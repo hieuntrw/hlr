@@ -26,7 +26,13 @@ export async function exchangeCodeForToken(
   access_token: string;
   refresh_token: string;
   expires_at: number;
-  athlete: { id: number };
+  athlete: {
+    id: number;
+    firstname?: string;
+    lastname?: string;
+    city?: string;
+    profile?: string;
+  };
 }> {
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;

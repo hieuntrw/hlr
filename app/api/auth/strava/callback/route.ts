@@ -28,25 +28,33 @@ export async function GET(request: NextRequest) {
 
     const tokenData = await exchangeCodeForToken(code, redirectUri);
 
+    // Get current session user
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!user) {
+    if (!session?.user) {
       return NextResponse.redirect(
         new URL("/?error=User not authenticated", request.url)
       );
     }
 
+    const userId = session.user.id;
+    const athleteName = `${tokenData.athlete.firstname || ""} ${tokenData.athlete.lastname || ""}`.trim();
+    const athleteCity = tokenData.athlete.city || "";
+
+    // Save Strava credentials to profile
     const { error: updateError } = await supabase
       .from("profiles")
       .upsert(
         {
-          id: user.id,
+          id: userId,
           strava_id: tokenData.athlete.id.toString(),
           strava_access_token: tokenData.access_token,
           strava_refresh_token: tokenData.refresh_token,
-          strava_token_expires_at: tokenData.expires_at,
+          strava_token_expires_at: new Date(tokenData.expires_at * 1000).toISOString(),
+          full_name: athleteName || session.user.email,
+          city: athleteCity,
         },
         { onConflict: "id" }
       );

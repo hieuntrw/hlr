@@ -280,3 +280,35 @@ CREATE TABLE IF NOT EXISTS pb_history (
     achieved_at DATE,
     race_id UUID REFERENCES races(id)
 );
+-- 1. Bật Extension pg_cron (Yêu cầu quyền Superuser/Admin trên Supabase)
+CREATE EXTENSION IF NOT EXISTS pg_cron;
+CREATE EXTENSION IF NOT EXISTS pg_net;
+
+-- 2. Tạo hàm để gọi Edge Function (API Sync)
+-- Giả sử Bolt đã tạo API route tại: /api/cron/sync-strava
+-- Chúng ta dùng pg_net để gọi API này định kỳ từ bên trong Database
+
+CREATE OR REPLACE FUNCTION invoke_sync_strava()
+RETURNS void AS $$
+DECLARE
+  project_url text := 'https://localhost:3000/api/cron/sync-strava'; -- Thay domain thật
+  service_role_key text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp2bnB4Y3dqZmlkcmxxbGZtdXZsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NDM4MjcxNSwiZXhwIjoyMDc5OTU4NzE1fQ.r7wDDaDNZ5zLQbsynuXM9MRD4PdBg-enxRkDIU0U3nk'; -- Lấy trong Supabase Settings > API
+BEGIN
+  PERFORM net.http_post(
+    url := project_url,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer ' || service_role_key
+    )
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. Lên lịch chạy mỗi 6 tiếng (Theo yêu cầu Bolt)
+-- Cú pháp Cron: Phút Giờ Ngày Tháng Thứ
+SELECT cron.schedule('sync-strava-job', '0 */6 * * *', $$SELECT invoke_sync_strava()$$);
+
+-- Ghi chú: Logic này đáp ứng yêu cầu về việc cập nhật dữ liệu.
+-- Ngoài ra, source [15] yêu cầu tạo thử thách vào ngày 25 hàng tháng.
+-- Ta tạo thêm 1 job cho việc đó:
+SELECT cron.schedule('create-monthly-challenge', '0 0 25 * *', $$SELECT create_next_month_challenge()$$);
