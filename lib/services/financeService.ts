@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase-client";
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 async function getSystemSetting(key: string) {
   const { data, error } = await supabase
@@ -180,3 +181,121 @@ export default {
   generateMonthlyFund,
   processChallengeFines,
 };
+
+// Client-friendly helpers ---------------------------------------------------
+
+export async function fetchUserTransactionsClient(supabaseClient: SupabaseClient, userId: string) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('transactions')
+      .select('id, created_at, type, description, amount, payment_status, receipt_url')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) {
+      console.error('fetchUserTransactionsClient error', error);
+      return [];
+    }
+    return data || [];
+  } catch (err) {
+    console.error('fetchUserTransactionsClient exception', err);
+    return [];
+  }
+}
+
+export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient) {
+  try {
+    // Try RPC first
+    try {
+      const { data: rpcData, error: rpcErr } = await supabaseClient.rpc('compute_public_fund_balance');
+      if (!rpcErr && rpcData) {
+        let balance = 0;
+        if (typeof rpcData === 'number') balance = rpcData;
+        else if (Array.isArray(rpcData) && rpcData[0] && rpcData[0].balance) balance = Number(rpcData[0].balance);
+        else if ((rpcData as any).balance) balance = Number((rpcData as any).balance);
+
+        const { data: recentExp } = await supabaseClient
+          .from('transactions')
+          .select('id, created_at, type, description, amount, user_id')
+          .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        return { balance, recentExpenses: recentExp || [] };
+      }
+    } catch (e) {
+      // fallback
+    }
+
+    const { data: creditRows } = await supabaseClient
+      .from('transactions')
+      .select('amount, type')
+      .in('type', ['fund_collection', 'donation'])
+      .limit(10000);
+    const credits = (creditRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+
+    const { data: expenseRows } = await supabaseClient
+      .from('transactions')
+      .select('amount, type, description, created_at, user_id')
+      .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
+      .order('created_at', { ascending: false })
+      .limit(10000);
+    const expenses = (expenseRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+
+    const { data: recentExpenses } = await supabaseClient
+      .from('transactions')
+      .select('id, created_at, type, description, amount, user_id')
+      .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    return { balance: credits - expenses, recentExpenses: recentExpenses || [] };
+  } catch (err) {
+    console.error('fetchPublicFundStatsClient exception', err);
+    return { balance: 0, recentExpenses: [] };
+  }
+}
+
+export async function uploadReceiptForTransactionClient(
+  supabaseClient: SupabaseClient,
+  transactionId: string,
+  file: File,
+  userId: string
+) {
+  try {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `receipts/${year}/${month}/${transactionId}_${safeName}`;
+
+    const { data: uploadData, error: uploadError } = await supabaseClient.storage
+      .from('receipts')
+      .upload(path, file, { cacheControl: '3600', upsert: false });
+
+    if (uploadError) {
+      console.error('uploadReceipt error', uploadError);
+      return { error: uploadError };
+    }
+
+    const { data: urlData } = supabaseClient.storage.from('receipts').getPublicUrl(path);
+    const publicUrl = urlData?.publicUrl || null;
+
+    const { data: txData, error: txError } = await supabaseClient
+      .from('transactions')
+      .update({ receipt_url: publicUrl, payment_status: 'submitted', receipt_uploaded_by: userId, receipt_uploaded_at: new Date().toISOString() })
+      .eq('id', transactionId)
+      .select()
+      .single();
+
+    if (txError) {
+      console.error('update transaction with receipt error', txError);
+      return { error: txError };
+    }
+
+    return { ok: true, transaction: txData };
+  } catch (err) {
+    console.error('uploadReceiptForTransactionClient exception', err);
+    return { error: err };
+  }
+}

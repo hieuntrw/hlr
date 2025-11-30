@@ -2,6 +2,11 @@
 
 import React, { useEffect, useState } from "react";
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import {
+  fetchUserTransactionsClient,
+  fetchPublicFundStatsClient,
+  uploadReceiptForTransactionClient,
+} from '@/lib/services/financeService';
 
 // Mobile-first personal finance page for members
 export default function FinancePage() {
@@ -11,6 +16,10 @@ export default function FinancePage() {
   const [pendingTotal, setPendingTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [showPayModal, setShowPayModal] = useState<boolean>(false);
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+  const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [uploadingReceipt, setUploadingReceipt] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'personal'|'report'>('personal');
   const [publicFund, setPublicFund] = useState<{ balance: number, recentExpenses: any[] }>({ balance: 0, recentExpenses: [] });
 
@@ -21,103 +30,50 @@ export default function FinancePage() {
       const u = userData?.user || null;
       setUser(u);
       if (u) {
-        const trs = await getUserTransactions(u.id);
+        const trs = await fetchUserTransactionsClient(supabase, u.id);
         setTransactions(trs);
         const pending = trs
-          .filter(t => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' ))
-          .reduce((s, t) => s + Number(t.amount || 0), 0);
+          .filter((t: any) => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' || t.payment_status === 'submitted'))
+          .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
         setPendingTotal(pending);
       }
-      const stats = await getPublicFundStats();
+      const stats = await fetchPublicFundStatsClient(supabase);
       setPublicFund(stats);
       setLoading(false);
     })();
   }, []);
 
-  async function getUserTransactions(userId: string) {
-    // Returns array of transactions for the user, latest first
-    try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('id, created_at, type, description, amount, payment_status')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(200);
-      if (error) {
-        console.error('getUserTransactions error', error);
-        return [];
-      }
-      return data || [];
-    } catch (err) {
-      console.error(err);
-      return [];
-    }
-  }
-
-  async function getPublicFundStats() {
-    // Compute fund balance and recent 10 expense-type transactions for transparency
-    try {
-      // Balance: we assume transactions with type 'fund_collection' and 'donation' are credits,
-      // expenses are 'expense', 'reward_payout', 'purchase' or 'fine' (depends on naming). Adjust as needed.
-      const { data: balanceData, error: balanceError } = await supabase
-        .rpc('compute_public_fund_balance')
-        .limit?.(1);
-
-      // If the DB doesn't have the RPC, gracefully fallback to calculating here
-      let balance = 0;
-      if (!balanceError && balanceData) {
-        // If RPC returns numeric or object
-        if (typeof balanceData === 'number') balance = balanceData;
-        else if (balanceData && balanceData[0] && balanceData[0].balance) balance = Number(balanceData[0].balance);
-      } else {
-        // Fallback: sum credits - sum expenses
-        const { data: creditRows } = await supabase
-          .from('transactions')
-          .select('amount, type, user_id')
-          .in('type', ['fund_collection', 'donation'])
-          .limit(10000);
-        const credits = (creditRows || [])
-          .filter(r => r.amount)
-          .reduce((s, r) => s + Number(r.amount), 0);
-
-        const { data: expenseRows } = await supabase
-          .from('transactions')
-          .select('amount, type, user_id, description, created_at')
-          .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
-          .limit(10000);
-        const expenses = (expenseRows || [])
-          .filter(r => r.amount)
-          .reduce((s, r) => s + Number(r.amount), 0);
-
-        balance = credits - expenses;
-      }
-
-      // Recent expenses (exclude user-specific fund_collections/donations): show latest 10 transactions of expense types
-      const { data: recentExp } = await supabase
-        .from('transactions')
-        .select('id, created_at, type, description, amount, user_id')
-        .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      const recentExpenses = (recentExp || []).map((r: any) => ({
-        id: r.id,
-        created_at: r.created_at,
-        type: r.type,
-        description: r.description,
-        amount: Number(r.amount || 0),
-        user_id: r.user_id
-      }));
-
-      return { balance, recentExpenses };
-    } catch (err) {
-      console.error('getPublicFundStats', err);
-      return { balance: 0, recentExpenses: [] };
-    }
-  }
+  // Note: data access uses client-friendly functions from lib/services/financeService
 
   function formatCurrency(v: number) {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(v);
+  }
+
+  async function handleOpenUploadModal(transactionId: string) {
+    setSelectedTransactionId(transactionId);
+    setReceiptFile(null);
+    setShowUploadModal(true);
+  }
+
+  async function handleUploadReceipt() {
+    if (!selectedTransactionId || !receiptFile || !user) return;
+    setUploadingReceipt(true);
+    const res = await uploadReceiptForTransactionClient(supabase, selectedTransactionId, receiptFile, user.id);
+    setUploadingReceipt(false);
+    if (res?.ok) {
+      // refresh
+      const trs = await fetchUserTransactionsClient(supabase, user.id);
+      setTransactions(trs);
+      const pending = trs
+        .filter((t: any) => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' || t.payment_status === 'submitted'))
+        .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
+      setPendingTotal(pending);
+      setShowUploadModal(false);
+      alert('Biên lai đã được gửi. Đang chờ thủ quỹ xác nhận.');
+    } else {
+      alert('Có lỗi khi tải biên lai. Vui lòng thử lại.');
+      console.error(res?.error);
+    }
   }
 
   if (loading) {
@@ -208,9 +164,24 @@ export default function FinancePage() {
                       <td className="px-4 py-3 text-sm text-right text-gray-800">{formatCurrency(Number(t.amount || 0))}</td>
                       <td className="px-4 py-3 text-sm text-center">
                         {t.payment_status === 'paid' || t.payment_status === 'Đã nộp' ? (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Đã nộp</span>
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-green-100 text-green-800">Đã nộp</span>
+                            {t.receipt_url && (
+                              <a className="text-xs text-slate-600 underline" href={t.receipt_url} target="_blank" rel="noreferrer">Xem biên lai</a>
+                            )}
+                          </div>
+                        ) : t.payment_status === 'submitted' ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-yellow-100 text-yellow-800">Đã gửi biên lai</span>
+                            {t.receipt_url && (
+                              <a className="text-xs text-slate-600 underline" href={t.receipt_url} target="_blank" rel="noreferrer">Xem biên lai</a>
+                            )}
+                          </div>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Chưa nộp</span>
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-red-100 text-red-800">Chưa nộp</span>
+                            <button className="text-xs text-slate-700 underline" onClick={() => handleOpenUploadModal(t.id)}>Tôi đã chuyển khoản</button>
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -305,6 +276,33 @@ export default function FinancePage() {
                   navigator?.clipboard?.writeText(txt).then(() => alert('Đã sao chép cú pháp chuyển khoản'));
                 }}>Sao chép cú pháp</button>
                 <button className="flex-1 bg-slate-100 text-slate-700 px-3 py-2 rounded" onClick={() => setShowPayModal(false)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Receipt Modal */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowUploadModal(false)} />
+          <div className="relative w-full sm:w-96 bg-white rounded-t-lg sm:rounded-lg shadow-lg p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-lg font-semibold">Tải biên lai chuyển khoản</h2>
+                <div className="text-xs text-gray-500">Chọn ảnh hoặc file PDF của biên lai. Thủ quỹ sẽ kiểm tra và cập nhật trạng thái.</div>
+              </div>
+              <button className="text-slate-500" onClick={() => setShowUploadModal(false)}>Đóng</button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 gap-4">
+              <input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} />
+
+              <div className="flex gap-2">
+                <button disabled={!receiptFile || uploadingReceipt} className="flex-1 bg-blue-600 text-white px-3 py-2 rounded" onClick={handleUploadReceipt}>
+                  {uploadingReceipt ? 'Đang tải...' : 'Gửi biên lai'}
+                </button>
+                <button className="flex-1 bg-slate-100 text-slate-700 px-3 py-2 rounded" onClick={() => setShowUploadModal(false)}>Hủy</button>
               </div>
             </div>
           </div>
