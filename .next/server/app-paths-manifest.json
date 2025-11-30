@@ -1,6 +1,12 @@
 {
   "/_not-found/page": "app/_not-found/page.js",
+  "/admin/challenges/page": "app/admin/challenges/page.js",
+  "/admin/finance-report/page": "app/admin/finance-report/page.js",
+  "/admin/finance/page": "app/admin/finance/page.js",
+  "/admin/members/page": "app/admin/members/page.js",
   "/admin/page": "app/admin/page.js",
+  "/admin/pb-approval/page": "app/admin/pb-approval/page.js",
+  "/admin/settings/page": "app/admin/settings/page.js",
   "/challenges/[id]/page": "app/challenges/[id]/page.js",
   "/challenges/page": "app/challenges/page.js",
   "/dashboard/page": "app/dashboard/page.js",
@@ -11,8 +17,8 @@
   "/profile/page": "app/profile/page.js",
   "/rules/page": "app/rules/page.js",
   "/api/auth/strava/login/route": "app/api/auth/strava/login/route.js",
-  "/api/strava/sync/route": "app/api/strava/sync/route.js",
+  "/api/auth/strava/callback/route": "app/api/auth/strava/callback/route.js",
   "/api/debug/login/route": "app/api/debug/login/route.js",
   "/api/debug/sync/route": "app/api/debug/sync/route.js",
-  "/api/auth/strava/callback/route": "app/api/auth/strava/callback/route.js"
+  "/api/strava/sync/route": "app/api/strava/sync/route.js"
 }

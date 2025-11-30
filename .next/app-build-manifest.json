@@ -12,17 +12,72 @@
       "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
-      "static/css/9426fd2de192244e.css",
+      "static/css/3cdb8758a42b4cc9.css",
       "static/chunks/421-43db3c75eac14dc8.js",
       "static/chunks/972-5dd3ebbbb229074c.js",
-      "static/chunks/app/layout-946e332c3b22067b.js"
+      "static/chunks/app/layout-3d6021bddd5d30c4.js"
+    ],
+    "/admin/challenges/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/challenges/page-da5e78882cf6e453.js"
+    ],
+    "/admin/finance-report/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/finance-report/page-121ad7f169070712.js"
+    ],
+    "/admin/finance/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/finance/page-45abce5fdbf7f9f6.js"
+    ],
+    "/admin/members/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/members/page-0d7bf6d0cfef1bc1.js"
     ],
     "/admin/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
       "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
-      "static/chunks/app/admin/page-3bfae08bb5eb864a.js"
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/app/admin/page-44fc78285b3f267a.js"
+    ],
+    "/admin/pb-approval/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/pb-approval/page-9b4b9a9d5e3a7921.js"
+    ],
+    "/admin/settings/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/admin/settings/page-2e13cca83741daed.js"
     ],
     "/challenges/[id]/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
@@ -48,14 +103,14 @@
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
       "static/chunks/421-43db3c75eac14dc8.js",
-      "static/chunks/app/dashboard/page-57c7bf423bbc219d.js"
+      "static/chunks/app/dashboard/page-723b10c40a66ab9c.js"
     ],
     "/debug-login/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
       "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
-      "static/chunks/app/debug-login/page-670b39d8821ebe44.js"
+      "static/chunks/app/debug-login/page-612b7ecbfda23a10.js"
     ],
     "/events/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",

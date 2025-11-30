@@ -1,1 +1,1 @@
-{"version":1,"functions":{"/api/auth/strava/callback":{},"/api/auth/strava/login":{},"/api/debug/login":{},"/api/debug/sync":{},"/api/strava/sync":{}}}
+{"version":1,"functions":{"/api/auth/strava/login":{},"/api/debug/login":{},"/api/auth/strava/callback":{},"/api/debug/sync":{},"/api/strava/sync":{}}}
