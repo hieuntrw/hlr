@@ -9,9 +9,9 @@
   "/page": "app/page.js",
   "/profile/page": "app/profile/page.js",
   "/rules/page": "app/rules/page.js",
-  "/api/auth/strava/login/route": "app/api/auth/strava/login/route.js",
   "/api/debug/login/route": "app/api/debug/login/route.js",
   "/api/debug/sync/route": "app/api/debug/sync/route.js",
   "/api/strava/sync/route": "app/api/strava/sync/route.js",
-  "/api/auth/strava/callback/route": "app/api/auth/strava/callback/route.js"
+  "/api/auth/strava/callback/route": "app/api/auth/strava/callback/route.js",
+  "/api/auth/strava/login/route": "app/api/auth/strava/login/route.js"
 }
