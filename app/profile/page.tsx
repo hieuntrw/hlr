@@ -1,260 +1,571 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Header from "@/components/Header";
 import { supabase } from "@/lib/supabase-client";
 
-interface RaceResult {
+interface Profile {
   id: string;
-  raceName: string;
-  distance: string;
+  full_name: string;
+  avatar_url?: string;
+  join_date?: string;
+  device_name?: string;
+  strava_id?: string;
+  pb_hm_seconds?: number;
+  pb_fm_seconds?: number;
+  pb_hm_approved?: boolean;
+  pb_fm_approved?: boolean;
+}
+
+interface Activity {
+  id: string;
+  name: string;
+  distance: number;
+  moving_time: number;
+  average_heartrate?: number;
+  average_cadence?: number;
+  elevation_gain?: number;
+  start_date: string;
+}
+
+interface ActivityData {
   date: string;
-  time: string;
-  pace: string;
-  isPR: boolean;
+  km: number;
 }
 
-interface UserProfile {
-  id: string;
-  fullName: string;
-  email: string;
-  phoneNumber?: string | null;
-  joinDate?: string | null;
-  isStravaConnected: boolean;
-  stravaId?: string | null;
-  pbHM?: string | null;
-  pbFM?: string | null;
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
-export default function Profile() {
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [races, setRaces] = useState<RaceResult[]>([]);
+function formatTime(seconds?: number): string {
+  if (!seconds || isNaN(seconds)) return "--:--:--";
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+function formatPace(seconds?: number): string {
+  if (!seconds || isNaN(seconds)) return "--:--";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}/km`;
+}
+
+function PBModal({
+  isOpen,
+  onClose,
+  onSubmit,
+  isLoading,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (data: { distance: string; time: string; evidence_link: string }) => void;
+  isLoading: boolean;
+}) {
+  const [distance, setDistance] = useState("21");
+  const [time, setTime] = useState("01:30:00");
+  const [evidenceLink, setEvidenceLink] = useState("");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!time || !evidenceLink) {
+      alert("Vui lòng điền đầy đủ thông tin");
+      return;
+    }
+    onSubmit({ distance, time, evidence_link: evidenceLink });
+    setTime("01:30:00");
+    setEvidenceLink("");
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+        <h3 className="text-2xl font-bold mb-4">Cập Nhật Thành Tích Cá Nhân</h3>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Cự Ly
+            </label>
+            <select
+              value={distance}
+              onChange={(e) => setDistance(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            >
+              <option value="21">Half Marathon (21 km)</option>
+              <option value="42">Full Marathon (42 km)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Thời gian (HH:MM:SS)
+            </label>
+            <input
+              type="text"
+              value={time}
+              onChange={(e) => setTime(e.target.value)}
+              placeholder="01:30:00"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Link Bằng Chứng (Result Page)
+            </label>
+            <input
+              type="url"
+              value={evidenceLink}
+              onChange={(e) => setEvidenceLink(e.target.value)}
+              placeholder="https://example.com/results"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            />
+          </div>
+
+          <p className="text-sm text-gray-500 bg-blue-50 p-3 rounded">
+            ℹ️ Thành tích này sẽ được gửi cho Admin duyệt trước khi cập nhật
+          </p>
+
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+            >
+              {isLoading ? "Đang gửi..." : "Gửi"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+export default function ProfilePage() {
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activityData, setActivityData] = useState<ActivityData[]>([]);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
+  const [stravaConnected, setStravaConnected] = useState(false);
+  const [showPBModal, setShowPBModal] = useState(false);
+  const [submittingPB, setSubmittingPB] = useState(false);
 
   useEffect(() => {
-    // Fetch real profile from Supabase
-    async function loadProfile() {
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select(
-            `id, full_name, email, phone_number, join_date, strava_id, pb_hm_seconds, pb_fm_seconds`
-          )
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error("Failed to load profile:", error);
-          setLoading(false);
-          return;
-        }
-
-        if (!profile) {
-          setLoading(false);
-          return;
-        }
-
-        const mapped: UserProfile = {
-          id: profile.id,
-          fullName: profile.full_name || user.email || "",
-          email: profile.email || user.email || "",
-          phoneNumber: profile.phone_number || null,
-          joinDate: profile.join_date || null,
-          isStravaConnected: !!profile.strava_id,
-          stravaId: profile.strava_id || null,
-          pbHM: profile.pb_hm_seconds ? secondsToTimeString(profile.pb_hm_seconds) : null,
-          pbFM: profile.pb_fm_seconds ? secondsToTimeString(profile.pb_fm_seconds) : null,
-        };
-
-        setProfile(mapped);
-        setLoading(false);
-      } catch (err) {
-        console.error("Profile load error:", err);
-        setLoading(false);
-      }
-    }
-
-    loadProfile();
+    fetchProfileData();
   }, []);
 
-  function secondsToTimeString(sec?: number | null) {
-    if (!sec) return null;
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    return `${m}:${String(s).padStart(2, "0")}`;
+  async function fetchProfileData() {
+    setLoading(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        window.location.href = "/debug-login";
+        return;
+      }
+
+      // Fetch profile
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select(
+          "id, full_name, avatar_url, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved"
+        )
+        .eq("id", user.id)
+        .single();
+
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+        return;
+      }
+
+      setProfile(profileData);
+      setStravaConnected(!!profileData?.strava_id);
+
+      // Fetch recent activities (30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from("activities")
+        .select("id, name, distance, moving_time, average_heartrate, average_cadence, elevation_gain, start_date")
+        .eq("user_id", user.id)
+        .gte("start_date", thirtyDaysAgo.toISOString())
+        .order("start_date", { ascending: false });
+
+      if (activitiesError) {
+        console.error("Error fetching activities:", activitiesError);
+      } else if (activitiesData) {
+        setActivities(activitiesData);
+
+        // Aggregate activities by date for chart
+        const aggregatedData: { [key: string]: number } = {};
+
+        activitiesData.forEach((activity) => {
+          const date = new Date(activity.start_date).toLocaleDateString("vi-VN");
+          const kmDistance = activity.distance / 1000;
+          aggregatedData[date] = (aggregatedData[date] || 0) + kmDistance;
+        });
+
+        // Convert to array and sort
+        const chartData = Object.entries(aggregatedData)
+          .map(([date, km]) => ({ date, km }))
+          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        setActivityData(chartData);
+      }
+    } catch (err) {
+      console.error("Unexpected error:", err);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  const handleConnectStrava = async () => {
-    setConnecting(true);
-    // Redirect to Strava login
-    window.location.href = "/api/auth/strava/login";
-  };
+  async function handleStravaToggle() {
+    if (stravaConnected) {
+      // Disconnect
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        await supabase
+          .from("profiles")
+          .update({
+            strava_id: null,
+            strava_access_token: null,
+            strava_refresh_token: null,
+            strava_token_expires_at: null,
+          })
+          .eq("id", user.id);
+
+        setStravaConnected(false);
+        alert("Đã ngắt kết nối Strava");
+      }
+    } else {
+      // Connect
+      window.location.href = "/api/auth/strava/login";
+    }
+  }
+
+  async function handleSubmitPB(data: { distance: string; time: string; evidence_link: string }) {
+    setSubmittingPB(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      // Parse time to seconds
+      const [hours, minutes, seconds] = data.time.split(":").map(Number);
+      const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+
+      // Insert into pb_history (pending approval)
+      const { error } = await supabase.from("pb_history").insert({
+        user_id: user.id,
+        distance: data.distance === "21" ? "HM" : "FM",
+        time_seconds: totalSeconds,
+        achieved_at: new Date().toISOString().split("T")[0],
+        evidence_link: data.evidence_link,
+      });
+
+      if (error) {
+        console.error("Error submitting PB:", error);
+        alert("Lỗi khi gửi thành tích");
+      } else {
+        alert("Thành tích đã được gửi cho Admin duyệt!");
+        setShowPBModal(false);
+        fetchProfileData();
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Có lỗi xảy ra");
+    } finally {
+      setSubmittingPB(false);
+    }
+  }
 
   if (loading) {
     return (
-      <>
-        <Header />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-gray-500">Đang tải...</div>
-          </div>
-        </main>
-      </>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Đang tải dữ liệu...</p>
+        </div>
+      </div>
     );
   }
 
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="text-center">
+          <p className="text-gray-600 text-lg">Không tìm thấy hồ sơ</p>
+        </div>
+      </div>
+    );
+  }
+
+  const maxChartValue = Math.max(...activityData.map((d) => d.km), 10);
+
   return (
-    <>
-      <Header />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Profile Header */}
-        <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-8 mb-8">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center">
-                <span className="text-5xl text-white font-bold">
-                  {profile?.fullName.charAt(0).toUpperCase()}
-                </span>
-              </div>
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex items-start gap-4 flex-1">
+              {profile.avatar_url ? (
+                <img
+                  src={profile.avatar_url}
+                  alt={profile.full_name}
+                  className="w-24 h-24 rounded-full object-cover border-4 border-white"
+                />
+              ) : (
+                <div className="w-24 h-24 rounded-full bg-white/30 flex items-center justify-center border-4 border-white text-4xl">
+                  👤
+                </div>
+              )}
+
               <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  {profile?.fullName}
-                </h1>
-                <p className="text-gray-600">
-                  Tham gia từ{" "}
-                  {new Date(profile?.joinDate || "").toLocaleDateString("vi-VN")}
-                </p>
+                <h1 className="text-4xl font-bold mb-2">{profile.full_name}</h1>
+                <div className="space-y-1 text-blue-100">
+                  <p>📅 Gia nhập: {formatDate(profile.join_date)}</p>
+                  <p>⌚ Thiết bị: {profile.device_name || "Chưa cập nhật"}</p>
+                </div>
               </div>
             </div>
 
-            {/* Strava Connection Status */}
-            {profile?.isStravaConnected ? (
-              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
-                <span className="text-green-600 font-semibold">
-                  ✓ Đã kết nối Strava
-                </span>
+            <div className="text-right">
+              <button
+                onClick={handleStravaToggle}
+                className={`px-6 py-3 rounded-lg font-bold transition-all whitespace-nowrap ${
+                  stravaConnected
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-500 hover:bg-green-600"
+                }`}
+              >
+                {stravaConnected ? "🔗 Ngắt kết nối Strava" : "🔗 Kết nối Strava"}
+              </button>
+            </div>
+          </div>
+
+          {/* Strava Status */}
+          <div className="mt-6 pt-6 border-t border-white/20">
+            {stravaConnected ? (
+              <div className="flex items-center gap-2 text-green-100">
+                <span className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                <span>✓ Kết nối Strava: {profile.strava_id}</span>
               </div>
             ) : (
-              <button
-                onClick={handleConnectStrava}
-                disabled={connecting}
-                className="px-6 py-2 bg-orange-500 hover:bg-orange-600 disabled:bg-gray-400 text-white font-semibold rounded-lg transition"
-              >
-                {connecting ? "Đang kết nối..." : "Kết nối Strava"}
-              </button>
+              <div className="flex items-center gap-2 text-red-100">
+                <span className="w-3 h-3 bg-red-400 rounded-full"></span>
+                <span>✗ Chưa kết nối Strava</span>
+              </div>
             )}
           </div>
+        </div>
+      </div>
 
-          {/* Contact Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Email</p>
-              <p className="font-semibold text-gray-900">{profile?.email}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Số điện thoại</p>
-              <p className="font-semibold text-gray-900">
-                {profile?.phoneNumber}
-              </p>
+      {/* Main Content */}
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* PB Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          {/* HM PB */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">🏃 PB Half Marathon (21km)</h3>
+
+            <div className="text-center py-6">
+              {profile.pb_hm_seconds ? (
+                <div>
+                  <div className="text-5xl font-bold text-blue-600 mb-2">
+                    {formatTime(profile.pb_hm_seconds)}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-4">
+                    Pace: {formatPace((profile.pb_hm_seconds * 1000) / 21)}
+                  </div>
+                  {profile.pb_hm_approved ? (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                      ✓ Đã duyệt
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-semibold">
+                      ⏳ Chờ duyệt
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500">Chưa có thành tích</p>
+              )}
             </div>
           </div>
 
-          {/* Personal Bests */}
-          <div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">
-              Thành tích cá nhân
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <p className="text-sm text-gray-600 mb-1">
-                  Kỷ lục bán marathon (21km)
-                </p>
-                <p className="text-2xl font-bold text-blue-600">
-                  {profile?.pbHM || "—"}
-                </p>
-                {profile?.pbHM && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Trung bình: {(parseInt(profile.pbHM.split(":")[0]) * 60 + parseInt(profile.pbHM.split(":")[1])) / 21}:00 /km
-                  </p>
-                )}
-              </div>
-              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                <p className="text-sm text-gray-600 mb-1">
-                  Kỷ lục marathon (42km)
-                </p>
-                <p className="text-2xl font-bold text-purple-600">
-                  {profile?.pbFM || "—"}
-                </p>
-                {profile?.pbFM && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Trung bình: {(parseInt(profile.pbFM.split(":")[0]) * 60 + parseInt(profile.pbFM.split(":")[1])) / 42}:00 /km
-                  </p>
-                )}
-              </div>
+          {/* FM PB */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">🏃 PB Full Marathon (42km)</h3>
+
+            <div className="text-center py-6">
+              {profile.pb_fm_seconds ? (
+                <div>
+                  <div className="text-5xl font-bold text-purple-600 mb-2">
+                    {formatTime(profile.pb_fm_seconds)}
+                  </div>
+                  <div className="text-sm text-gray-600 mb-4">
+                    Pace: {formatPace((profile.pb_fm_seconds * 1000) / 42)}
+                  </div>
+                  {profile.pb_fm_approved ? (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
+                      ✓ Đã duyệt
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-sm font-semibold">
+                      ⏳ Chờ duyệt
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-gray-500">Chưa có thành tích</p>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Race History */}
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">
-            Lịch sử giải đấu
-          </h2>
+        {/* Update PB Button */}
+        <div className="mb-8">
+          <button
+            onClick={() => setShowPBModal(true)}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition-colors"
+          >
+            ✏️ Cập Nhật Thành Tích Cá Nhân
+          </button>
+        </div>
 
-          {races.length === 0 ? (
-            <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-              <p className="text-gray-600">
-                Chưa có kết quả giải đấu nào được ghi nhận
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {races.map((race) => (
-                <div
-                  key={race.id}
-                  className="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-gray-900">
-                          {race.raceName}
-                        </h3>
-                        {race.isPR && (
-                          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-semibold bg-yellow-100 text-yellow-800">
-                            ⭐ PB
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">
-                        {race.distance} • {new Date(race.date).toLocaleDateString("vi-VN")}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-gray-900">
-                        {race.time}
-                      </p>
-                      <p className="text-sm text-gray-600">{race.pace}</p>
+        {/* Activity Chart */}
+        {activityData.length > 0 && (
+          <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+            <h3 className="text-2xl font-bold text-gray-900 mb-6">📈 Hoạt Động 30 Ngày Gần Nhất</h3>
+
+            <div className="h-80 flex items-end justify-start gap-1 overflow-x-auto pb-4">
+              {activityData.map((data, idx) => {
+                const heightPercent = (data.km / maxChartValue) * 100;
+                return (
+                  <div
+                    key={idx}
+                    className="flex-shrink-0 flex flex-col items-center"
+                    title={`${data.date}: ${data.km.toFixed(1)} km`}
+                  >
+                    <div
+                      className="w-6 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t transition-all hover:from-blue-600 hover:to-blue-500 cursor-pointer"
+                      style={{ height: `${heightPercent}%`, minHeight: "4px" }}
+                    ></div>
+                    <div className="text-xs text-gray-600 mt-2 w-12 text-center truncate">
+                      {data.km.toFixed(0)}km
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            <div className="text-center pt-4 border-t border-gray-200">
+              <p className="text-sm text-gray-600">
+                Tổng: <span className="font-bold text-blue-600">{activityData.reduce((sum, d) => sum + d.km, 0).toFixed(1)} km</span>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Recent Activities */}
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-2xl font-bold text-gray-900 mb-6">🏃 Lịch Sử Hoạt Động Gần Đây</h3>
+
+          {activities.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b-2 border-gray-300">
+                    <th className="text-left py-3 px-2 font-bold text-gray-700">Tên Hoạt Động</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Quãng Đường</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Thời Gian</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Pace</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Nhịp Tim</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Cadence</th>
+                    <th className="text-right py-3 px-2 font-bold text-gray-700">Elevation</th>
+                    <th className="text-left py-3 px-2 font-bold text-gray-700">Ngày</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activities.map((activity) => {
+                    const kmDistance = activity.distance / 1000;
+                    const pace = activity.distance > 0 ? (activity.moving_time * 1000) / activity.distance : 0;
+                    return (
+                      <tr
+                        key={activity.id}
+                        className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                      >
+                        <td className="py-3 px-2 font-semibold text-gray-900">{activity.name}</td>
+                        <td className="py-3 px-2 text-right text-blue-600 font-semibold">
+                          {kmDistance.toFixed(2)} km
+                        </td>
+                        <td className="py-3 px-2 text-right text-gray-600">
+                          {formatTime(activity.moving_time)}
+                        </td>
+                        <td className="py-3 px-2 text-right text-gray-600">
+                          {formatPace(pace)}
+                        </td>
+                        <td className="py-3 px-2 text-right text-gray-600">
+                          {activity.average_heartrate ? `${Math.round(activity.average_heartrate)} bpm` : "N/A"}
+                        </td>
+                        <td className="py-3 px-2 text-right text-gray-600">
+                          {activity.average_cadence ? `${Math.round(activity.average_cadence)}` : "N/A"}
+                        </td>
+                        <td className="py-3 px-2 text-right text-gray-600">
+                          {activity.elevation_gain ? `${Math.round(activity.elevation_gain)} m` : "N/A"}
+                        </td>
+                        <td className="py-3 px-2 text-gray-600">
+                          {formatDate(activity.start_date)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Chưa có hoạt động nào trong 30 ngày gần nhất</p>
             </div>
           )}
         </div>
-      </main>
-    </>
+      </div>
+
+      {/* PB Modal */}
+      <PBModal
+        isOpen={showPBModal}
+        onClose={() => setShowPBModal(false)}
+        onSubmit={handleSubmitPB}
+        isLoading={submittingPB}
+      />
+    </div>
   );
 }

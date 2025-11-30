@@ -12,7 +12,7 @@
       "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
-      "static/css/bd3b4e6f652a3129.css",
+      "static/css/0351a7a3b6300b98.css",
       "static/chunks/421-43db3c75eac14dc8.js",
       "static/chunks/972-5dd3ebbbb229074c.js",
       "static/chunks/app/layout-946e332c3b22067b.js"
@@ -24,15 +24,6 @@
       "static/chunks/main-app-de25cc078d158482.js",
       "static/chunks/app/admin/page-3bfae08bb5eb864a.js"
     ],
-    "/challenges/[id]/page": [
-      "static/chunks/webpack-03f7c6bc932ce1e3.js",
-      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
-      "static/chunks/117-d643246a05a9f744.js",
-      "static/chunks/main-app-de25cc078d158482.js",
-      "static/chunks/421-43db3c75eac14dc8.js",
-      "static/chunks/972-5dd3ebbbb229074c.js",
-      "static/chunks/app/challenges/[id]/page-c40035daf4439f44.js"
-    ],
     "/challenges/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
       "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
@@ -41,6 +32,15 @@
       "static/chunks/421-43db3c75eac14dc8.js",
       "static/chunks/972-5dd3ebbbb229074c.js",
       "static/chunks/app/challenges/page-4fecf72dcf1a9b78.js"
+    ],
+    "/challenges/[id]/page": [
+      "static/chunks/webpack-03f7c6bc932ce1e3.js",
+      "static/chunks/fd9d1056-896aff8d3a2ab3c4.js",
+      "static/chunks/117-d643246a05a9f744.js",
+      "static/chunks/main-app-de25cc078d158482.js",
+      "static/chunks/421-43db3c75eac14dc8.js",
+      "static/chunks/972-5dd3ebbbb229074c.js",
+      "static/chunks/app/challenges/[id]/page-c40035daf4439f44.js"
     ],
     "/dashboard/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
@@ -86,7 +86,7 @@
       "static/chunks/117-d643246a05a9f744.js",
       "static/chunks/main-app-de25cc078d158482.js",
       "static/chunks/421-43db3c75eac14dc8.js",
-      "static/chunks/app/profile/page-4d0c9af7cdcc18e8.js"
+      "static/chunks/app/profile/page-e2f1877bdb49b33e.js"
     ],
     "/rules/page": [
       "static/chunks/webpack-03f7c6bc932ce1e3.js",
