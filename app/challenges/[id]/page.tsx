@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { ClipboardList, User, Gift, Frown, Lock } from "lucide-react";
 
 interface Challenge {
   id: string;
@@ -77,6 +78,9 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [registering, setRegistering] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [password, setPassword] = useState("");
+  const [failedParticipants, setFailedParticipants] = useState<ParticipantWithActivity[]>([]);
 
   const TARGET_OPTIONS = [70, 100, 150, 200, 250, 300];
 
@@ -129,16 +133,21 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       if (participantsError) {
         console.error("Error fetching participants:", participantsError);
       } else if (participantsData) {
-        setParticipants(
-          participantsData.map((p: any) => ({
-            user_id: p.user_id,
-            target_km: p.target_km,
-            actual_km: p.actual_km,
-            avg_pace_seconds: p.avg_pace_seconds,
-            total_activities: p.total_activities,
-            profile: p.profiles,
-          }))
-        );
+        const mapped = participantsData.map((p: any) => ({
+          user_id: p.user_id,
+          target_km: p.target_km,
+          actual_km: p.actual_km,
+          avg_pace_seconds: p.avg_pace_seconds,
+          total_activities: p.total_activities,
+          profile: p.profiles,
+        }));
+        setParticipants(mapped);
+
+        // Separate failed participants (didn't meet target)
+        if (challengeData.status === "Closed") {
+          const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
+          setFailedParticipants(failed);
+        }
       }
 
       // Fetch lucky draw winners if challenge is closed
@@ -198,6 +207,12 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   async function handleRegister() {
     if (!selectedTarget || !currentUser) return;
 
+    // Check password if required
+    if (challenge?.password && password !== challenge.password) {
+      alert("Mật khẩu không đúng!");
+      return;
+    }
+
     setRegistering(true);
 
     try {
@@ -214,6 +229,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         } else {
           alert("Cập nhật mục tiêu thành công!");
           setUserParticipation({ ...userParticipation, target_km: selectedTarget });
+          setShowRegisterModal(false);
         }
       } else {
         // Create new participation
@@ -231,6 +247,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           alert("Lỗi khi đăng ký thử thách");
         } else {
           alert("Đăng ký thử thách thành công!");
+          setShowRegisterModal(false);
           fetchData();
         }
       }
@@ -288,7 +305,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           <div className="lg:col-span-1">
             {/* Description Card */}
             <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-2xl font-bold mb-4">📋 Thông Tin</h2>
+              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><ClipboardList size={28} /> Thông Tin</h2>
               <p className="text-gray-700 whitespace-pre-wrap mb-4">{challenge.description}</p>
 
               <div className="space-y-2 text-sm">
@@ -304,83 +321,102 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
             </div>
 
             {/* Registration Card */}
-            {challenge.status === "Open" && (
+            {challenge.status === "Open" && !userParticipation && (
               <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg shadow-md p-6 border-2 border-green-300">
-                <h3 className="text-xl font-bold text-green-900 mb-4">🎯 Chọn Mục Tiêu</h3>
-
-                <div className="space-y-3 mb-6">
-                  {TARGET_OPTIONS.map((km) => (
-                    <label
-                      key={km}
-                      className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedTarget === km
-                          ? "border-green-600 bg-green-100"
-                          : "border-green-200 hover:border-green-400"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="target"
-                        value={km}
-                        checked={selectedTarget === km}
-                        onChange={() => setSelectedTarget(km)}
-                        className="w-4 h-4"
-                      />
-                      <span className="ml-3 font-semibold text-green-900">{km} km</span>
-                    </label>
-                  ))}
-                </div>
-
+                <h3 className="text-xl font-bold text-green-900 mb-4">🎯 Đăng Ký Tham Gia</h3>
+                <p className="text-sm text-gray-700 mb-4">
+                  Chọn mốc km và đăng ký ngay để tham gia thử thách!
+                </p>
                 <button
-                  onClick={handleRegister}
-                  disabled={registering || !selectedTarget}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-3 rounded-lg transition-colors"
+                  onClick={() => setShowRegisterModal(true)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors"
                 >
-                  {registering ? "Đang xử lý..." : userParticipation ? "Cập nhật" : "Đăng ký"}
+                  Đăng Ký Ngay
                 </button>
+              </div>
+            )}
 
-                {userParticipation && (
-                  <p className="text-sm text-green-700 mt-3 text-center">
-                    ✓ Bạn đã đăng ký với mục tiêu {userParticipation.target_km} km
-                  </p>
-                )}
+            {userParticipation && (
+              <div className="bg-green-50 rounded-lg shadow-md p-6 border-2 border-green-300">
+                <h3 className="text-xl font-bold text-green-900 mb-2">✓ Đã Đăng Ký</h3>
+                <p className="text-sm text-gray-700">
+                  Mục tiêu: <span className="font-bold">{userParticipation.target_km} km</span>
+                </p>
+                <p className="text-sm text-gray-700">
+                  Đã chạy: <span className="font-bold">{userParticipation.actual_km} km</span>
+                </p>
               </div>
             )}
           </div>
 
           {/* Right Column: Leaderboard & Lucky Draw */}
           <div className="lg:col-span-2">
-            {/* Lucky Draw Winners (if closed) */}
-            {challenge.status === "Closed" && luckyDrawWinners.length > 0 && (
-              <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-                <h3 className="text-2xl font-bold mb-4">🎁 Quay Thưởng May Mắn</h3>
-
-                <div className="space-y-4">
-                  {luckyDrawWinners.map((draw, idx) => (
-                    <div
-                      key={draw.id}
-                      className={`p-4 rounded-lg border-2 flex items-center gap-4 ${
-                        idx === 0
-                          ? "bg-yellow-50 border-yellow-400"
-                          : "bg-gray-50 border-gray-300"
-                      }`}
-                    >
-                      <div
-                        className={`text-4xl font-bold w-12 text-center ${
-                          idx === 0 ? "text-yellow-600" : "text-gray-600"
-                        }`}
-                      >
-                        {idx === 0 ? "🥇" : "🥈"}
-                      </div>
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-900">
-                          {draw.winner_profile?.full_name || "Anonymous"}
-                        </p>
-                        <p className="text-sm text-gray-600">{draw.prize_name}</p>
-                      </div>
+            {/* Summary Section (if closed) */}
+            {challenge.status === "Closed" && (
+              <div className="space-y-6 mb-6">
+                {/* Lucky Draw Winners */}
+                {luckyDrawWinners.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-2xl font-bold mb-4">🎁 Người Trúng Thưởng</h3>
+                    <div className="space-y-4">
+                      {luckyDrawWinners.map((draw, idx) => (
+                        <div
+                          key={draw.id}
+                          className={`p-4 rounded-lg border-2 flex items-center gap-4 ${
+                            idx === 0
+                              ? "bg-yellow-50 border-yellow-400"
+                              : "bg-gray-50 border-gray-300"
+                          }`}
+                        >
+                          <div
+                            className={`text-4xl font-bold w-12 text-center ${
+                              idx === 0 ? "text-yellow-600" : "text-gray-600"
+                            }`}
+                          >
+                            {idx === 0 ? "🥇" : "🥈"}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-bold text-gray-900">
+                              {draw.winner_profile?.full_name || "Anonymous"}
+                            </p>
+                            <p className="text-sm text-gray-600">{draw.prize_name}</p>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )}
+
+                {/* Failed Participants */}
+                {failedParticipants.length > 0 && (
+                  <div className="bg-white rounded-lg shadow-md p-6">
+                    <h3 className="text-2xl font-bold mb-4 text-red-600">⚠️ Danh Sách Bị Phạt</h3>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Các thành viên không đạt mục tiêu đã đăng ký
+                    </p>
+                    <div className="space-y-2">
+                      {failedParticipants.map((p) => (
+                        <div
+                          key={p.user_id}
+                          className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-red-400 flex items-center justify-center text-white font-bold">
+                            {p.profile?.full_name?.charAt(0) || "?"}
+                          </div>
+                          <div className="flex-1">
+                            <p className="font-semibold text-gray-900">
+                              {p.profile?.full_name || "Unknown"}
+                            </p>
+                            <p className="text-xs text-gray-600">
+                              Đạt {p.actual_km}/{p.target_km} km (
+                              {Math.round((p.actual_km / p.target_km) * 100)}%)
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -395,64 +431,79 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                       <tr className="border-b-2 border-gray-300">
                         <th className="text-left py-3 px-2 font-bold text-gray-700">#</th>
                         <th className="text-left py-3 px-2 font-bold text-gray-700">Tên</th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">
-                          Quãng Đường
-                        </th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">
-                          Pace Avg
-                        </th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">Hoạt động</th>
+                        <th className="text-right py-3 px-2 font-bold text-gray-700">KM</th>
+                        <th className="text-right py-3 px-2 font-bold text-gray-700">Pace</th>
+                        <th className="text-right py-3 px-2 font-bold text-gray-700">% Hoàn thành</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {participants.map((p, idx) => (
-                        <tr
-                          key={p.user_id}
-                          className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                        >
-                          <td className="py-4 px-2">
-                            <div className="flex items-center justify-center">
-                              {idx === 0 ? (
-                                <span className="text-2xl">🥇</span>
-                              ) : idx === 1 ? (
-                                <span className="text-2xl">🥈</span>
-                              ) : idx === 2 ? (
-                                <span className="text-2xl">🥉</span>
-                              ) : (
-                                <span className="font-bold text-gray-600">{idx + 1}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-4 px-2">
-                            <div className="flex items-center gap-2">
-                              {p.profile?.avatar_url ? (
-                                <img
-                                  src={p.profile.avatar_url}
-                                  alt={p.profile.full_name}
-                                  className="w-8 h-8 rounded-full object-cover"
-                                />
-                              ) : (
+                      {participants.map((p, idx) => {
+                        const progressPercent = Math.min(
+                          Math.round((p.actual_km / p.target_km) * 100),
+                          100
+                        );
+                        const isSuccess = progressPercent >= 100;
+                        return (
+                          <tr
+                            key={p.user_id}
+                            className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                          >
+                            <td className="py-4 px-2">
+                              <div className="flex items-center justify-center">
+                                {idx === 0 ? (
+                                  <span className="text-2xl">🥇</span>
+                                ) : idx === 1 ? (
+                                  <span className="text-2xl">🥈</span>
+                                ) : idx === 2 ? (
+                                  <span className="text-2xl">🥉</span>
+                                ) : (
+                                  <span className="font-bold text-gray-600">{idx + 1}</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-4 px-2">
+                              <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                  <span className="text-xs">👤</span>
+                                  <span className="text-xs">
+                                    {p.profile?.full_name?.charAt(0) || "?"}
+                                  </span>
                                 </div>
-                              )}
-                              <span className="font-semibold text-gray-900">
-                                {p.profile?.full_name || "Unknown"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-2 text-right">
-                            <div className="font-bold text-blue-600">{p.actual_km} km</div>
-                            <div className="text-xs text-gray-500">Target: {p.target_km} km</div>
-                          </td>
-                          <td className="py-4 px-2 text-right">
-                            {formatPace(p.avg_pace_seconds)}
-                          </td>
-                          <td className="py-4 px-2 text-right text-gray-600">
-                            {p.total_activities}
-                          </td>
-                        </tr>
-                      ))}
+                                <span className="font-semibold text-gray-900">
+                                  {p.profile?.full_name || "Unknown"}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-2 text-right">
+                              <div className="font-bold text-blue-600">{p.actual_km} km</div>
+                              <div className="text-xs text-gray-500">
+                                Mục tiêu: {p.target_km} km
+                              </div>
+                            </td>
+                            <td className="py-4 px-2 text-right">
+                              {formatPace(p.avg_pace_seconds)}
+                            </td>
+                            <td className="py-4 px-2 text-right">
+                              <div className="flex flex-col items-end gap-1">
+                                <span
+                                  className={`font-bold ${
+                                    isSuccess ? "text-green-600" : "text-red-600"
+                                  }`}
+                                >
+                                  {progressPercent}%
+                                </span>
+                                <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full ${
+                                      isSuccess ? "bg-green-500" : "bg-red-500"
+                                    }`}
+                                    style={{ width: `${progressPercent}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -465,6 +516,71 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
+
+      {/* Register Modal */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-2xl font-bold text-[var(--color-primary)] mb-4">
+              Đăng Ký Thử Thách
+            </h3>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Chọn mục tiêu (km)
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {TARGET_OPTIONS.map((km) => (
+                    <button
+                      key={km}
+                      onClick={() => setSelectedTarget(km)}
+                      className={`py-2 px-3 border-2 rounded-lg font-semibold transition-all ${
+                        selectedTarget === km
+                          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
+                          : "border-gray-300 hover:border-[var(--color-primary)]"
+                      }`}
+                    >
+                      {km} km
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {challenge?.password && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Mật khẩu thử thách
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowRegisterModal(false)}
+                className="flex-1 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                onClick={handleRegister}
+                disabled={registering || !selectedTarget}
+                className="flex-1 py-3 bg-[var(--color-primary)] text-white font-semibold rounded-lg hover:opacity-90 disabled:bg-gray-400 transition-colors"
+              >
+                {registering ? "Đang xử lý..." : "Đăng Ký"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

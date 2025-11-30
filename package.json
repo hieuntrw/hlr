@@ -1,5 +1,5 @@
 {
-  "name": "hlr-running-club",
+  "name": "Hai Lang Runners",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,8 +10,10 @@
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.8.0",
+    "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.39.0",
     "axios": "^1.6.0",
+    "lucide-react": "^0.555.0",
     "next": "^14.0.0",
     "qrcode": "^1.5.1",
     "react": "^18.2.0",
@@ -23,6 +25,7 @@
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
     "autoprefixer": "^10.4.16",
+    "dotenv": "^17.2.3",
     "eslint": "^8.55.0",
     "eslint-config-next": "^14.0.0",
     "postcss": "^8.4.31",

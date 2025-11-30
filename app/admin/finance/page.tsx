@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import RejectModal from "./RejectModal";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
@@ -21,6 +22,7 @@ interface Transaction {
   paid_at?: string | null;
   rejected_by?: string | null;
   rejected_at?: string | null;
+  rejection_reason?: string | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -64,6 +66,8 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
   const [adminUserId, setAdminUserId] = useState<string | null>(null);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,7 +106,7 @@ export default function FinancePage() {
     try {
       let query = supabase
         .from("transactions")
-        .select("id, user_id, type, amount, description, transaction_date, payment_status, profiles(full_name)")
+        .select("id, user_id, type, amount, description, transaction_date, payment_status, profiles(full_name), receipt_url, paid_by, paid_at, rejected_by, rejected_at, rejection_reason")
         .order("transaction_date", { ascending: false });
 
       if (filterType) {
@@ -116,18 +120,24 @@ export default function FinancePage() {
         return;
       }
 
-      setTransactions(
-        data?.map((t: any) => ({
-          id: t.id,
-          user_id: t.user_id,
-          type: t.type,
-          amount: t.amount,
-          description: t.description,
-          transaction_date: t.transaction_date,
-          payment_status: t.payment_status,
-          profile: t.profiles,
-        })) || []
-      );
+          setTransactions(
+            data?.map((t: any) => ({
+              id: t.id,
+              user_id: t.user_id,
+              type: t.type,
+              amount: t.amount,
+              description: t.description,
+              transaction_date: t.transaction_date,
+              payment_status: t.payment_status,
+              profile: t.profiles,
+              receipt_url: t.receipt_url,
+              paid_by: t.paid_by,
+              paid_at: t.paid_at,
+              rejected_by: t.rejected_by,
+              rejected_at: t.rejected_at,
+              rejection_reason: t.rejection_reason,
+            })) || []
+          );
     } catch (err) {
       console.error("Error:", err);
     } finally {
@@ -152,11 +162,11 @@ export default function FinancePage() {
     }
   }
 
-  async function rejectTransaction(transactionId: string) {
+  async function rejectTransaction(transactionId: string, reason: string) {
     try {
       const { data, error } = await supabase
         .from('transactions')
-        .update({ payment_status: 'rejected', rejected_by: adminUserId, rejected_at: new Date().toISOString() })
+        .update({ payment_status: 'rejected', rejected_by: adminUserId, rejected_at: new Date().toISOString(), rejection_reason: reason })
         .eq('id', transactionId)
         .select()
         .single();
@@ -320,11 +330,20 @@ export default function FinancePage() {
                         className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${
                           transaction.payment_status === "paid"
                             ? "bg-green-100 text-green-800"
+                            : transaction.payment_status === "rejected"
+                            ? "bg-red-100 text-red-800"
                             : "bg-yellow-100 text-yellow-800"
                         }`}
                       >
-                        {transaction.payment_status === "paid" ? "✓ Đã thanh toán" : "⏳ Chờ"}
+                        {transaction.payment_status === "paid"
+                          ? "✓ Đã thanh toán"
+                          : transaction.payment_status === "rejected"
+                          ? "Đã từ chối"
+                          : "⏳ Chờ"}
                       </span>
+                      {transaction.payment_status === "rejected" && transaction.rejection_reason && (
+                        <div className="text-xs text-red-600 mt-1">Lý do: {transaction.rejection_reason}</div>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       {transaction.payment_status === 'submitted' ? (
@@ -333,7 +352,16 @@ export default function FinancePage() {
                             <a href={transaction['receipt_url']} target="_blank" rel="noreferrer" className="text-sm underline text-sky-600">Xem biên lai</a>
                           )}
                           <button onClick={() => approveTransaction(transaction.id)} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Xác nhận</button>
-                          <button onClick={() => rejectTransaction(transaction.id)} className="px-3 py-1 bg-red-600 text-white rounded text-sm">Từ chối</button>
+                          <button onClick={() => { setRejectingId(transaction.id); setShowRejectModal(true); }} className="px-3 py-1 bg-red-600 text-white rounded text-sm">Từ chối</button>
+                              <RejectModal
+                                open={showRejectModal}
+                                onClose={() => setShowRejectModal(false)}
+                                onSubmit={reason => {
+                                  if (rejectingId) rejectTransaction(rejectingId, reason);
+                                  setShowRejectModal(false);
+                                  setRejectingId(null);
+                                }}
+                              />
                         </div>
                       ) : (
                         <span className="text-sm text-gray-600">-</span>

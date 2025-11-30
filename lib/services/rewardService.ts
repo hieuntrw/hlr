@@ -147,13 +147,17 @@ export async function checkRaceReward(userId: string, raceResult: RaceResult) {
   }
 
   // 6) Insert member_rewards
-  const { error: insertErr } = await supabase.from("member_rewards").insert({
-    user_id: userId,
-    race_result_id: raceResult.id,
-    reward_definition_id: awardedReward.id,
-    awarded_date: new Date().toISOString().slice(0, 10),
-    status: "pending",
-  });
+  const { data: mrInserted, error: insertErr } = await supabase
+    .from("member_rewards")
+    .insert({
+      user_id: userId,
+      race_result_id: raceResult.id,
+      reward_definition_id: awardedReward.id,
+      awarded_date: new Date().toISOString().slice(0, 10),
+      status: "pending",
+    })
+    .select("id")
+    .single();
 
   if (insertErr) {
     console.error(`[rewardService] Failed to insert member_reward:`, insertErr);
@@ -161,19 +165,29 @@ export async function checkRaceReward(userId: string, raceResult: RaceResult) {
   }
 
   // 7) Create transaction for cash reward
-  if (awardedReward.cash_amount > 0) {
-    const { error: txnErr } = await supabase.from("transactions").insert({
-      user_id: userId,
-      type: "reward_payout",
-      amount: awardedReward.cash_amount,
-      description: `Race reward: ${awardedReward.prize_desc} (${category} - ${gender})`,
-      transaction_date: new Date().toISOString().slice(0, 10),
-      payment_status: "pending",
-      related_challenge_id: null,
-    });
+  if (awardedReward.cash_amount > 0 && mrInserted?.id) {
+    const { data: txnIns, error: txnErr } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: userId,
+        type: "reward_payout",
+        amount: awardedReward.cash_amount,
+        description: `Race reward: ${awardedReward.prize_desc} (${category} - ${gender})`,
+        transaction_date: new Date().toISOString().slice(0, 10),
+        payment_status: "pending",
+        related_challenge_id: null,
+        related_member_reward_id: mrInserted.id,
+      })
+      .select("id")
+      .single();
 
     if (txnErr) {
       console.error(`[rewardService] Failed to create transaction:`, txnErr);
+    } else if (txnIns?.id) {
+      await supabase
+        .from("member_rewards")
+        .update({ related_transaction_id: txnIns.id })
+        .eq("id", mrInserted.id);
     }
   }
 
@@ -241,13 +255,17 @@ export async function checkPodiumReward(
   }
 
   // 4) Insert member_rewards
-  const { error: insertErr } = await supabase.from("member_rewards").insert({
+  const { data: mrInserted, error: insertErr } = await supabase
+    .from("member_rewards")
+    .insert({
     user_id: userId,
     race_result_id: raceResult.id,
     reward_definition_id: podiumReward.id,
     awarded_date: new Date().toISOString().slice(0, 10),
     status: "pending",
-  });
+    })
+    .select("id")
+    .single();
 
   if (insertErr) {
     console.error(`[rewardService] Failed to insert member_reward:`, insertErr);
@@ -255,19 +273,29 @@ export async function checkPodiumReward(
   }
 
   // 5) Create transaction
-  if (podiumReward.cash_amount > 0) {
-    const { error: txnErr } = await supabase.from("transactions").insert({
-      user_id: userId,
-      type: "reward_payout",
-      amount: podiumReward.cash_amount,
-      description: `Podium reward: ${rankType} rank ${rank} - ${podiumReward.prize_desc}`,
-      transaction_date: new Date().toISOString().slice(0, 10),
-      payment_status: "pending",
-      related_challenge_id: null,
-    });
+  if (podiumReward.cash_amount > 0 && mrInserted?.id) {
+    const { data: txnIns, error: txnErr } = await supabase
+      .from("transactions")
+      .insert({
+        user_id: userId,
+        type: "reward_payout",
+        amount: podiumReward.cash_amount,
+        description: `Podium reward: ${rankType} rank ${rank} - ${podiumReward.prize_desc}`,
+        transaction_date: new Date().toISOString().slice(0, 10),
+        payment_status: "pending",
+        related_challenge_id: null,
+        related_member_reward_id: mrInserted.id,
+      })
+      .select("id")
+      .single();
 
     if (txnErr) {
       console.error(`[rewardService] Failed to create transaction:`, txnErr);
+    } else if (txnIns?.id) {
+      await supabase
+        .from("member_rewards")
+        .update({ related_transaction_id: txnIns.id })
+        .eq("id", mrInserted.id);
     }
   }
 

@@ -1,3 +1,71 @@
+// Transaction type for admin UI and service
+export interface Transaction {
+  id: string;
+  user_id?: string;
+  type: string;
+  amount: number;
+  description: string;
+  transaction_date?: string;
+  payment_status?: string;
+  profile?: { full_name: string };
+  receipt_url?: string | null;
+  paid_by?: string | null;
+  paid_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+}
+
+// Server-side: getUserTransactions(userId) - returns user's transactions, newest first
+export async function getUserTransactions(userId: string) {
+  const { data, error } = await supabase
+    .from('transactions')
+    .select('id, created_at, type, description, amount, payment_status, receipt_url')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) {
+    throw new Error('getUserTransactions error: ' + error.message);
+  }
+  return data || [];
+}
+
+// Server-side: getPublicFundStats() - returns totalBalance and 10 latest expenses (date, description, amount)
+export async function getPublicFundStats() {
+  // Sum credits
+  const { data: creditRows, error: creditError } = await supabase
+    .from('transactions')
+    .select('amount, type')
+    .in('type', ['fund_collection', 'donation']);
+  if (creditError) throw new Error('getPublicFundStats credit error: ' + creditError.message);
+  const totalIncome = (creditRows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  // Sum expenses
+  const { data: expenseRows, error: expenseError } = await supabase
+    .from('transactions')
+    .select('amount, type')
+    .in('type', ['expense', 'reward_payout', 'fine', 'purchase']);
+  if (expenseError) throw new Error('getPublicFundStats expense error: ' + expenseError.message);
+  const totalExpense = (expenseRows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+
+  // Get 10 latest expenses (date, description, amount)
+  const { data: latestExpenses, error: latestError } = await supabase
+    .from('transactions')
+    .select('created_at, description, amount')
+    .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
+    .order('created_at', { ascending: false })
+    .limit(10);
+  if (latestError) throw new Error('getPublicFundStats latest error: ' + latestError.message);
+
+  return {
+    totalBalance: totalIncome - totalExpense,
+    latestExpenses: (latestExpenses || []).map(e => ({
+      date: e.created_at,
+      description: e.description,
+      amount: Number(e.amount || 0)
+    }))
+  };
+}
 import { supabase } from "@/lib/supabase-client";
 import type { SupabaseClient } from '@supabase/supabase-js';
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { Activity, Calendar, MapPin, Trophy, Medal, Star, Sparkles, User, Lightbulb } from "lucide-react";
 
 interface Race {
   id: string;
@@ -86,11 +87,11 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
 
         <div className="space-y-2 text-sm text-gray-600">
           <p className="flex items-center gap-2">
-            <span className="text-lg">📅</span>
+            <Calendar size={20} className="text-gray-600" />
             <span>{formatDate(race.race_date)}</span>
           </p>
           <p className="flex items-center gap-2">
-            <span className="text-lg">📍</span>
+            <MapPin size={20} className="text-gray-600" />
             <span>{race.location || "Chưa có thông tin"}</span>
           </p>
         </div>
@@ -229,7 +230,9 @@ export default function EventsPage() {
             </button>
             <h1 className="text-4xl md:text-5xl font-bold mb-2">{selectedRace.name}</h1>
             <p className="text-blue-100">
-              📅 {formatDate(selectedRace.race_date)} • 📍 {selectedRace.location}
+              <div className="flex items-center gap-3 text-gray-600">
+                <Calendar size={18} /> {formatDate(selectedRace.race_date)} • <MapPin size={18} /> {selectedRace.location}
+              </div>
             </p>
           </div>
         </div>
@@ -248,7 +251,7 @@ export default function EventsPage() {
               {/* Results by Distance */}
               {raceResults.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6">🏃 Kết Quả Giải Chạy</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Activity size={28} /> Kết Quả Giải Chạy</h2>
 
                   {/* Group by distance */}
                   {Array.from(new Set(raceResults.map((r) => r.distance))).map((distance) => (
@@ -279,11 +282,11 @@ export default function EventsPage() {
                                   <td className="py-3 px-4">
                                     <div className="flex items-center justify-center">
                                       {idx === 0 ? (
-                                        <span className="text-2xl">🥇</span>
+                                        <Medal size={24} className="text-yellow-400" />
                                       ) : idx === 1 ? (
-                                        <span className="text-2xl">🥈</span>
+                                        <Medal size={24} className="text-gray-400" />
                                       ) : idx === 2 ? (
-                                        <span className="text-2xl">🥉</span>
+                                        <Medal size={24} className="text-orange-600" />
                                       ) : (
                                         <span className="font-bold text-gray-600">#{idx + 1}</span>
                                       )}
@@ -298,15 +301,15 @@ export default function EventsPage() {
                                           className="w-8 h-8 rounded-full object-cover"
                                         />
                                       ) : (
-                                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-xs">
-                                          👤
+                                        <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
+                                          <User size={16} className="text-gray-600" />
                                         </div>
                                       )}
                                       <span className="font-semibold text-gray-900">
                                         {result.profile?.full_name}
                                       </span>
                                       {result.is_pr && (
-                                        <span className="ml-2 text-xl animate-pulse">⭐</span>
+                                        <Star size={20} className="text-yellow-400 fill-yellow-400 animate-pulse" />
                                       )}
                                     </div>
                                   </td>
@@ -320,7 +323,7 @@ export default function EventsPage() {
                                   </td>
                                   <td className="py-3 px-4 text-center">
                                     {result.is_pr ? (
-                                      <span className="text-2xl">✨</span>
+                                      <Sparkles size={24} className="text-yellow-400 mx-auto" />
                                     ) : (
                                       <span className="text-gray-300">-</span>
                                     )}
@@ -338,14 +341,14 @@ export default function EventsPage() {
               {/* Reward Table */}
               {rewards.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6">🏆 Bảng Quy Đổi Giải Thưởng</h2>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Trophy size={28} className="text-yellow-500" /> Bảng Quy Đổi Giải Thưởng</h2>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Half Marathon Rewards */}
                     {rewards.filter((r) => r.category === "HM").length > 0 && (
                       <div className="bg-white rounded-lg shadow-md p-6">
                         <h3 className="text-xl font-bold text-blue-600 mb-4">
-                          🏃 Half Marathon (21km)
+                          <Activity size={18} /> Half Marathon (21km)
                         </h3>
 
                         <div className="space-y-3">
@@ -377,7 +380,7 @@ export default function EventsPage() {
                     {rewards.filter((r) => r.category === "FM").length > 0 && (
                       <div className="bg-white rounded-lg shadow-md p-6">
                         <h3 className="text-xl font-bold text-purple-600 mb-4">
-                          🏃 Full Marathon (42km)
+                          <Activity size={18} /> Full Marathon (42km)
                         </h3>
 
                         <div className="space-y-3">
@@ -406,9 +409,12 @@ export default function EventsPage() {
                     )}
                   </div>
 
-                  <p className="text-sm text-gray-600 mt-6 p-4 bg-blue-50 rounded-lg">
-                    💡 <strong>Hướng dẫn:</strong> Tra cứu thành tích của bạn để xem mình đạt mốc nào và sẽ nhận được giải thưởng gì.
-                    Những thành tích có dấu ⭐ là những kỷ lục cá nhân (PR).
+                  <p className="text-sm text-gray-600 mt-6 p-4 bg-blue-50 rounded-lg flex items-start gap-2">
+                    <Lightbulb size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Hướng dẫn:</strong> Tra cứu thành tích của bạn để xem mình đạt mốc nào và sẽ nhận được giải thưởng gì.
+                      Những thành tích có dấu <Star size={14} className="inline text-yellow-400 fill-yellow-400" /> là những kỷ lục cá nhân (PR).
+                    </span>
                   </p>
                 </div>
               )}
@@ -430,7 +436,7 @@ export default function EventsPage() {
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">🏃 Danh Sách Sự Kiện Chạy</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-2 flex items-center gap-3"><Activity size={40} /> Danh Sách Sự Kiện Chạy</h1>
           <p className="text-blue-100 text-lg">Xem kết quả giải đấu và nhận thưởng</p>
         </div>
       </div>

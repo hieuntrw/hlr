@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { Calendar, CheckCircle, Clock, PlayCircle, XCircle, Lock, Flag, List, User } from "lucide-react";
 
 interface Challenge {
   id: string;
@@ -28,54 +29,69 @@ function formatDate(dateStr: string): string {
   });
 }
 
-function getStatusBadge(status: "Open" | "Closed") {
-  if (status === "Open") {
+function getStatusBadge(challenge: Challenge) {
+  const now = new Date();
+  const start = new Date(challenge.start_date);
+  const end = new Date(challenge.end_date);
+
+  if (now < start) {
+    return (
+      <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
+        <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+        Sắp diễn ra
+      </span>
+    );
+  } else if (now >= start && now <= end && challenge.status === "Open") {
     return (
       <span className="inline-flex items-center gap-2 px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-semibold">
         <span className="w-2 h-2 bg-green-600 rounded-full animate-pulse"></span>
-        Đang diễn ra
+        Đang chạy
+      </span>
+    );
+  } else {
+    return (
+      <span className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
+        <span className="w-2 h-2 bg-gray-600 rounded-full"></span>
+        Đã kết thúc
       </span>
     );
   }
-  return (
-    <span className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
-      <span className="w-2 h-2 bg-gray-600 rounded-full"></span>
-      Đã đóng
-    </span>
-  );
 }
 
 function ChallengeCard({ challenge }: { challenge: ChallengeWithParticipation }) {
   return (
     <Link href={`/challenges/${challenge.id}`}>
-      <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow overflow-hidden cursor-pointer border-l-4 border-blue-500">
+      <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all overflow-hidden cursor-pointer border-l-4 border-[var(--color-primary)]">
         <div className="p-6">
           <div className="flex items-start justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-900 flex-1">{challenge.title}</h3>
+            <h3 className="text-xl font-bold text-[var(--color-primary)] flex-1">{challenge.title}</h3>
             {challenge.user_participates && (
-              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                ✓ Đã tham gia
+              <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded flex items-center gap-1">
+                <CheckCircle size={14} />
+                Đã tham gia
               </span>
             )}
           </div>
 
           <div className="space-y-3 mb-4">
             <div className="flex items-center gap-2 text-gray-600">
-              <span className="text-lg">📅</span>
-              <span>
+              <Calendar size={18} />
+              <span className="text-sm">
                 {formatDate(challenge.start_date)} - {formatDate(challenge.end_date)}
               </span>
             </div>
 
             <div className="flex items-center gap-2">
-              {getStatusBadge(challenge.status)}
+              {getStatusBadge(challenge)}
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-            <span className="text-sm text-gray-500">Chi tiết →</span>
+            <span className="text-sm text-[var(--color-accent)] font-medium">Chi tiết →</span>
             {challenge.is_locked && (
-              <span className="text-xs text-red-600 font-semibold">🔒 Khoá</span>
+              <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                <Lock size={12} /> Đã khóa
+              </span>
             )}
           </div>
         </div>
@@ -170,11 +186,14 @@ export default function ChallengesPage() {
   const displayChallenges = challenges;
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
+      <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white py-8 px-4">
         <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">🏃 Danh Sách Thử Thách</h1>
+          <div className="flex items-center gap-3 mb-2">
+            <Flag size={40} />
+            <h1 className="text-4xl md:text-5xl font-bold">Đanh Sách Thử Thách</h1>
+          </div>
           <p className="text-blue-100 text-lg">Tham gia các thử thách hàng tháng và hoàn thành mục tiêu</p>
         </div>
       </div>
@@ -185,23 +204,25 @@ export default function ChallengesPage() {
         <div className="flex gap-2 mb-8 border-b border-gray-300">
           <button
             onClick={() => setActiveTab("all")}
-            className={`px-6 py-3 font-semibold transition-all border-b-2 ${
+            className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
               activeTab === "all"
-                ? "text-blue-600 border-blue-600"
+                ? "text-[var(--color-primary)] border-[var(--color-primary)]"
                 : "text-gray-600 border-transparent hover:text-gray-900"
             }`}
           >
-            📋 Tất Cả Thử Thách
+            <List size={20} />
+            Tất Cả Thử Thách
           </button>
           <button
             onClick={() => setActiveTab("my")}
-            className={`px-6 py-3 font-semibold transition-all border-b-2 ${
+            className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
               activeTab === "my"
-                ? "text-blue-600 border-blue-600"
+                ? "text-[var(--color-primary)] border-[var(--color-primary)]"
                 : "text-gray-600 border-transparent hover:text-gray-900"
             }`}
           >
-            ✓ Đã Tham Gia
+            <User size={20} />
+            Thử Thách Của Tôi
           </button>
         </div>
 

@@ -1,10 +1,11 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Header from "@/components/Header";
 import LeaderboardRow from "@/components/LeaderboardRow";
 import { supabase } from "@/lib/supabase-client";
+import { User, Bell, Target, TrendingUp } from "lucide-react";
 
 interface LeaderboardEntry {
   rank: number;
@@ -25,9 +26,23 @@ interface UserProfile {
   id: string;
   full_name: string | null;
   strava_id: string | null;
+  role?: string;
+}
+
+function Avatar({ url, name }: { url?: string; name: string }) {
+  return (
+    <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center overflow-hidden shadow-lg">
+      {url ? (
+        <img src={url} alt={name} className="w-full h-full object-cover" />
+      ) : (
+        <User className="text-white" size={28} />
+      )}
+    </div>
+  );
 }
 
 function DashboardContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const connected = searchParams.get("strava_connected");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
@@ -42,6 +57,7 @@ function DashboardContent() {
     targetKm: 0,
     progressPercent: 0,
   });
+  const [notifications, setNotifications] = useState<string[]>([]);
 
   // fetch leaderboard (mocked here; replace with Supabase query in production)
   async function fetchLeaderboard() {
@@ -189,7 +205,7 @@ function DashboardContent() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("id, full_name, strava_id")
+        .select("id, full_name, strava_id, role")
         .eq("id", user.id)
         .maybeSingle();
 
@@ -202,34 +218,49 @@ function DashboardContent() {
   }
 
   useEffect(() => {
-    // Auto-fetch leaderboard and user profile on mount
-    fetchLeaderboard();
-    fetchUserProfile();
-    fetchPersonalStats();
-
-    // Auto-sync once when page loads
-    (async function autoSync() {
-      try {
-        setSyncLoading(true);
-        setLastSyncMessage(null);
-        const res = await fetch("/api/strava/sync", { method: "POST" });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setLastSyncMessage(body?.error || "Đồng bộ thất bại");
-        } else {
-          const body = await res.json();
-          setLastSyncMessage("Đồng bộ thành công");
-          // reload leaderboard data to reflect latest sync
-          await fetchLeaderboard();
-          await fetchPersonalStats();
-        }
-      } catch (err) {
-        setLastSyncMessage("Đồng bộ thất bại");
-      } finally {
-        setSyncLoading(false);
+    // Check auth on mount
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        router.push(`/login?redirect=${encodeURIComponent("/dashboard")}`);
+        return;
       }
-    })();
 
+      // Auto-fetch leaderboard and user profile on mount
+      fetchLeaderboard();
+      fetchUserProfile();
+      fetchPersonalStats();
+      setNotifications([
+        "Sắp có giải chạy HLR tháng 12!",
+        "Nhắc đóng quỹ tháng này trước 10/12.",
+        "Chúc mừng thành viên đạt PB mới!",
+      ]);
+
+      // Auto-sync once when page loads
+      (async function autoSync() {
+        try {
+          setSyncLoading(true);
+          setLastSyncMessage(null);
+          const res = await fetch("/api/strava/sync", { method: "POST" });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            setLastSyncMessage(body?.error || "Đồng bộ thất bại");
+          } else {
+            const body = await res.json();
+            setLastSyncMessage("Đồng bộ thành công");
+            // reload leaderboard data to reflect latest sync
+            await fetchLeaderboard();
+            await fetchPersonalStats();
+          }
+        } catch (err) {
+          setLastSyncMessage("Đồng bộ thất bại");
+        } finally {
+          setSyncLoading(false);
+        }
+      })();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -258,35 +289,58 @@ function DashboardContent() {
     <>
       <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* User Welcome Section */}
-        {!userProfile && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-            <div>
-              <h3 className="font-semibold text-blue-900">Bạn chưa đăng nhập</h3>
-              <p className="text-sm text-blue-700">Vui lòng đăng nhập bằng email của thành viên để kết nối Strava và đồng bộ hoạt động.</p>
-            </div>
-            <div>
-              <a href="/profile" className="px-4 py-2 bg-blue-600 text-white rounded-md">Đăng nhập / Hồ sơ</a>
-            </div>
+      {/* Welcome Block */}
+      {userProfile && (
+        <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--color-bg)] shadow-md mb-6">
+          <Avatar url={undefined} name={userProfile.full_name || "?"} />
+          <div>
+            <h2 className="text-xl font-bold text-[var(--color-primary)]">Xin chào, {userProfile.full_name || "thành viên"}!</h2>
+            <p className="text-sm text-[var(--color-muted)]">Chúc bạn một ngày chạy vui vẻ!</p>
           </div>
-        )}
+        </div>
+      )}
 
-        {userProfile && (
-          <div className="mb-8 p-6 bg-gradient-to-r from-primary-500 to-blue-500 rounded-lg text-white">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-3xl font-bold mb-2">
-                  Chào mừng, {userProfile.full_name || "Runner"}! 🏃
-                </h1>
-                <p className="text-primary-100">
-                  {userProfile.strava_id
-                    ? "Kết nối Strava đã được thiết lập. Dữ liệu của bạn sẽ được cập nhật tự động."
-                    : "Hãy kết nối Strava để bắt đầu theo dõi hoạt động"}
-                </p>
-              </div>
+      {/* Notifications Block */}
+      <div className="p-4 rounded-xl bg-gradient-to-tr from-[var(--color-accent)] to-[var(--color-bg)] shadow-md mb-6">
+        <h3 className="font-semibold text-[var(--color-primary)] mb-2">Thông báo mới</h3>
+        <div className="flex gap-2 overflow-x-auto pb-2">
+          {notifications.map((note, idx) => (
+            <div key={idx} className="min-w-[180px] px-3 py-2 bg-white/80 rounded-lg shadow text-[var(--color-primary)] text-sm font-medium">
+              {note}
             </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Current Challenge Block */}
+      <div className="p-4 rounded-xl bg-[var(--color-bg)] shadow-md mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="font-semibold text-[var(--color-primary)]">Thử thách hiện tại</h3>
+          <a href="/challenges" className="text-xs text-[var(--color-accent)] underline">Chi tiết</a>
+        </div>
+        <div>
+          <p className="text-sm font-medium mb-2">{challenge}</p>
+          <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+            <div
+              className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] h-3 rounded-full"
+              style={{ width: `${personalStats.progressPercent || 0}%` }}
+            />
           </div>
-        )}
+          <div className="flex justify-between text-xs text-[var(--color-muted)]">
+            <span>Tổng KM: <span className="font-bold text-[var(--color-primary)]">{personalStats.totalKm ?? "-"}</span></span>
+            <span>Pace TB: <span className="font-bold text-[var(--color-primary)]">{personalStats.avgPace ?? "-"} min/km</span></span>
+            <span>Hoàn thành: <span className="font-bold text-[var(--color-primary)]">{personalStats.progressPercent ?? 0}%</span></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Admin Shortcuts Block */}
+      {userProfile && (userProfile.role === "admin" || userProfile.role?.startsWith("mod_")) && (
+        <div className="p-4 rounded-xl bg-[var(--color-bg)] shadow-md flex gap-4 mb-6">
+          <a href="/admin/finance" className="flex-1 py-3 px-4 bg-gradient-to-tr from-[var(--color-primary)] to-[var(--color-accent)] text-white rounded-lg font-semibold shadow text-center">Quản lý Thu chi</a>
+          <a href="/admin/pb-approval" className="flex-1 py-3 px-4 bg-gradient-to-tr from-[var(--color-accent)] to-[var(--color-primary)] text-white rounded-lg font-semibold shadow text-center">Duyệt PB</a>
+        </div>
+      )}
 
         {userProfile && !userProfile.strava_id && (
           <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-center justify-between">
