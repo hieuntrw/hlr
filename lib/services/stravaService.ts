@@ -5,6 +5,33 @@ import {
 
 const STRAVA_ACTIVITIES_URL = "https://www.strava.com/api/v3/athlete/activities";
 
+// Default pace limits (in seconds per km): 4:00 min, 12:00 max
+const DEFAULT_MIN_PACE_SECONDS = 240; // 4:00
+const DEFAULT_MAX_PACE_SECONDS = 720; // 12:00
+
+/**
+ * Calculate pace (seconds per km) from distance and time.
+ * Returns null if distance is 0 or invalid.
+ */
+function calculatePacePerKm(distanceMeters: number, movingTimeSeconds: number): number | null {
+  if (!distanceMeters || distanceMeters <= 0 || !movingTimeSeconds || movingTimeSeconds <= 0) {
+    return null;
+  }
+  const distanceKm = distanceMeters / 1000;
+  return Math.round(movingTimeSeconds / distanceKm);
+}
+
+/**
+ * Check if pace falls within acceptable range.
+ */
+function isPaceWithinRange(
+  paceSeconds: number,
+  minPaceSeconds: number = DEFAULT_MIN_PACE_SECONDS,
+  maxPaceSeconds: number = DEFAULT_MAX_PACE_SECONDS
+): boolean {
+  return paceSeconds >= minPaceSeconds && paceSeconds <= maxPaceSeconds;
+}
+
 /**
  * Refresh Strava token for a user if expired.
  * Returns updated token data or null if no Strava connection.
@@ -145,6 +172,10 @@ export async function syncUserActivities(
   const perPage = 200;
   let allRuns: any[] = [];
 
+  // Get pace limits from challenge (or use defaults)
+  const minPaceSeconds = challenge.min_pace_seconds ?? DEFAULT_MIN_PACE_SECONDS;
+  const maxPaceSeconds = challenge.max_pace_seconds ?? DEFAULT_MAX_PACE_SECONDS;
+
   while (true) {
     const url = `${STRAVA_ACTIVITIES_URL}?after=${after}&before=${before}&page=${page}&per_page=${perPage}`;
 
@@ -160,8 +191,24 @@ export async function syncUserActivities(
     const items = await res.json();
     if (!Array.isArray(items) || items.length === 0) break;
 
-    const runs = items.filter((a: any) => a.type === "Run");
-    allRuns = allRuns.concat(runs);
+    // Filter: only runs/walks, and only within pace range
+    const validActivities = items.filter((a: any) => {
+      if (a.type !== "Run" && a.type !== "Walk") return false;
+
+      const pace = calculatePacePerKm(a.distance, a.moving_time);
+      if (pace === null) return false; // skip if cannot calculate pace
+
+      if (!isPaceWithinRange(pace, minPaceSeconds, maxPaceSeconds)) {
+        console.warn(
+          `[stravaService] Activity ${a.id} filtered out: pace ${pace}s/km outside range [${minPaceSeconds}-${maxPaceSeconds}]`
+        );
+        return false;
+      }
+
+      return true;
+    });
+
+    allRuns = allRuns.concat(validActivities);
 
     if (items.length < perPage) break;
     page += 1;
@@ -174,6 +221,50 @@ export async function syncUserActivities(
   const totalActivities = allRuns.length;
 
   const avgPaceSeconds = totalKm > 0 ? Math.round(totalSeconds / totalKm) : 0;
+
+  // Calculate aggregate heartrate, cadence, elevation
+  const avgHeartrate = totalActivities > 0 
+    ? Math.round(
+        allRuns.reduce((sum, a) => sum + (a.average_heartrate || 0), 0) / totalActivities * 100
+      ) / 100
+    : null;
+  const avgCadence = totalActivities > 0
+    ? Math.round(
+        allRuns.reduce((sum, a) => sum + (a.average_cadence || 0), 0) / totalActivities * 100
+      ) / 100
+    : null;
+  const totalElevation = Math.round(
+    allRuns.reduce((sum, a) => sum + (a.total_elevation_gain || 0), 0) * 100
+  ) / 100;
+
+  // 5b) Insert activities into `activities` table for detailed tracking
+  for (const activity of allRuns) {
+    const activityPayload = {
+      strava_activity_id: activity.id,
+      user_id: userId,
+      challenge_participant_id: participant.id,
+      name: activity.name,
+      type: activity.type || "Run",
+      distance: activity.distance || 0,
+      moving_time: activity.moving_time || 0,
+      elapsed_time: activity.elapsed_time || 0,
+      elevation_gain: activity.total_elevation_gain || null,
+      average_heartrate: activity.average_heartrate || null,
+      max_heartrate: activity.max_heartrate || null,
+      average_cadence: activity.average_cadence || null,
+      start_date: activity.start_date,
+      raw_json: activity, // store full response for audit/reference
+    };
+
+    // Use upsert (insert or ignore if strava_activity_id exists)
+    const { error: actError } = await supabase
+      .from("activities")
+      .upsert([activityPayload], { onConflict: "strava_activity_id" });
+
+    if (actError) {
+      console.error(`[stravaService] Failed to insert activity ${activity.id}:`, actError);
+    }
+  }
 
   // 6) Update challenge_participants
   const updatePayload: any = {
@@ -197,13 +288,113 @@ export async function syncUserActivities(
     throw new Error(`Failed to update participant: ${updateError.message}`);
   }
 
+  // 7) Check for PB if any activity is a race event
+  await checkAndUpdatePBs(userId, allRuns, challenge.id);
+
   return {
     challengeId: challenge.id,
     participantId: participant.id,
     totalKm,
     avgPaceSeconds,
     totalActivities,
+    avgHeartrate,
+    avgCadence,
+    totalElevation,
   };
+}
+
+/**
+ * Check if any activity is a race (event) and updates PBs if personal records are set.
+ * For race activities, determines distance (HM/FM) and checks if time is a new PB.
+ * If PB detected, updates profile with pb_hm_approved/pb_fm_approved = FALSE (pending approval).
+ */
+async function checkAndUpdatePBs(userId: string, activities: any[], challengeId: string) {
+  if (!activities || activities.length === 0) return;
+
+  // Fetch current profile PBs
+  const { data: profile, error: pErr } = await supabase
+    .from("profiles")
+    .select("id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved")
+    .eq("id", userId)
+    .single();
+
+  if (pErr) {
+    console.error(`[stravaService] Failed to load profile for PB check:`, pErr);
+    return;
+  }
+
+  const currentPBHM = profile?.pb_hm_seconds ?? null;
+  const currentPBFM = profile?.pb_fm_seconds ?? null;
+
+  // Filter race activities (has race_type field or event_type indicator)
+  const raceActivities = activities.filter((a) => a.event_type || a.workout_type === 3 || a.flagged);
+
+  for (const race of raceActivities) {
+    // Try to infer distance from activity name or metadata
+    // Common patterns: "HM", "21k", "Half Marathon" -> HM, "FM", "42k", "Marathon" -> FM
+    const name = (race.name || "").toUpperCase();
+    const distance = race.distance || 0;
+    const movingTime = race.moving_time || 0;
+
+    let raceDistance: "HM" | "FM" | null = null;
+
+    if (name.includes("HALF") || name.includes("HM") || name.includes("21")) {
+      raceDistance = "HM";
+    } else if (name.includes("MARATHON") || name.includes("FM") || name.includes("42")) {
+      raceDistance = "FM";
+    } else if (distance >= 20000 && distance < 22000) {
+      raceDistance = "HM";
+    } else if (distance >= 41000 && distance < 43000) {
+      raceDistance = "FM";
+    }
+
+    if (!raceDistance) {
+      console.warn(`[stravaService] Race activity ${race.id} could not be classified (${name})`);
+      continue;
+    }
+
+    // Check if this is a new PB
+    const currentPB = raceDistance === "HM" ? currentPBHM : currentPBFM;
+    const isNewPB = !currentPB || movingTime < currentPB;
+
+    if (isNewPB) {
+      console.log(
+        `[stravaService] New PB detected: ${raceDistance} = ${movingTime}s (old: ${currentPB}s)`
+      );
+
+      // Update profile with new PB time, but mark as pending approval
+      const updatePayload: any = {};
+      const approvalField = raceDistance === "HM" ? "pb_hm_approved" : "pb_fm_approved";
+      const pbField = raceDistance === "HM" ? "pb_hm_seconds" : "pb_fm_seconds";
+
+      updatePayload[pbField] = movingTime;
+      updatePayload[approvalField] = false; // pending approval
+
+      const { error: updateErr } = await supabase
+        .from("profiles")
+        .update(updatePayload)
+        .eq("id", userId);
+
+      if (updateErr) {
+        console.error(`[stravaService] Failed to update PB:`, updateErr);
+      } else {
+        console.log(`[stravaService] Profile updated with pending ${raceDistance} PB`);
+      }
+
+      // Add entry to pb_history
+      const { error: histErr } = await supabase.from("pb_history").insert({
+        user_id: userId,
+        distance: raceDistance,
+        time_seconds: movingTime,
+        achieved_at: new Date(race.start_date || new Date()).toISOString().slice(0, 10),
+        race_id: null, // could link to races table if this activity has race metadata
+      });
+
+      if (histErr) {
+        console.error(`[stravaService] Failed to insert pb_history:`, histErr);
+      }
+    }
+  }
 }
 
 /**
