@@ -18,8 +18,9 @@ async function main() {
 
   try {
     const bucketId = 'receipts';
-    console.log('Creating bucket:', bucketId);
-    const { data, error } = await supabase.storage.createBucket(bucketId, { public: true });
+    const makePublic = (process.env.PUBLIC || 'true').toLowerCase() === 'true';
+    console.log(`Creating bucket: ${bucketId} (public=${makePublic})`);
+    const { data, error } = await supabase.storage.createBucket(bucketId, { public: makePublic });
     if (error) {
       if (error.message && error.message.includes('already exists')) {
         console.log('Bucket already exists');
@@ -29,6 +30,9 @@ async function main() {
       }
     } else {
       console.log('Bucket created:', data);
+    }
+    if (!makePublic) {
+      console.log('Bucket created as private. Note: to serve receipts to admins use signed URLs generated server-side with the service role key.');
     }
   } catch (err) {
     console.error('Unexpected error:', err);
