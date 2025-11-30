@@ -16,6 +16,11 @@ interface Transaction {
   profile?: {
     full_name: string;
   };
+  receipt_url?: string | null;
+  paid_by?: string | null;
+  paid_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
 }
 
 function formatDate(dateStr: string): string {
@@ -58,6 +63,7 @@ export default function FinancePage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [adminUserId, setAdminUserId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
 
   useEffect(() => {
@@ -74,6 +80,8 @@ export default function FinancePage() {
       router.push("/debug-login");
       return;
     }
+
+    setAdminUserId(user.id);
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -124,6 +132,40 @@ export default function FinancePage() {
       console.error("Error:", err);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function approveTransaction(transactionId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .update({ payment_status: 'paid', paid_by: adminUserId, paid_at: new Date().toISOString() })
+        .eq('id', transactionId)
+        .select()
+        .single();
+      if (error) throw error;
+      alert('Đã xác nhận thanh toán.');
+      fetchTransactions();
+    } catch (err) {
+      console.error(err);
+      alert('Không thể xác nhận.');
+    }
+  }
+
+  async function rejectTransaction(transactionId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .update({ payment_status: 'rejected', rejected_by: adminUserId, rejected_at: new Date().toISOString() })
+        .eq('id', transactionId)
+        .select()
+        .single();
+      if (error) throw error;
+      alert('Đã từ chối biên lai.');
+      fetchTransactions();
+    } catch (err) {
+      console.error(err);
+      alert('Không thể từ chối.');
     }
   }
 
@@ -251,6 +293,7 @@ export default function FinancePage() {
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Mô Tả</th>
                   <th className="text-right py-3 px-4 font-bold text-gray-700">Số Tiền</th>
                   <th className="text-center py-3 px-4 font-bold text-gray-700">Trạng Thái</th>
+                  <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
                 </tr>
               </thead>
               <tbody>
@@ -282,6 +325,19 @@ export default function FinancePage() {
                       >
                         {transaction.payment_status === "paid" ? "✓ Đã thanh toán" : "⏳ Chờ"}
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {transaction.payment_status === 'submitted' ? (
+                        <div className="flex items-center justify-center gap-2">
+                          {transaction['receipt_url'] && (
+                            <a href={transaction['receipt_url']} target="_blank" rel="noreferrer" className="text-sm underline text-sky-600">Xem biên lai</a>
+                          )}
+                          <button onClick={() => approveTransaction(transaction.id)} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Xác nhận</button>
+                          <button onClick={() => rejectTransaction(transaction.id)} className="px-3 py-1 bg-red-600 text-white rounded text-sm">Từ chối</button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-600">-</span>
+                      )}
                     </td>
                   </tr>
                 ))}

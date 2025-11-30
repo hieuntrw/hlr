@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import QRCode from 'qrcode';
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
 import {
   fetchUserTransactionsClient,
@@ -20,6 +21,8 @@ export default function FinancePage() {
   const [selectedTransactionId, setSelectedTransactionId] = useState<string | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState<boolean>(false);
+  const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
+  const [paymentQrUrl, setPaymentQrUrl] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'personal'|'report'>('personal');
   const [publicFund, setPublicFund] = useState<{ balance: number, recentExpenses: any[] }>({ balance: 0, recentExpenses: [] });
 
@@ -38,6 +41,14 @@ export default function FinancePage() {
         setPendingTotal(pending);
       }
       const stats = await fetchPublicFundStatsClient(supabase);
+      // generate QR for payment using default account string
+      try {
+        const accountString = `HLR|Vietcombank|0123456789|HLR Running Club`;
+        const qr = await QRCode.toDataURL(accountString);
+        setPaymentQrUrl(qr);
+      } catch (e) {
+        console.warn('Failed to generate QR', e);
+      }
       setPublicFund(stats);
       setLoading(false);
     })();
@@ -52,6 +63,7 @@ export default function FinancePage() {
   async function handleOpenUploadModal(transactionId: string) {
     setSelectedTransactionId(transactionId);
     setReceiptFile(null);
+    setReceiptPreviewUrl(null);
     setShowUploadModal(true);
   }
 
@@ -73,6 +85,23 @@ export default function FinancePage() {
     } else {
       alert('Có lỗi khi tải biên lai. Vui lòng thử lại.');
       console.error(res?.error);
+    }
+  }
+
+  function handleFileChange(file?: File | null) {
+    setReceiptFile(file ?? null);
+    setReceiptPreviewUrl(null);
+    if (!file) return;
+    const maxBytes = 5 * 1024 * 1024; // 5MB
+    if (file.size > maxBytes) {
+      alert('File quá lớn. Vui lòng chọn file nhỏ hơn 5MB.');
+      setReceiptFile(null);
+      return;
+    }
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setReceiptPreviewUrl(String(reader.result));
+      reader.readAsDataURL(file);
     }
   }
 
@@ -296,7 +325,12 @@ export default function FinancePage() {
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4">
-              <input type="file" accept="image/*,application/pdf" onChange={(e) => setReceiptFile(e.target.files?.[0] ?? null)} />
+              <input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
+              {receiptPreviewUrl && (
+                <div className="mt-2">
+                  <img src={receiptPreviewUrl} alt="preview" className="max-h-40 rounded" />
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <button disabled={!receiptFile || uploadingReceipt} className="flex-1 bg-blue-600 text-white px-3 py-2 rounded" onClick={handleUploadReceipt}>
