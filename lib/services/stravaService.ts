@@ -112,7 +112,7 @@ export async function syncUserActivities(
 
   const { data: challenges, error: chError } = await supabase
     .from("challenges")
-    .select("id, start_date, end_date, is_locked")
+    .select("id, start_date, end_date, is_locked, min_pace_seconds, max_pace_seconds")
     .gte("start_date", startISO)
     .lte("start_date", endISO)
     .limit(1);
