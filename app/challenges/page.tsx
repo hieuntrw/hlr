@@ -101,7 +101,7 @@ function ChallengeCard({ challenge }: { challenge: ChallengeWithParticipation })
 }
 
 export default function ChallengesPage() {
-  const [activeTab, setActiveTab] = useState<"my" | "all">("all");
+  const [activeTab, setActiveTab] = useState<"my" | "all">("my");
   const [challenges, setChallenges] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
@@ -186,66 +186,57 @@ export default function ChallengesPage() {
   const displayChallenges = challenges;
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center gap-3 mb-2">
-            <Flag size={40} />
-            <h1 className="text-4xl md:text-5xl font-bold">Đanh Sách Thử Thách</h1>
+    <div>
+      <div className="min-h-screen bg-[var(--color-bg-secondary)]">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {/* Tabs */}
+          <div className="flex gap-2 mb-8 border-b border-gray-300">
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                activeTab === "all"
+                  ? "text-[var(--color-primary)] border-[var(--color-primary)]"
+                  : "text-gray-600 border-transparent hover:text-gray-900"
+              }`}
+            >
+              <List size={20} />
+              Tất Cả Thử Thách
+            </button>
+            <button
+              onClick={() => setActiveTab("my")}
+              className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
+                activeTab === "my"
+                  ? "text-[var(--color-primary)] border-[var(--color-primary)]"
+                  : "text-gray-600 border-transparent hover:text-gray-900"
+              }`}
+            >
+              <User size={20} />
+              Thử Thách Của Tôi
+            </button>
           </div>
-          <p className="text-blue-100 text-lg">Tham gia các thử thách hàng tháng và hoàn thành mục tiêu</p>
-        </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Tabs */}
-        <div className="flex gap-2 mb-8 border-b border-gray-300">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
-              activeTab === "all"
-                ? "text-[var(--color-primary)] border-[var(--color-primary)]"
-                : "text-gray-600 border-transparent hover:text-gray-900"
-            }`}
-          >
-            <List size={20} />
-            Tất Cả Thử Thách
-          </button>
-          <button
-            onClick={() => setActiveTab("my")}
-            className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
-              activeTab === "my"
-                ? "text-[var(--color-primary)] border-[var(--color-primary)]"
-                : "text-gray-600 border-transparent hover:text-gray-900"
-            }`}
-          >
-            <User size={20} />
-            Thử Thách Của Tôi
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Đang tải dữ liệu...</p>
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Đang tải dữ liệu...</p>
+              </div>
             </div>
-          </div>
-        ) : displayChallenges.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displayChallenges.map((challenge) => (
-              <ChallengeCard key={challenge.id} challenge={challenge} />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-            <p className="text-gray-500 text-lg">
-              {activeTab === "my" ? "Bạn chưa tham gia thử thách nào" : "Chưa có thử thách"}
-            </p>
-          </div>
-        )}
+          ) : displayChallenges.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {displayChallenges.map((challenge) => (
+                <ChallengeCard key={challenge.id} challenge={challenge} />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg p-12 text-center shadow-sm">
+              <p className="text-gray-500 text-lg">
+                {activeTab === "my" ? "Bạn chưa tham gia thử thách nào" : "Chưa có thử thách"}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

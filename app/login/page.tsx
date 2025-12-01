@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 
-export default function LoginPage() {
+function LoginForm() {
 	const searchParams = useSearchParams();
 	const router = useRouter();
 	const [email, setEmail] = useState("");
@@ -18,29 +18,36 @@ export default function LoginPage() {
 		setLoading(true);
 		setMessage(null);
 
-		console.log("Login attempt for:", email);
-
 		try {
-			// Use Supabase client directly to ensure cookies are set properly
+			console.log("Attempting login with Supabase Auth...");
+			
+			// Simple: just use Supabase client auth directly
 			const { data, error } = await supabase.auth.signInWithPassword({
 				email,
 				password,
 			});
 
-			console.log("Login response:", { error: error?.message, user: data?.user?.email });
-
 			if (error) {
 				console.error("Login error:", error);
-				setMessage(error.message || "Đăng nhập thất bại");
+				setMessage(error.message);
 				setLoading(false);
-			} else if (data.user) {
-				console.log("Login successful, redirecting to:", redirectTo);
-				// Login successful, use window.location for full reload to ensure cookies work
-				window.location.href = redirectTo;
-			} else {
-				setMessage("Đăng nhập thất bại - không nhận được thông tin user");
-				setLoading(false);
+				return;
 			}
+
+			if (!data.session || !data.user) {
+				console.error("No session or user returned");
+				setMessage("Đăng nhập thất bại. Vui lòng thử lại.");
+				setLoading(false);
+				return;
+			}
+
+			console.log("✓ Login successful!");
+			console.log("  User:", data.user.email);
+			console.log("  Session:", data.session ? "created" : "missing");
+			
+			// Redirect to destination
+			console.log("Redirecting to:", redirectTo);
+			router.push(redirectTo);
 		} catch (err: any) {
 			console.error("Login exception:", err);
 			setMessage(err?.message || String(err));
@@ -91,5 +98,20 @@ export default function LoginPage() {
 			</p>
 			</div>
 		</main>
+	);
+}
+
+export default function LoginPage() {
+	return (
+		<Suspense fallback={
+			<main className="min-h-screen bg-gray-50 flex items-center justify-center">
+				<div className="text-center">
+					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+					<p className="text-gray-600">Đang tải...</p>
+				</div>
+			</main>
+		}>
+			<LoginForm />
+		</Suspense>
 	);
 }

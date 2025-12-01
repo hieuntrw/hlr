@@ -57,19 +57,12 @@ export default function PBApprovalPage() {
     const {
       data: { user },
     } = await supabase.auth.getUser();
-
     if (!user) {
       router.push("/debug-login");
       return;
     }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.role || !["admin", "mod_member"].includes(profile.role)) {
+    const role = user.user_metadata?.role;
+    if (!role || !["admin", "mod_member"].includes(role)) {
       router.push("/");
     }
   }
@@ -110,16 +103,19 @@ export default function PBApprovalPage() {
 
   async function handleApprove(pbId: string, distance: string) {
     try {
-      const column = distance === "HM" ? "pb_hm_approved" : "pb_fm_approved";
       const pbData = pendingPBs.find((p) => p.id === pbId);
 
       if (!pbData) return;
 
-      // Update profile
-      await supabase
-        .from("profiles")
-        .update({ [column]: true })
-        .eq("id", pbData.user_id);
+      // Mark corresponding race_result as approved and is_pr to trigger auto-award
+      const { error: updateErr } = await supabase
+        .from("race_results")
+        .update({ approved: true, is_pr: true })
+        .eq("user_id", pbData.user_id)
+        .eq("race_id", (await supabase.from("pb_history").select("race_id").eq("id", pbId).single()).data?.race_id)
+        .eq("chip_time_seconds", pbData.time_seconds);
+
+      if (updateErr) throw updateErr;
 
       alert("Đã duyệt thành tích!");
       fetchPendingPBs();
@@ -145,7 +141,7 @@ export default function PBApprovalPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 px-4">
+      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">✅ Duyệt Thành Tích Cá Nhân</h1>
@@ -181,11 +177,11 @@ export default function PBApprovalPage() {
                   <tr key={pb.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="py-3 px-4 font-semibold">{pb.profile?.full_name}</td>
                     <td className="py-3 px-4 text-center">
-                      <span className="inline-flex px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold">
+                      <span className="inline-flex px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-semibold">
                         {pb.distance === "HM" ? "HM (21km)" : "FM (42km)"}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-blue-600">
+                    <td className="py-3 px-4 text-right font-bold text-orange-600">
                       {formatTime(pb.time_seconds)}
                     </td>
                     <td className="py-3 px-4 text-right text-gray-600">
@@ -197,7 +193,7 @@ export default function PBApprovalPage() {
                         href={pb.evidence_link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 font-semibold"
+                        className="text-orange-600 hover:text-orange-800 font-semibold"
                       >
                         🔗 Xem
                       </a>

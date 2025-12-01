@@ -104,7 +104,7 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
   );
 }
 
-export default function EventsPage() {
+export default function RacesPage() {
   const [races, setRaces] = useState<Race[]>([]);
   const [selectedRace, setSelectedRace] = useState<Race | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
@@ -421,7 +421,7 @@ export default function EventsPage() {
 
               {raceResults.length === 0 && rewards.length === 0 && (
                 <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-                  <p className="text-gray-500 text-lg">Chưa có dữ liệu cho sự kiện này</p>
+                  <p className="text-gray-500 text-lg">Chưa có dữ liệu cho race này</p>
                 </div>
               )}
             </>
@@ -432,32 +432,26 @@ export default function EventsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2 flex items-center gap-3"><Activity size={40} /> Danh Sách Sự Kiện Chạy</h1>
-          <p className="text-blue-100 text-lg">Xem kết quả giải đấu và nhận thưởng</p>
+    <div>
+      <div className="min-h-screen bg-gray-50">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          {races.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {races.map((race) => (
+                <RaceCard
+                  key={race.id}
+                  race={race}
+                  onClick={() => handleSelectRace(race)}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-lg p-12 text-center shadow-sm">
+              <p className="text-gray-500 text-lg">Chưa có race nào</p>
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {races.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {races.map((race) => (
-              <RaceCard
-                key={race.id}
-                race={race}
-                onClick={() => handleSelectRace(race)}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-            <p className="text-gray-500 text-lg">Chưa có sự kiện nào</p>
-          </div>
-        )}
       </div>
     </div>
   );

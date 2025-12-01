@@ -40,11 +40,11 @@ function formatCash(amount: number): string {
 
 function getTypeColor(type: string): string {
   const colors: { [key: string]: string } = {
-    fund_collection: "bg-blue-100 text-blue-800",
+    fund_collection: "bg-orange-100 text-orange-800",
     fine: "bg-red-100 text-red-800",
     donation: "bg-green-100 text-green-800",
     expense: "bg-orange-100 text-orange-800",
-    reward_payout: "bg-purple-100 text-purple-800",
+    reward_payout: "bg-orange-100 text-orange-800",
   };
   return colors[type] || "bg-gray-100 text-gray-800";
 }
@@ -80,6 +80,8 @@ export default function FinancePage() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    console.log('[Finance Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
+
     if (!user) {
       router.push("/debug-login");
       return;
@@ -87,15 +89,14 @@ export default function FinancePage() {
 
     setAdminUserId(user.id);
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    // Get role from Auth metadata
+    const userRole = user.user_metadata?.role;
 
-    if (profile?.role && ["admin", "mod_finance"].includes(profile.role)) {
-      setRole(profile.role);
+    if (userRole && ["admin", "mod_finance"].includes(userRole)) {
+      setRole(userRole);
+      console.log('[Finance Page] Role authorized:', userRole);
     } else {
+      console.log('[Finance Page] Unauthorized role:', userRole);
       router.push("/");
     }
   }
@@ -204,7 +205,7 @@ export default function FinancePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 px-4">
+      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-3xl font-bold">💰 Quản Lý Thu/Chi</h1>
@@ -239,7 +240,7 @@ export default function FinancePage() {
             onClick={() => setFilterType(null)}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === null
-                ? "bg-blue-600 text-white"
+                ? "bg-orange-600 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >
@@ -249,7 +250,7 @@ export default function FinancePage() {
             onClick={() => setFilterType("fund_collection")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "fund_collection"
-                ? "bg-blue-600 text-white"
+                ? "bg-orange-600 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >
@@ -259,7 +260,7 @@ export default function FinancePage() {
             onClick={() => setFilterType("fine")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "fine"
-                ? "bg-blue-600 text-white"
+                ? "bg-orange-600 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >
@@ -269,7 +270,7 @@ export default function FinancePage() {
             onClick={() => setFilterType("expense")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "expense"
-                ? "bg-blue-600 text-white"
+                ? "bg-orange-600 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >
@@ -279,7 +280,7 @@ export default function FinancePage() {
             onClick={() => setFilterType("reward_payout")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "reward_payout"
-                ? "bg-blue-600 text-white"
+                ? "bg-orange-600 text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
           >

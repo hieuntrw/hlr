@@ -44,19 +44,21 @@ export default function ChallengesAdminPage() {
       data: { user },
     } = await supabase.auth.getUser();
 
+    console.log('[Challenges Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
+
     if (!user) {
       router.push("/debug-login");
       return;
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
+    // Get role from Auth metadata
+    const userRole = user.user_metadata?.role;
 
-    if (!profile?.role || !["admin", "mod_challenge"].includes(profile.role)) {
+    if (!userRole || !["admin", "mod_challenge"].includes(userRole)) {
+      console.log('[Challenges Page] Unauthorized role:', userRole);
       router.push("/");
+    } else {
+      console.log('[Challenges Page] Role authorized:', userRole);
     }
   }
 
@@ -117,7 +119,7 @@ export default function ChallengesAdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-6 px-4">
+      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <h1 className="text-3xl font-bold">🏃 Tạo/Sửa Thử Thách</h1>
@@ -134,7 +136,7 @@ export default function ChallengesAdminPage() {
         <div className="mb-6">
           <button
             onClick={() => setShowForm(!showForm)}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
           >
             {showForm ? "✕ Đóng Form" : "➕ Tạo Thử Thách Mới"}
           </button>
@@ -249,7 +251,7 @@ export default function ChallengesAdminPage() {
                     <td className="py-3 px-4 text-center">
                       <Link
                         href={`/challenges/${challenge.id}`}
-                        className="text-blue-600 hover:text-blue-800 font-semibold"
+                        className="text-orange-600 hover:text-orange-800 font-semibold"
                       >
                         Xem
                       </Link>

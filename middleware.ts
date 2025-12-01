@@ -1,98 +1,119 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
 
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
+  console.log("\n[Middleware] ===== NEW REQUEST =====");
+  console.log("[Middleware] Path:", req.nextUrl.pathname);
+  const allCookies = req.cookies.getAll();
+  console.log("[Middleware] All cookies count:", allCookies.length);
   
-  // Get access token from cookie
-  const accessToken = req.cookies.get('sb-access-token')?.value;
+  // Find Supabase auth cookies
+  const authCookies = allCookies.filter(c => 
+    c.name.includes('supabase') || 
+    c.name.includes('sb-') ||
+    c.name === 'sb-access-token' ||
+    c.name === 'sb-refresh-token'
+  );
+  console.log("[Middleware] Auth cookies found:", authCookies.map(c => c.name).join(", "));
   
-  // If no access token, redirect to login
-  if (!accessToken) {
+  let response = NextResponse.next({
+    request: {
+      headers: req.headers,
+    },
+  });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          const value = req.cookies.get(name)?.value;
+          if (value) {
+            console.log(`[Middleware] Cookie get: ${name} = ${value.substring(0, 20)}...`);
+          }
+          return value;
+        },
+        set(name: string, value: string, options: any) {
+          console.log(`[Middleware] Cookie set: ${name}`);
+          req.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+          response.cookies.set({
+            name,
+            value,
+            ...options,
+          });
+        },
+        remove(name: string, options: any) {
+          console.log(`[Middleware] Cookie remove: ${name}`);
+          req.cookies.set({
+            name,
+            value: "",
+            ...options,
+          });
+          response.cookies.set({
+            name,
+            value: "",
+            ...options,
+          });
+        },
+      },
+    }
+  );
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  
+  if (authError) {
+    console.log("[Middleware] Auth error:", authError.message);
+  }
+  console.log("[Middleware] User:", user?.email || "not authenticated");
+  console.log("[Middleware] User metadata:", user?.user_metadata);
+
+  if (!user) {
     const redirectUrl = new URL("/login", req.url);
     redirectUrl.searchParams.set("redirect", req.nextUrl.pathname);
     return NextResponse.redirect(redirectUrl);
   }
 
-  try {
-    // Create Supabase client for server-side validation
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-
-    // Verify the token by getting user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser(accessToken);
-
-    if (userError || !user) {
-      const redirectUrl = new URL("/login", req.url);
-      redirectUrl.searchParams.set("redirect", req.nextUrl.pathname);
-      return NextResponse.redirect(redirectUrl);
+  // Check if the route is an admin route
+  if (req.nextUrl.pathname.startsWith("/admin")) {
+    // Use Supabase Auth user metadata for role only
+    const role = (user as any)?.user_metadata?.role as string | undefined;
+    console.log("[Middleware] User role (metadata):", role);
+    const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
+    if (!role || !validRoles.includes(role)) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
     }
-
-    // Check if the route is an admin route
-    if (req.nextUrl.pathname.startsWith("/admin")) {
-      // Get user's profile to check role
-      const { data: profile, error } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (error || !profile) {
-        console.error("Error fetching profile:", error);
-        return NextResponse.redirect(new URL("/dashboard", req.url));
-      }
-
-      // Define valid admin/mod roles
-      const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
-
-      if (!validRoles.includes(profile.role)) {
-        // User doesn't have admin/mod role, redirect to dashboard
-        return NextResponse.redirect(new URL("/dashboard", req.url));
-      }
-
-      // Role-based access control for specific admin routes
-      const path = req.nextUrl.pathname;
-
-      // Finance routes - only admin and mod_finance
-      if (
-        (path.startsWith("/admin/finance") || path === "/admin/finance-report") &&
-        !["admin", "mod_finance"].includes(profile.role)
-      ) {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
-
-      // Challenge routes - only admin and mod_challenge
-      if (path.startsWith("/admin/challenges") && !["admin", "mod_challenge"].includes(profile.role)) {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
-
-      // Member and PB approval routes - only admin and mod_member
-      if (
-        (path.startsWith("/admin/members") || path.startsWith("/admin/pb-approval")) &&
-        !["admin", "mod_member"].includes(profile.role)
-      ) {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
-
-      // Settings route - only admin
-      if (path.startsWith("/admin/settings") && profile.role !== "admin") {
-        return NextResponse.redirect(new URL("/admin", req.url));
-      }
+    // Role-based access control for specific admin routes
+    const path = req.nextUrl.pathname;
+    if (
+      (path.startsWith("/admin/finance") || path === "/admin/finance-report") &&
+      !["admin", "mod_finance"].includes(role)
+    ) {
+      return NextResponse.redirect(new URL("/admin", req.url));
     }
-
-    return res;
-  } catch (error) {
-    console.error("Middleware error:", error);
-    const redirectUrl = new URL("/login", req.url);
-    redirectUrl.searchParams.set("redirect", req.nextUrl.pathname);
-    return NextResponse.redirect(redirectUrl);
+    if (path.startsWith("/admin/challenges") && !["admin", "mod_challenge"].includes(role)) {
+      return NextResponse.redirect(new URL("/admin", req.url));
+    }
+    if (
+      (path.startsWith("/admin/members") || path.startsWith("/admin/pb-approval")) &&
+      !["admin", "mod_member"].includes(role)
+    ) {
+      return NextResponse.redirect(new URL("/admin", req.url));
+    }
+    if (path.startsWith("/admin/settings") && role !== "admin") {
+      return NextResponse.redirect(new URL("/admin", req.url));
+    }
   }
+
+  return response;
 }
 
 export const config = {

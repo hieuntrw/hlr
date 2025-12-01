@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Header from "@/components/Header";
 
 export default function Rules() {
   const [activeTab, setActiveTab] = useState<"rewards" | "fees">("rewards");
@@ -108,7 +107,6 @@ export default function Rules() {
 
   return (
     <>
-      <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Quy định CLB</h1>
@@ -185,7 +183,7 @@ export default function Rules() {
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <h2 className="text-2xl font-bold text-gray-900">
-                  Giải thưởng Marathon Toàn Bộ (42km)
+                  Giải thưởng Full Marathon (42km)
                 </h2>
                 <span className="text-3xl">🏃</span>
               </div>

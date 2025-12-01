@@ -7,7 +7,6 @@ import { User, Mail, Phone, Cake, Calendar, Watch, Activity, Target, CheckCircle
 interface Profile {
   id: string;
   full_name: string;
-  avatar_url?: string;
   join_date?: string;
   device_name?: string;
   strava_id?: string;
@@ -15,10 +14,11 @@ interface Profile {
   pb_fm_seconds?: number;
   pb_hm_approved?: boolean;
   pb_fm_approved?: boolean;
-  birth_date?: string;
-  phone?: string;
+  dob?: string;
+  phone_number?: string;
   email?: string;
   last_sync_at?: string;
+  gender?: string;
 }
 
 interface Activity {
@@ -173,6 +173,13 @@ export default function ProfilePage() {
   const [stravaConnected, setStravaConnected] = useState(false);
   const [showPBModal, setShowPBModal] = useState(false);
   const [submittingPB, setSubmittingPB] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    phone: "",
+    birth_date: "",
+    device_name: "",
+  });
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
@@ -191,22 +198,54 @@ export default function ProfilePage() {
         return;
       }
 
-      // Fetch profile
-      const { data: profileData, error: profileError } = await supabase
+      console.log("[Profile] Fetching for user:", user.id, user.email);
+
+      // Fetch profile by ID first, then fallback to email if not found
+      let { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, avatar_url, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, birth_date, phone, email, last_sync_at"
+          "id, full_name, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, last_sync_at, gender"
         )
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
+
+      // If not found by ID, try by email
+      if (!profileData && user.email) {
+        console.log("[Profile] Not found by ID, trying email:", user.email);
+        const result = await supabase
+          .from("profiles")
+          .select(
+            "id, full_name, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, last_sync_at, gender"
+          )
+          .eq("email", user.email)
+          .maybeSingle();
+        
+        profileData = result.data;
+        profileError = result.error;
+      }
 
       if (profileError) {
-        console.error("Error fetching profile:", profileError);
+        console.error("[Profile] Error fetching profile:", profileError);
+        alert("Lỗi khi tải hồ sơ: " + profileError.message);
         return;
       }
 
+      if (!profileData) {
+        console.error("[Profile] No profile found for user:", user.id, user.email);
+        alert("Không tìm thấy hồ sơ. Vui lòng liên hệ admin.");
+        return;
+      }
+
+      console.log("[Profile] Profile loaded:", profileData);
       setProfile(profileData);
       setStravaConnected(!!profileData?.strava_id);
+      
+      // Initialize edit form with current data
+      setEditFormData({
+        phone: profileData.phone_number || "",
+        birth_date: profileData.dob || "",
+        device_name: profileData.device_name || "",
+      });
 
       // Fetch recent activities (30 days)
       const thirtyDaysAgo = new Date();
@@ -215,7 +254,7 @@ export default function ProfilePage() {
       const { data: activitiesData, error: activitiesError } = await supabase
         .from("activities")
         .select("id, name, distance, moving_time, elapsed_time, average_heartrate, average_cadence, elevation_gain, start_date")
-        .eq("user_id", user.id)
+        .eq("user_id", profileData.id)
         .gte("start_date", thirtyDaysAgo.toISOString())
         .order("start_date", { ascending: false });
 
@@ -242,6 +281,7 @@ export default function ProfilePage() {
       }
     } catch (err) {
       console.error("Unexpected error:", err);
+      alert("Có lỗi xảy ra: " + String(err));
     } finally {
       setLoading(false);
     }
@@ -312,6 +352,36 @@ export default function ProfilePage() {
     }
   }
 
+  async function handleUpdateProfile() {
+    if (!profile) return;
+    
+    setUpdatingProfile(true);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          phone_number: editFormData.phone || null,
+          dob: editFormData.birth_date || null,
+          device_name: editFormData.device_name || null,
+        })
+        .eq("id", profile.id);
+
+      if (error) {
+        console.error("Error updating profile:", error);
+        alert("Lỗi khi cập nhật: " + error.message);
+      } else {
+        alert("✓ Cập nhật thông tin thành công!");
+        setShowEditModal(false);
+        fetchProfileData();
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Có lỗi xảy ra");
+    } finally {
+      setUpdatingProfile(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -333,36 +403,36 @@ export default function ProfilePage() {
     );
   }
 
-  const maxChartValue = Math.max(...activityData.map((d) => d.km), 10);
+  const maxChartValue = 10;
+  // Force recompile
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-start justify-between gap-6">
+    <div>
+      <div className="min-h-screen bg-[var(--color-bg-secondary)]">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white py-8 px-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-start justify-between gap-6">
             <div className="flex items-start gap-4 flex-1">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.full_name}
-                  className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-lg"
-                />
-              ) : (
-                <div className="w-28 h-28 rounded-full bg-white/30 flex items-center justify-center border-4 border-white text-5xl shadow-lg">
-                  <User size={80} className="text-[var(--color-primary)]" />
-                </div>
-              )}
+              <div className="w-28 h-28 rounded-full bg-white/30 flex items-center justify-center border-4 border-white text-5xl shadow-lg">
+                <User size={80} className="text-[var(--color-primary)]" />
+              </div>
 
               <div className="flex-1">
                 <h1 className="text-4xl font-bold mb-3">{profile.full_name}</h1>
                 <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-blue-100">
                   <p className="flex items-center gap-2"><Mail size={16} /> Email: {profile.email || "Chưa cập nhật"}</p>
-                  <p className="flex items-center gap-2"><Phone size={16} /> SĐT: {profile.phone || "Chưa cập nhật"}</p>
-                  <p className="flex items-center gap-2"><Cake size={16} /> Ngày sinh: {formatDate(profile.birth_date)}</p>
+                  <p className="flex items-center gap-2"><Phone size={16} /> SĐT: {profile.phone_number || "Chưa cập nhật"}</p>
+                  <p className="flex items-center gap-2"><Cake size={16} /> Ngày sinh: {formatDate(profile.dob)}</p>
                   <p className="flex items-center gap-2"><Calendar size={16} /> Gia nhập: {formatDate(profile.join_date)}</p>
                   <p className="col-span-2 flex items-center gap-2"><Watch size={16} /> Thiết bị: {profile.device_name || "Chưa cập nhật"}</p>
-                </div>
+                </div>                {/* Edit Profile Button */}
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-all border border-white/30"
+                >
+                  ✏️ Cập nhật thông tin
+                </button>
               </div>
             </div>
 
@@ -402,10 +472,9 @@ export default function ProfilePage() {
             )}
           </div>
         </div>
-      </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
         {/* PB Stats */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* HM PB */}
@@ -583,15 +652,87 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-      </div>
+        </div>
 
-      {/* PB Modal */}
-      <PBModal
-        isOpen={showPBModal}
-        onClose={() => setShowPBModal(false)}
-        onSubmit={handleSubmitPB}
-        isLoading={submittingPB}
-      />
+        {/* PB Modal */}
+        <PBModal
+          isOpen={showPBModal}
+          onClose={() => setShowPBModal(false)}
+          onSubmit={handleSubmitPB}
+          isLoading={submittingPB}
+        />
+        
+        {/* Edit Profile Modal */}
+        {showEditModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-6">
+              <h3 className="text-2xl font-bold mb-4 text-gray-900">Cập Nhật Thông Tin Cá Nhân</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Số điện thoại
+                  </label>
+                  <input
+                    type="tel"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    placeholder="0912345678"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Ngày sinh
+                  </label>
+                  <input
+                    type="date"
+                    value={editFormData.birth_date}
+                    onChange={(e) => setEditFormData({ ...editFormData, birth_date: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Thiết bị chạy bộ
+                  </label>
+                  <input
+                    type="text"
+                    value={editFormData.device_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, device_name: e.target.value })}
+                    placeholder="Garmin Forerunner 245"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+
+                <p className="text-sm text-gray-500 bg-blue-50 p-3 rounded">
+                  ℹ️ Email và Họ tên không thể thay đổi. Vui lòng liên hệ admin nếu cần.
+                </p>
+
+                <div className="flex gap-3 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowEditModal(false)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    onClick={handleUpdateProfile}
+                    disabled={updatingProfile}
+                    className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 transition-colors"
+                  >
+                    {updatingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+        </div>
+      </div>
     </div>
   );
 }

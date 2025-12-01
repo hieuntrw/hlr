@@ -14,18 +14,38 @@ export default function Footer() {
             <h4 className="font-bold text-white mb-4">Liên kết nhanh</h4>
             <ul className="space-y-2 text-sm">
               <li>
-                <a href="/dashboard" className="hover:text-white transition">
-                  Bảng xếp hạng
+                <a href="/challenges" className="hover:text-white transition">
+                  Thử thách
                 </a>
               </li>
               <li>
-                <a href="/profile" className="hover:text-white transition">
-                  Hồ sơ cá nhân
+                <a href="/hall-of-fame" className="hover:text-white transition">
+                  Bảng vàng
+                </a>
+              </li>
+              <li>
+                <a href="/races" className="hover:text-white transition">
+                  Races
+                </a>
+              </li>
+              <li>
+                <a href="/rewards" className="hover:text-white transition">
+                  Quà tặng
+                </a>
+              </li>
+              <li>
+                <a href="/finance" className="hover:text-white transition">
+                  Quỹ CLB
                 </a>
               </li>
               <li>
                 <a href="/rules" className="hover:text-white transition">
                   Quy định
+                </a>
+              </li>
+              <li>
+                <a href="/profile" className="hover:text-white transition">
+                  Thành viên
                 </a>
               </li>
             </ul>

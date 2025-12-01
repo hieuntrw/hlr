@@ -17,7 +17,6 @@ interface AdminProfile {
   id: string;
   full_name: string;
   role: string;
-  avatar_url?: string;
 }
 
 interface DashboardStats {
@@ -42,6 +41,7 @@ export default function AdminPage() {
     totalMembers: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfileAndStats();
@@ -55,22 +55,46 @@ export default function AdminPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      console.log("[Admin Page] User from auth:", user);
+      console.log("[Admin Page] User metadata:", user?.user_metadata);
+      console.log("[Admin Page] User role from metadata:", user?.user_metadata?.role);
+
+      if (!user) {
+        console.log("[Admin Page] No user, redirecting to login");
+        window.location.href = "/login";
+        return;
+      }
+
+      // Get role from Supabase Auth metadata
+      const authRole = user.user_metadata?.role;
+      console.log("[Admin Page] Auth role:", authRole);
+
+      // Check if user has admin/mod permissions
+      const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
+      if (!authRole || !validRoles.includes(authRole)) {
+        console.log("[Admin Page] Invalid role, redirecting to dashboard");
+        window.location.href = "/dashboard";
+        return;
+      }
 
       const { data: profileData, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, role, avatar_url")
+        .select("id, full_name, role")
         .eq("id", user.id)
         .single();
 
-      if (profileError || !profileData) return;
+      if (profileError || !profileData) {
+        console.log("[Admin Page] Profile error:", profileError);
+        return;
+      }
 
-      setProfile(profileData);
+      setProfile({...profileData, role: authRole}); // Use auth role, not profile role
 
       // Fetch dashboard statistics
-      await fetchStats(profileData.role);
+      await fetchStats(authRole);
     } catch (err) {
-      console.error("Unexpected error:", err);
+      console.error("[Admin Page] Unexpected error:", err);
+      setLastError(String(err));
     } finally {
       setLoading(false);
     }
@@ -78,88 +102,83 @@ export default function AdminPage() {
 
   async function fetchStats(role: string) {
     try {
-      // Fetch pending members (status = 'pending' or null)
-      const { count: pendingMembersCount } = await supabase
+      // Fetch total members
+      const { count: totalMembersCount, error: membersError } = await supabase
         .from("profiles")
         .select("*", { count: "exact", head: true })
-        .or("status.is.null,status.eq.pending");
+        .eq("is_active", true);
 
-      // Fetch pending PB approvals
-      const { count: pendingHMCount } = await supabase
-        .from("profiles")
+      if (membersError) {
+        console.error("Members count error:", membersError);
+        setLastError(`Members: ${membersError.message}`);
+      }
+
+      // Fetch active challenges (not locked)
+      const { count: activeChallengesCount, error: challengesError } = await supabase
+        .from("challenges")
         .select("*", { count: "exact", head: true })
-        .not("pb_hm_seconds", "is", null)
-        .eq("pb_hm_approved", false);
+        .eq("is_locked", false);
 
-      const { count: pendingFMCount } = await supabase
-        .from("profiles")
+      if (challengesError) {
+        console.error("Challenges count error:", challengesError);
+        setLastError(`Challenges: ${challengesError.message}`);
+      }
+
+      // Fetch pending transactions
+      const { count: pendingTransactionsCount, error: pendingError } = await supabase
+        .from("transactions")
         .select("*", { count: "exact", head: true })
-        .not("pb_fm_seconds", "is", null)
-        .eq("pb_fm_approved", false);
+        .eq("payment_status", "pending");
 
-      // Fetch fund status (sum of all approved transactions)
-      const { data: fundData } = await supabase
+      if (pendingError) {
+        console.error("Pending transactions error:", pendingError);
+        setLastError(`Pending: ${pendingError.message}`);
+      }
+
+      // Calculate fund balance from approved transactions
+      const { data: fundData, error: fundError } = await supabase
         .from("transactions")
         .select("amount, type")
-        .eq("status", "approved");
+        .eq("payment_status", "paid");
+
+      if (fundError) {
+        console.error("Fund data error:", fundError);
+        setLastError(`Fund: ${fundError.message}`);
+      }
 
       let totalFund = 0;
-      let monthlyCollection = 0;
-
       if (fundData) {
         fundData.forEach((t) => {
-          if (t.type === "collection" || t.type === "fine" || t.type === "donation") {
+          if (t.type === "fund_collection" || t.type === "fine" || t.type === "donation") {
             totalFund += t.amount;
-          } else if (t.type === "expense" || t.type === "reward") {
+          } else if (t.type === "expense" || t.type === "reward_payout") {
             totalFund -= t.amount;
           }
         });
-
-        // Calculate this month's collection
-        const now = new Date();
-        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        const { data: monthlyData } = await supabase
-          .from("transactions")
-          .select("amount")
-          .eq("type", "collection")
-          .eq("status", "approved")
-          .gte("created_at", firstDayOfMonth.toISOString());
-
-        if (monthlyData) {
-          monthlyCollection = monthlyData.reduce((sum, t) => sum + t.amount, 0);
-        }
       }
 
-      // Fetch pending fines
-      const { count: pendingFinesCount } = await supabase
-        .from("transactions")
-        .select("*", { count: "exact", head: true })
-        .eq("type", "fine")
-        .eq("status", "pending");
-
-      // Fetch active challenges
-      const { count: activeChallengesCount } = await supabase
-        .from("challenges")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "Open");
-
-      // Fetch total members
-      const { count: totalMembersCount } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true });
-
       setStats({
-        pendingMembers: pendingMembersCount || 0,
-        pendingPBApprovals: (pendingHMCount || 0) + (pendingFMCount || 0),
-        totalFund,
-        monthlyCollection,
-        pendingFines: pendingFinesCount || 0,
+        pendingMembers: 0, // TODO: implement when status column is added
+        pendingPBApprovals: 0, // TODO: implement when approval columns are added
+        totalFund: totalFund,
+        monthlyCollection: 0, // TODO: calculate current month
+        pendingFines: pendingTransactionsCount || 0,
         activeChallenges: activeChallengesCount || 0,
         totalMembers: totalMembersCount || 0,
       });
-    } catch (error) {
-      console.error("Error fetching stats:", error);
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+      setLastError(String(err));
+      // Set default stats on error
+      setStats({
+        pendingMembers: 0,
+        pendingPBApprovals: 0,
+        totalFund: 0,
+        monthlyCollection: 0,
+        pendingFines: 0,
+        activeChallenges: 0,
+        totalMembers: 0,
+      });
     }
   }
 
@@ -199,20 +218,20 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
+      {/* Debug Panel (only visible when lastError exists) */}
+      {lastError && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3 text-sm">
+          <div className="font-semibold">Debug:</div>
+          <div>Role: {profile?.role || "unknown"}</div>
+          <div>Error: {lastError}</div>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center gap-4">
-          {profile.avatar_url ? (
-            <img
-              src={profile.avatar_url}
-              alt={profile.full_name}
-              className="w-16 h-16 rounded-full object-cover border-4 border-blue-200"
-            />
-          ) : (
-            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
-              <Users className="text-white" size={32} />
-            </div>
-          )}
+          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+            <Users className="text-white" size={32} />
+          </div>
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard {getRoleLabel(profile.role)}</h1>
             <p className="text-gray-600">Chào mừng trở lại, {profile.full_name}!</p>
@@ -277,16 +296,16 @@ export default function AdminPage() {
         {/* Fund Status Widget */}
         {hasFinanceAccess && (
           <Link href="/admin/finance">
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-blue-500">
+            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-orange-500">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Wallet className="text-blue-600" size={24} />
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Wallet className="text-orange-600" size={24} />
                 </div>
-                <TrendingUp className="text-blue-600" size={20} />
+                <TrendingUp className="text-orange-600" size={20} />
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">Tổng Quỹ</h3>
               <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalFund)}</p>
-              <p className="text-blue-600 text-xs mt-2">Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
+              <p className="text-orange-600 text-xs mt-2">Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
             </div>
           </Link>
         )}
@@ -296,13 +315,13 @@ export default function AdminPage() {
           <Link href="/admin/challenges">
             <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-purple-500">
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Target className="text-purple-600" size={24} />
+                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <Target className="text-orange-600" size={24} />
                 </div>
               </div>
               <h3 className="text-gray-600 text-sm font-medium mb-1">Thử Thách Đang Diễn Ra</h3>
               <p className="text-3xl font-bold text-gray-900">{stats.activeChallenges}</p>
-              <p className="text-purple-600 text-xs mt-2">Tổng thành viên: {stats.totalMembers}</p>
+              <p className="text-orange-600 text-xs mt-2">Tổng thành viên: {stats.totalMembers}</p>
             </div>
           </Link>
         )}
@@ -332,10 +351,10 @@ export default function AdminPage() {
         )}
 
         {/* System Info */}
-        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg shadow-md p-6 border-l-4 border-blue-600">
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg shadow-md p-6 border-l-4 border-orange-600">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-              <Calendar className="text-blue-600" size={20} />
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Calendar className="text-orange-600" size={20} />
             </div>
             <h3 className="text-lg font-bold text-gray-900">Thông Tin Hệ Thống</h3>
           </div>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import QRCode from 'qrcode';
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs";
+import { supabase } from "@/lib/supabase-client";
 import {
   fetchUserTransactionsClient,
   fetchPublicFundStatsClient,
@@ -11,7 +11,6 @@ import {
 
 // Mobile-first personal finance page for members
 export default function FinancePage() {
-  const supabase = createClientComponentClient();
   const [user, setUser] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [pendingTotal, setPendingTotal] = useState<number>(0);
@@ -115,8 +114,9 @@ export default function FinancePage() {
   }
 
   return (
-    <div className="p-4 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold mb-4">Tài chính cá nhân</h1>
+    <div>
+      <div className="p-4 max-w-3xl mx-auto">
+        <h1 className="text-2xl font-semibold mb-4">Tài chính cá nhân</h1>
 
       {/* Personal Summary Card */}
       <section className="mb-6">
@@ -342,7 +342,7 @@ export default function FinancePage() {
           </div>
         </div>
       )}
-
+      </div>
     </div>
   );
 }

@@ -94,7 +94,7 @@ export default function AdminRaceDetailPage() {
   async function fetchResults() {
     const { data } = await supabase
       .from("race_results")
-      .select("id, user_id, distance, chip_time_seconds, official_rank, age_group_rank, evidence_link, is_pr, profiles(full_name)")
+      .select("id, user_id, distance, chip_time_seconds, official_rank, age_group_rank, evidence_link, is_pr, approved, category, milestone_name, profiles(full_name)")
       .eq("race_id", raceId)
       .order("chip_time_seconds", { ascending: true });
     if (data) {
@@ -173,7 +173,8 @@ export default function AdminRaceDetailPage() {
       // 2) Update PB and mark PR
       const isPR = await updatePBIfNeeded(form.user_id, form.distance, chipSeconds);
       if (isPR) {
-        await supabase.from("race_results").update({ is_pr: true }).eq("id", raceResultId);
+        // Mark PR and set approved to true to trigger auto-award milestone
+        await supabase.from("race_results").update({ is_pr: true, approved: true }).eq("id", raceResultId);
       }
 
       // 3) Reward checks: time-based + podium
@@ -285,7 +286,7 @@ export default function AdminRaceDetailPage() {
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center">
                     <Activity className="text-white" />
                   </div>
                   <div>
@@ -295,7 +296,7 @@ export default function AdminRaceDetailPage() {
                     </p>
                   </div>
                 </div>
-                <Link href="/admin/races" className="text-blue-600 font-medium">← Quay lại</Link>
+                <Link href="/admin/races" className="text-orange-600 font-medium">← Quay lại</Link>
               </div>
             </div>
           </>
@@ -384,7 +385,7 @@ export default function AdminRaceDetailPage() {
               <button
                 type="submit"
                 disabled={!form.user_id || saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-60"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-60"
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Lưu kết quả
@@ -411,6 +412,9 @@ export default function AdminRaceDetailPage() {
                       <th className="py-2 px-3">Chung cuộc</th>
                       <th className="py-2 px-3">Lứa tuổi</th>
                       <th className="py-2 px-3">PR</th>
+                      <th className="py-2 px-3">Duyệt PB</th>
+                      <th className="py-2 px-3">Mốc thưởng</th>
+                      <th className="py-2 px-3 text-right">Hành động</th>
                       <th className="py-2 px-3">Link</th>
                     </tr>
                   </thead>
@@ -423,9 +427,42 @@ export default function AdminRaceDetailPage() {
                         <td className="py-2 px-3">{r.official_rank || "-"}</td>
                         <td className="py-2 px-3">{r.age_group_rank || "-"}</td>
                         <td className="py-2 px-3">{r.is_pr ? <CheckCircle className="text-green-600" size={18} /> : "-"}</td>
+                        <td className="py-2 px-3">{r.approved ? <CheckCircle className="text-blue-600" size={18} /> : "-"}</td>
+                        <td className="py-2 px-3">{r.milestone_name || "-"}</td>
+                        <td className="py-2 px-3 text-right">
+                          {(!r.approved) ? (
+                            <button
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
+                              onClick={async () => {
+                                try {
+                                  await supabase.from("race_results").update({ approved: true, is_pr: true }).eq("id", r.id);
+                                  // Fetch back the single result to read milestone annotation
+                                  const { data: updated } = await supabase
+                                    .from("race_results")
+                                    .select("milestone_name")
+                                    .eq("id", r.id)
+                                    .single();
+                                  if (updated?.milestone_name) {
+                                    setMessage(`Đã duyệt PB. Mốc thưởng: ${updated.milestone_name}`);
+                                  } else {
+                                    setMessage('Đã duyệt PB.');
+                                  }
+                                  await fetchResults();
+                                } catch (e) {
+                                  console.error("Approve PB error:", e);
+                                  alert("Không thể duyệt PB");
+                                }
+                              }}
+                            >
+                              Duyệt PB
+                            </button>
+                          ) : (
+                            <span className="text-gray-400 text-xs">—</span>
+                          )}
+                        </td>
                         <td className="py-2 px-3">
                           {r.evidence_link ? (
-                            <a className="text-blue-600" href={r.evidence_link} target="_blank">Link</a>
+                            <a className="text-orange-600" href={r.evidence_link} target="_blank">Link</a>
                           ) : (
                             "-"
                           )}

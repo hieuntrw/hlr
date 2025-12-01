@@ -136,10 +136,7 @@ export default function HallOfFamePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchLeaderboard();
-  }, [activeTab]);
-
-  async function fetchLeaderboard() {
+    async function fetchLeaderboard() {
     setLoading(true);
 
     try {
@@ -204,30 +201,26 @@ export default function HallOfFamePage() {
     } finally {
       setLoading(false);
     }
-  }
+    }
+    fetchLeaderboard();
+  }, [activeTab]);
 
-  // Determine PB field for current tab
-  let pbField: string = "pb_fm_seconds";
-  if (activeTab === "fm_female") pbField = "pb_fm_seconds";
-  else if (activeTab === "hm_male") pbField = "pb_hm_seconds";
-  else if (activeTab === "hm_female") pbField = "pb_hm_seconds";
+  // Determine PB field based on active tab for display
+  const getPbField = () => {
+    if (activeTab === "fm_female" || activeTab === "fm_male") return "pb_fm_seconds";
+    return "pb_hm_seconds";
+  };
 
+  const pbField = getPbField();
   const top3 = leaderboard.slice(0, 3);
   const top4_10 = leaderboard.slice(3, 10);
   const top11Plus = leaderboard.slice(10);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-4xl md:text-5xl font-bold mb-2 flex items-center gap-3"><Trophy size={48} /> Bảng Vàng</h1>
-          <p className="text-blue-100 text-lg">Personal Best - Thành tích chạy marathon & nửa marathon</p>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
+    <div>
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100">
+        {/* Main Content */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2">
           {tabs.map((tab) => {
@@ -290,6 +283,7 @@ export default function HallOfFamePage() {
           </>
         )}
       </div>
+    </div>
     </div>
   );
 }

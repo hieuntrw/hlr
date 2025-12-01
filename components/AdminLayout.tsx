@@ -17,6 +17,10 @@ import {
   X,
   LogOut,
   User,
+  Home,
+  Gift,
+  Star,
+  Award,
 } from "lucide-react";
 
 interface AdminProfile {
@@ -83,6 +87,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       requiredRoles: ["admin", "mod_member"],
     },
     {
+      title: "Mốc Thành Tích",
+      icon: Award,
+      link: "/admin/reward-milestones",
+      requiredRoles: ["admin"],
+    },
+    {
+      title: "Quay Số May Mắn",
+      icon: Gift,
+      link: "/admin/lucky-draw",
+      requiredRoles: ["admin"],
+    },
+    {
+      title: "Phần Thưởng Đứng Bục",
+      icon: Star,
+      link: "/admin/podium-rewards",
+      requiredRoles: ["admin"],
+    },
+    {
       title: "Cài Đặt",
       icon: Settings,
       link: "/admin/settings",
@@ -100,19 +122,46 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (!user) return;
+      console.log("[AdminLayout] User:", user?.email);
+      console.log("[AdminLayout] User metadata:", user?.user_metadata);
+
+      if (!user) {
+        console.log("[AdminLayout] No user, redirecting to login");
+        window.location.href = "/login";
+        return;
+      }
+
+      // Get role from Supabase Auth metadata
+      const authRole = user.user_metadata?.role;
+      console.log("[AdminLayout] Auth role:", authRole);
+
+      if (!authRole) {
+        console.log("[AdminLayout] No role in metadata, redirecting to dashboard");
+        window.location.href = "/dashboard";
+        return;
+      }
 
       const { data } = await supabase
         .from("profiles")
-        .select("id, full_name, role, avatar_url")
+        .select("id, full_name, avatar_url")
         .eq("id", user.id)
         .single();
 
       if (data) {
-        setProfile(data);
+        setProfile({
+          ...data,
+          role: authRole, // Use auth role, not profile role
+        });
+      } else {
+        // If no profile exists, create minimal profile object
+        setProfile({
+          id: user.id,
+          full_name: user.email || "Admin",
+          role: authRole,
+        });
       }
     } catch (error) {
-      console.error("Error fetching profile:", error);
+      console.error("[AdminLayout] Error fetching profile:", error);
     } finally {
       setLoading(false);
     }
@@ -141,7 +190,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Đang tải...</p>
         </div>
       </div>
@@ -180,7 +229,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               </div>
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Admin Panel</h2>
-                <p className="text-xs text-gray-500">HLR Running Club</p>
+                <p className="text-xs text-gray-500">Hải Lăng Runners</p>
               </div>
             </Link>
           </div>
@@ -201,7 +250,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               )}
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 truncate">{profile.full_name}</p>
-                <p className="text-xs text-blue-600 font-medium">{getRoleLabel(profile.role)}</p>
+                <p className="text-xs text-orange-600 font-medium">{getRoleLabel(profile.role)}</p>
               </div>
             </div>
           </div>
@@ -219,7 +268,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     onClick={() => setSidebarOpen(false)}
                     className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all ${
                       isActive
-                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
+                        ? "bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-md"
                         : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                     }`}
                   >
@@ -231,8 +280,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </nav>
 
-          {/* Logout Button */}
-          <div className="px-3 py-4 border-t border-gray-200">
+          {/* Actions */}
+          <div className="px-3 py-4 border-t border-gray-200 space-y-2">
+            <Link
+              href="/dashboard"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-orange-600 hover:bg-orange-50 transition-all"
+            >
+              <Home size={20} />
+              <span>Trang Chủ</span>
+            </Link>
             <button
               onClick={handleLogout}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-all"

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
+import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "email and password required" }, { status: 400 });
     }
 
-    const supabase = createRouteHandlerClient({ cookies });
+    // Use service role key for debug operations
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false
+        }
+      }
+    );
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
