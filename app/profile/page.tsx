@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
-import { User, Mail, Phone, Cake, Calendar, Watch, Activity, Target, CheckCircle, Clock } from "lucide-react";
+import { User, Mail, Phone, Cake, Calendar, Watch, Activity, Target, CheckCircle, Clock, Star } from "lucide-react";
 
 interface Profile {
   id: string;
@@ -10,6 +10,9 @@ interface Profile {
   join_date?: string;
   device_name?: string;
   strava_id?: string;
+  strava_access_token?: string;
+  strava_refresh_token?: string;
+  strava_token_expires_at?: number;
   pb_hm_seconds?: number;
   pb_fm_seconds?: number;
   pb_hm_approved?: boolean;
@@ -17,7 +20,6 @@ interface Profile {
   dob?: string;
   phone_number?: string;
   email?: string;
-  last_sync_at?: string;
   gender?: string;
 }
 
@@ -36,6 +38,15 @@ interface Activity {
 interface ActivityData {
   date: string;
   km: number;
+}
+
+interface MemberReward {
+  id: string;
+  reward_type: string;
+  reward_name: string;
+  reward_amount: number;
+  awarded_at: string;
+  status: string;
 }
 
 function formatDate(dateStr?: string): string {
@@ -169,6 +180,7 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityData, setActivityData] = useState<ActivityData[]>([]);
+  const [rewards, setRewards] = useState<MemberReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [stravaConnected, setStravaConnected] = useState(false);
   const [showPBModal, setShowPBModal] = useState(false);
@@ -178,12 +190,26 @@ export default function ProfilePage() {
     phone: "",
     birth_date: "",
     device_name: "",
+    pb_hm_time: "",
+    pb_fm_time: "",
   });
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
   useEffect(() => {
     fetchProfileData();
   }, []);
+
+  useEffect(() => {
+    if (showEditModal && profile) {
+      setEditFormData({
+        phone: profile.phone_number || "",
+        birth_date: profile.dob || "",
+        device_name: profile.device_name || "",
+        pb_hm_time: profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "",
+        pb_fm_time: profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "",
+      });
+    }
+  }, [showEditModal, profile]);
 
   async function fetchProfileData() {
     setLoading(true);
@@ -204,7 +230,7 @@ export default function ProfilePage() {
       let { data: profileData, error: profileError } = await supabase
         .from("profiles")
         .select(
-          "id, full_name, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, last_sync_at, gender"
+          "id, full_name, join_date, device_name, strava_id, strava_access_token, strava_refresh_token, strava_token_expires_at, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, gender"
         )
         .eq("id", user.id)
         .maybeSingle();
@@ -215,7 +241,7 @@ export default function ProfilePage() {
         const result = await supabase
           .from("profiles")
           .select(
-            "id, full_name, join_date, device_name, strava_id, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, last_sync_at, gender"
+            "id, full_name, join_date, device_name, strava_id, strava_access_token, strava_refresh_token, strava_token_expires_at, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, gender"
           )
           .eq("email", user.email)
           .maybeSingle();
@@ -238,14 +264,82 @@ export default function ProfilePage() {
 
       console.log("[Profile] Profile loaded:", profileData);
       setProfile(profileData);
-      setStravaConnected(!!profileData?.strava_id);
+      
+      // Check Strava connection and token validity
+      const hasStravaId = !!profileData?.strava_id;
+      const hasValidToken = profileData?.strava_access_token && profileData?.strava_token_expires_at;
+      
+      if (hasStravaId && hasValidToken) {
+        const tokenExpiresAt = new Date(profileData.strava_token_expires_at * 1000);
+        const now = new Date();
+        const isTokenValid = tokenExpiresAt > now;
+        
+        if (isTokenValid) {
+          console.log("[Profile] Strava token is valid until:", tokenExpiresAt);
+          setStravaConnected(true);
+        } else {
+          console.log("[Profile] Strava token expired at:", tokenExpiresAt);
+          // Try to refresh token if refresh token exists
+          if (profileData.strava_refresh_token) {
+            console.log("[Profile] Attempting to refresh Strava token...");
+            try {
+              const refreshResponse = await fetch("/api/strava/refresh-token", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId: user.id }),
+              });
+              
+              if (refreshResponse.ok) {
+                console.log("[Profile] Token refreshed successfully");
+                setStravaConnected(true);
+                // Reload profile data to get new token
+                fetchProfileData();
+                return;
+              } else {
+                console.log("[Profile] Token refresh failed");
+                setStravaConnected(false);
+              }
+            } catch (err) {
+              console.error("[Profile] Token refresh error:", err);
+              setStravaConnected(false);
+            }
+          } else {
+            setStravaConnected(false);
+          }
+        }
+      } else {
+        setStravaConnected(false);
+      }
       
       // Initialize edit form with current data
-      setEditFormData({
+      const initialEditData = {
         phone: profileData.phone_number || "",
         birth_date: profileData.dob || "",
         device_name: profileData.device_name || "",
-      });
+        pb_hm_time: profileData.pb_hm_seconds ? formatTime(profileData.pb_hm_seconds) : "",
+        pb_fm_time: profileData.pb_fm_seconds ? formatTime(profileData.pb_fm_seconds) : "",
+      };
+      setEditFormData(initialEditData);
+
+      // Fetch member rewards (milestone achievements)
+      const { data: rewardsData, error: rewardsError } = await supabase
+        .from("member_rewards")
+        .select(`
+          id,
+          reward_type,
+          reward_name,
+          reward_amount,
+          awarded_at,
+          status
+        `)
+        .eq("user_id", user.id)
+        .eq("reward_type", "milestone")
+        .order("awarded_at", { ascending: false });
+
+      if (rewardsData) {
+        console.log("[Profile] Rewards loaded:", rewardsData);
+        setRewards(rewardsData);
+      }
 
       // Fetch recent activities (30 days)
       const thirtyDaysAgo = new Date();
@@ -357,6 +451,13 @@ export default function ProfilePage() {
     
     setUpdatingProfile(true);
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) return;
+
+      // Update basic profile info
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -369,11 +470,59 @@ export default function ProfilePage() {
       if (error) {
         console.error("Error updating profile:", error);
         alert("Lỗi khi cập nhật: " + error.message);
+        return;
+      }
+
+      // Process PR updates
+      const prUpdates = [];
+
+      // Check HM PR update
+      if (editFormData.pb_hm_time && editFormData.pb_hm_time !== "--:--:--") {
+        const currentHM = profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "";
+        if (editFormData.pb_hm_time !== currentHM) {
+          const [hours, minutes, seconds] = editFormData.pb_hm_time.split(":").map(Number);
+          const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+          prUpdates.push({
+            user_id: user.id,
+            distance: "HM",
+            time_seconds: totalSeconds,
+            achieved_at: new Date().toISOString().split("T")[0],
+            evidence_link: "",
+          });
+        }
+      }
+
+      // Check FM PR update
+      if (editFormData.pb_fm_time && editFormData.pb_fm_time !== "--:--:--") {
+        const currentFM = profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "";
+        if (editFormData.pb_fm_time !== currentFM) {
+          const [hours, minutes, seconds] = editFormData.pb_fm_time.split(":").map(Number);
+          const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+          prUpdates.push({
+            user_id: user.id,
+            distance: "FM",
+            time_seconds: totalSeconds,
+            achieved_at: new Date().toISOString().split("T")[0],
+            evidence_link: "",
+          });
+        }
+      }
+
+      // Submit PR updates for approval
+      if (prUpdates.length > 0) {
+        const { error: prError } = await supabase.from("pb_history").insert(prUpdates);
+        if (prError) {
+          console.error("Error submitting PR:", prError);
+          alert("⚠️ Cập nhật thông tin thành công nhưng PR cần admin duyệt");
+        } else {
+          alert("✓ Cập nhật thành công! PR mới đã gửi cho admin duyệt.");
+        }
       } else {
         alert("✓ Cập nhật thông tin thành công!");
-        setShowEditModal(false);
-        fetchProfileData();
       }
+
+      setShowEditModal(false);
+      fetchProfileData();
     } catch (err) {
       console.error("Error:", err);
       alert("Có lỗi xảy ra");
@@ -412,64 +561,128 @@ export default function ProfilePage() {
         {/* Header */}
         <div className="bg-gradient-to-r from-[var(--color-primary)] to-[var(--color-accent)] text-white py-8 px-4">
           <div className="max-w-7xl mx-auto">
-            <div className="flex items-start justify-between gap-6">
-            <div className="flex items-start gap-4 flex-1">
-              <div className="w-28 h-28 rounded-full bg-white/30 flex items-center justify-center border-4 border-white text-5xl shadow-lg">
-                <User size={80} className="text-[var(--color-primary)]" />
-              </div>
-
-              <div className="flex-1">
-                <h1 className="text-4xl font-bold mb-3">{profile.full_name}</h1>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-2 text-blue-100">
-                  <p className="flex items-center gap-2"><Mail size={16} /> Email: {profile.email || "Chưa cập nhật"}</p>
-                  <p className="flex items-center gap-2"><Phone size={16} /> SĐT: {profile.phone_number || "Chưa cập nhật"}</p>
-                  <p className="flex items-center gap-2"><Cake size={16} /> Ngày sinh: {formatDate(profile.dob)}</p>
-                  <p className="flex items-center gap-2"><Calendar size={16} /> Gia nhập: {formatDate(profile.join_date)}</p>
-                  <p className="col-span-2 flex items-center gap-2"><Watch size={16} /> Thiết bị: {profile.device_name || "Chưa cập nhật"}</p>
-                </div>                {/* Edit Profile Button */}
-                <button
-                  onClick={() => setShowEditModal(true)}
-                  className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg font-medium transition-all border border-white/30"
-                >
-                  ✏️ Cập nhật thông tin
-                </button>
-              </div>
-            </div>
-
-            <div className="text-right">
-              <button
-                onClick={handleStravaToggle}
-                className={`px-6 py-3 rounded-lg font-bold transition-all whitespace-nowrap shadow-lg ${
-                  stravaConnected
-                    ? "bg-red-500 hover:bg-red-600"
-                    : "bg-green-500 hover:bg-green-600"
-                }`}
-              >
-                {stravaConnected ? "🔗 Ngắt kết nối Strava" : "🔗 Kết nối Strava"}
-              </button>
-            </div>
-          </div>
-
-          {/* Strava Status */}
-          <div className="mt-6 pt-6 border-t border-white/20">
-            {stravaConnected ? (
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-green-100">
-                  <span className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
-                  <span>✓ Kết nối Strava: {profile.strava_id}</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Column 1: Avatar & Basic Info */}
+              <div className="bg-white/20 rounded-lg border border-white/30 p-4">
+                <div className="flex items-start gap-4">
+                  <div className="w-24 h-24 rounded-full bg-white/30 flex items-center justify-center border-4 border-white text-5xl shadow-lg flex-shrink-0">
+                    <User size={64} className="text-[var(--color-primary)]" />
+                  </div>
+                  <div className="flex-1">
+                    <h1 className="text-xl font-bold mb-2">{profile.full_name}</h1>
+                    <div className="space-y-1 text-sm text-blue-100">
+                      <p className="flex items-center gap-2"><Cake size={14} /> {formatDate(profile.dob)}</p>
+                      <p className="flex items-center gap-2"><Watch size={14} /> {profile.device_name || "Chưa cập nhật"}</p>
+                      <p className="flex items-center gap-2"><Phone size={14} /> {profile.phone_number || "Chưa cập nhật"}</p>
+                      <p className="flex items-center gap-2"><Calendar size={14} /> Gia nhập: {formatDate(profile.join_date)}</p>
+                    </div>
+                  </div>
                 </div>
-                {profile.last_sync_at && (
-                  <span className="text-blue-100 text-sm">
-                    Đồng bộ gần nhất: {formatDate(profile.last_sync_at)}
-                  </span>
+              </div>
+
+              {/* Column 2: Personal Records */}
+              <div className="bg-white/20 rounded-lg border border-white/30 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Star size={18} className="text-yellow-300" fill="currentColor" />
+                  <span className="font-bold text-sm">Personal Records</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium">HM</span>
+                    <span className="text-sm font-mono bg-white/90 text-gray-900 px-2 py-0.5 rounded">
+                      {profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "--:--:--"}
+                    </span>
+                    {profile.pb_hm_approved ? (
+                      <span className="text-xs text-green-300">✓</span>
+                    ) : profile.pb_hm_seconds ? (
+                      <span className="text-xs text-yellow-300">⏳</span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-medium">FM</span>
+                    <span className="text-sm font-mono bg-white/90 text-gray-900 px-2 py-0.5 rounded">
+                      {profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "--:--:--"}
+                    </span>
+                    {profile.pb_fm_approved ? (
+                      <span className="text-xs text-green-300">✓</span>
+                    ) : profile.pb_fm_seconds ? (
+                      <span className="text-xs text-yellow-300">⏳</span>
+                    ) : null}
+                  </div>
+                  <button
+                    onClick={() => setShowEditModal(true)}
+                    className="ml-auto px-3 py-1.5 bg-white text-orange-600 hover:bg-gray-100 rounded-lg font-medium transition-all shadow text-sm"
+                  >
+                    ✏️ Cập nhật
+                  </button>
+                </div>
+
+                {/* Milestone Rewards */}
+                <div className="mt-4 pt-4 border-t border-white/30">
+                  <h4 className="text-sm font-bold mb-2 flex items-center gap-1.5">
+                    <Target size={14} /> Mốc Thành Tích Đạt Được
+                  </h4>
+                  {rewards.length > 0 ? (
+                    <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                      {rewards.map((reward) => (
+                        <div key={reward.id} className="bg-white/10 rounded px-2 py-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium text-white">{reward.reward_name}</span>
+                            <span className="text-green-300 font-bold">
+                              {reward.reward_amount.toLocaleString()} ₫
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-blue-200 mt-0.5">
+                            {formatDate(reward.awarded_at)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-blue-200 italic">Chưa có mốc nào</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Column 3: Strava Connection */}
+              <div>
+                {stravaConnected ? (
+                  <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+                    <div className="flex items-center gap-2 text-green-200 mb-3">
+                      <span className="w-3 h-3 bg-green-400 rounded-full animate-pulse"></span>
+                      <span className="font-semibold text-sm">✓ Đã kết nối Strava</span>
+                    </div>
+                    <div className="text-xs text-white/90 space-y-2">
+                      <div className="bg-white/5 rounded p-2">
+                        <p className="text-white/60 text-[10px] mb-1">Athlete ID</p>
+                        <p className="font-mono text-sm">{profile.strava_id}</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-2">
+                        <p className="text-white/60 text-[10px] mb-1">Token</p>
+                        <p className="font-mono text-[10px] truncate">{profile.strava_access_token ? `${profile.strava_access_token.substring(0, 18)}...` : 'N/A'}</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-2">
+                        <p className="text-white/60 text-[10px] mb-1">Expires</p>
+                        <p className="font-mono text-[10px]">{profile.strava_token_expires_at ? new Date(profile.strava_token_expires_at * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-red-100/30 backdrop-blur rounded-lg p-4 border border-red-300/50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="w-3 h-3 bg-red-500 rounded-full"></span>
+                      <span className="font-bold text-sm text-red-600">✗ Chưa kết nối Strava</span>
+                    </div>
+                    <button
+                      onClick={handleStravaToggle}
+                      className="w-full px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-bold transition-all shadow-lg text-sm"
+                    >
+                      🔗 Kết nối Strava
+                    </button>
+                  </div>
                 )}
               </div>
-            ) : (
-              <div className="flex items-center gap-2 text-red-100">
-                <span className="w-3 h-3 bg-red-400 rounded-full"></span>
-                <span>✗ Chưa kết nối Strava</span>
-              </div>
-            )}
+            </div>
           </div>
         </div>
 
@@ -707,6 +920,40 @@ export default function ProfilePage() {
                   />
                 </div>
 
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="text-lg font-bold text-gray-900 mb-3 flex items-center gap-2">
+                    <Star size={18} className="text-yellow-500" fill="currentColor" />
+                    Personal Records
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Half Marathon (HH:MM:SS)
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.pb_hm_time}
+                        onChange={(e) => setEditFormData({ ...editFormData, pb_hm_time: e.target.value })}
+                        placeholder="01:30:00"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Full Marathon (HH:MM:SS)
+                      </label>
+                      <input
+                        type="text"
+                        value={editFormData.pb_fm_time}
+                        onChange={(e) => setEditFormData({ ...editFormData, pb_fm_time: e.target.value })}
+                        placeholder="03:00:00"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">⏳ PR mới cần được admin phê duyệt</p>
+                </div>
+
                 <p className="text-sm text-gray-500 bg-blue-50 p-3 rounded">
                   ℹ️ Email và Họ tên không thể thay đổi. Vui lòng liên hệ admin nếu cần.
                 </p>
@@ -731,7 +978,6 @@ export default function ProfilePage() {
             </div>
           </div>
         )}
-        </div>
       </div>
     </div>
   );

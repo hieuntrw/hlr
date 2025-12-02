@@ -10,6 +10,7 @@ interface UserProfile {
   full_name: string | null;
   strava_id: string | null;
   role?: string;
+  email?: string | null;
   pb_5k_seconds: number | null;
   pb_10k_seconds: number | null;
   pb_half_marathon_seconds: number | null;
@@ -288,14 +289,34 @@ function DashboardContent() {
       } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, full_name, strava_id, role, pb_5k_seconds, pb_10k_seconds, pb_half_marathon_seconds, pb_full_marathon_seconds")
-        .eq("id", user.id)
-        .maybeSingle();
+      console.log("[DEBUG] User ID:", user.id, "Email:", user.email);
 
-      if (profile) {
-        setUserProfile(profile);
+      // Truy vấn bảng profiles bằng email - chỉ lấy full_name
+      if (user.email) {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .eq("email", user.email)
+          .maybeSingle();
+        
+        console.log("[DEBUG] Truy vấn profile bằng email:", user.email, "Result:", profile, "Error:", error);
+
+        if (profile) {
+          setUserProfile({
+            id: profile.id,
+            full_name: profile.full_name,
+            email: profile.email,
+            strava_id: null,
+            role: undefined,
+            pb_5k_seconds: null,
+            pb_10k_seconds: null,
+            pb_half_marathon_seconds: null,
+            pb_full_marathon_seconds: null,
+          });
+          console.log("[DEBUG] Đã set userProfile với full_name:", profile.full_name);
+        } else {
+          console.log("[DEBUG] Không tìm thấy profile với email:", user.email);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
@@ -387,41 +408,10 @@ function DashboardContent() {
         {/* Welcome Section */}
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">
-            Xin chào, {userProfile?.full_name || "thành viên"}! 👋
+            Xin chào, {userProfile?.full_name}! 👋
           </h1>
-          <p className="text-gray-600 mt-1">Chào mừng bạn quay lại với HLR Running Club</p>
+          <p className="text-gray-600 mt-1">Chào mừng bạn quay lại với Hải Lăng Runners</p>
         </div>
-
-        {/* Strava Connection Alert */}
-        {userProfile && !userProfile.strava_id && (
-          <div className="mb-6 p-4 bg-orange-50 border border-orange-200 rounded-lg flex items-start gap-3">
-            <AlertCircle className="text-orange-600 mt-0.5" size={20} />
-            <div className="flex-1">
-              <h3 className="font-semibold text-orange-900">Chưa kết nối Strava</h3>
-              <p className="text-sm text-orange-700 mt-1">
-                Kết nối Strava để tự động đồng bộ hoạt động chạy và theo dõi tiến độ thử thách.
-              </p>
-              <a
-                href="/api/auth/strava/login"
-                className="inline-block mt-3 px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 transition text-sm font-medium"
-              >
-                Kết nối Strava ngay
-              </a>
-            </div>
-          </div>
-        )}
-
-        {connected && (
-          <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-            <Award className="text-green-600 mt-0.5" size={20} />
-            <div>
-              <h3 className="font-semibold text-green-900">Kết nối Strava thành công!</h3>
-              <p className="text-sm text-green-700 mt-1">
-                Dữ liệu hoạt động của bạn sẽ được cập nhật tự động.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Main Dashboard Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

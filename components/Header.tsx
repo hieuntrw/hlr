@@ -192,7 +192,7 @@ export default function Header() {
                     <div className="flex items-center gap-2">
                       <User size={16} className="text-gray-600" />
                       <span className="text-sm font-medium text-gray-900">
-                        {profile?.full_name || user.email}
+                        {user.email}
                       </span>
                     </div>
                     {user?.user_metadata?.role && (

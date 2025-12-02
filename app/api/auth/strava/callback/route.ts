@@ -1,24 +1,77 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase-client";
+import { createServerClient } from "@supabase/ssr";
 import { exchangeCodeForToken } from "@/lib/strava-oauth";
+import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  console.log("[Strava Callback] Starting...");
+  
+  const cookieStore = await cookies();
+  const requestUrl = new URL(request.url);
+
+  // Create Supabase client with cookies
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set(name: string, value: string, options: any) {
+          try {
+            cookieStore.set({ name, value, ...options });
+          } catch (error) {
+            // Can't set cookies in middleware/edge
+          }
+        },
+        remove(name: string, options: any) {
+          try {
+            cookieStore.set({ name, value: "", ...options });
+          } catch (error) {
+            // Can't remove cookies in middleware/edge
+          }
+        },
+      },
+    }
+  );
+
   try {
-    const searchParams = request.nextUrl.searchParams;
+    const searchParams = requestUrl.searchParams;
     const code = searchParams.get("code");
     const error = searchParams.get("error");
 
+    console.log("[Strava Callback] Code:", code ? "present" : "missing");
+    console.log("[Strava Callback] Error:", error);
+
     if (error) {
+      console.error("[Strava Callback] OAuth error:", error);
       return NextResponse.redirect(
-        new URL(`/?error=${encodeURIComponent(error)}`, request.url)
+        new URL(`/profile?error=${encodeURIComponent(error)}`, requestUrl.origin)
       );
     }
 
     if (!code) {
+      console.error("[Strava Callback] No authorization code");
       return NextResponse.redirect(
-        new URL("/?error=Missing authorization code", request.url)
+        new URL("/profile?error=Missing authorization code", requestUrl.origin)
+      );
+    }
+
+    // Get current session user
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    console.log("[Strava Callback] Current user:", user?.id, user?.email);
+
+    if (userError || !user) {
+      console.error("[Strava Callback] User not authenticated:", userError);
+      return NextResponse.redirect(
+        new URL("/login?error=Please login first&redirect=/profile", requestUrl.origin)
       );
     }
 
@@ -26,22 +79,14 @@ export async function GET(request: NextRequest) {
     const host = request.headers.get("host") || "localhost:3000";
     const redirectUri = `${protocol}://${host}/api/auth/strava/callback`;
 
+    console.log("[Strava Callback] Exchanging code for token...");
     const tokenData = await exchangeCodeForToken(code, redirectUri);
+    console.log("[Strava Callback] Token received for athlete:", tokenData.athlete.id);
 
-    // Get current session user
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session?.user) {
-      return NextResponse.redirect(
-        new URL("/?error=User not authenticated", request.url)
-      );
-    }
-
-    const userId = session.user.id;
+    const userId = user.id;
     const athleteName = `${tokenData.athlete.firstname || ""} ${tokenData.athlete.lastname || ""}`.trim();
-    const athleteCity = tokenData.athlete.city || "";
+
+    console.log("[Strava Callback] Saving tokens for user:", userId);
 
     // Save Strava credentials to profile
     const { error: updateError } = await supabase
@@ -49,28 +94,29 @@ export async function GET(request: NextRequest) {
       .upsert(
         {
           id: userId,
+          email: user.email,
           strava_id: tokenData.athlete.id.toString(),
           strava_access_token: tokenData.access_token,
           strava_refresh_token: tokenData.refresh_token,
-          strava_token_expires_at: new Date(tokenData.expires_at * 1000).toISOString(),
-          full_name: athleteName || session.user.email,
-          city: athleteCity,
+          strava_token_expires_at: tokenData.expires_at,
+          full_name: athleteName || user.email,
         },
         { onConflict: "id" }
       );
 
     if (updateError) {
-      console.error("Failed to save Strava tokens:", updateError);
+      console.error("[Strava Callback] Failed to save tokens:", updateError);
       return NextResponse.redirect(
-        new URL("/?error=Failed to save Strava connection", request.url)
+        new URL("/profile?error=Failed to save Strava connection", requestUrl.origin)
       );
     }
 
-    return NextResponse.redirect(new URL("/dashboard?strava_connected=true", request.url));
+    console.log("[Strava Callback] Success! Redirecting to profile...");
+    return NextResponse.redirect(new URL("/profile?strava_connected=true", requestUrl.origin));
   } catch (error) {
-    console.error("Strava callback error:", error);
+    console.error("[Strava Callback] Unexpected error:", error);
     return NextResponse.redirect(
-      new URL("/?error=Authentication failed", request.url)
+      new URL("/profile?error=Authentication failed", requestUrl.origin)
     );
   }
 }

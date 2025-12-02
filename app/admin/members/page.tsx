@@ -17,6 +17,15 @@ interface Member {
   phone_number: string | null;
   dob: string | null;
   device_name: string | null;
+  gender: string | null;
+  pb_hm_seconds: number | null;
+  pb_fm_seconds: number | null;
+  pb_hm_approved: boolean;
+  pb_fm_approved: boolean;
+  strava_id: string | null;
+  strava_access_token: string | null;
+  strava_refresh_token: string | null;
+  strava_token_expires_at: string | null;
 }
 
 function formatDate(dateStr: string | null): string {
@@ -29,24 +38,88 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+// Hiển thị dạng: "dd/mm/yyyy"
+function formatDateSimple(dateStr: string | null): string {
+  if (!dateStr) return "N/A";
+  const date = new Date(dateStr);
+  const dd = date.getDate().toString().padStart(2, '0');
+  const mm = (date.getMonth() + 1).toString().padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+// Chuyển từ yyyy-mm-dd sang dd/mm/yyyy để hiển thị trong input
+function dateToDisplay(dateStr: string): string {
+  if (!dateStr) return "";
+  const [yyyy, mm, dd] = dateStr.split('-');
+  if (!yyyy || !mm || !dd) return "";
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+// Chuyển từ dd/mm/yyyy sang yyyy-mm-dd để lưu vào DB
+function displayToDate(displayStr: string): string {
+  if (!displayStr) return "";
+  const [dd, mm, yyyy] = displayStr.split('/');
+  if (!dd || !mm || !yyyy) return "";
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatTime(seconds: number | null): string {
+  if (!seconds) return "Chưa có";
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function timeToSeconds(timeStr: string): number | null {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  if (parts.length !== 3) return null;
+  const hours = parseInt(parts[0]);
+  const minutes = parseInt(parts[1]);
+  const seconds = parseInt(parts[2]);
+  if (isNaN(hours) || isNaN(minutes) || isNaN(seconds)) return null;
+  return hours * 3600 + minutes * 60 + seconds;
+}
+
+function maskToken(token: string | null): string {
+  if (!token) return "Chưa kết nối";
+  if (token.length <= 10) return "***" + token.slice(-4);
+  return token.slice(0, 6) + "..." + token.slice(-4);
+}
+
+function formatTokenExpiry(expiresAt: string | null): string {
+  if (!expiresAt) return "N/A";
+  const date = new Date(expiresAt);
+  const now = new Date();
+  const isExpired = date < now;
+  const formatted = date.toLocaleString("vi-VN");
+  return isExpired ? `❌ Hết hạn: ${formatted}` : `✅ Còn hạn: ${formatted}`;
+}
+
 export default function MembersAdminPage() {
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [searchEmail, setSearchEmail] = useState("");
   const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showEditForm, setShowEditForm] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [formData, setFormData] = useState({
     email: "",
-    password: "",
     full_name: "",
     role: "member",
     phone_number: "",
     dob: "",
+    gender: "",
     device_name: "",
+    join_date: new Date().toISOString().split('T')[0],
+    pb_hm_time: "", // Format: HH:MM:SS
+    pb_fm_time: "", // Format: HH:MM:SS
+    password: "",
   });
+  const [joinDateDisplay, setJoinDateDisplay] = useState(dateToDisplay(new Date().toISOString().split('T')[0]));
+  const [dobDisplay, setDobDisplay] = useState("");
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
@@ -90,7 +163,7 @@ export default function MembersAdminPage() {
       
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role, is_active, join_date, leave_date, phone_number, dob, device_name")
+        .select("id, full_name, email, role, is_active, join_date, leave_date, phone_number, dob, device_name, gender, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, strava_id, strava_access_token, strava_refresh_token, strava_token_expires_at")
         .order("join_date", { ascending: false });
 
       console.log("[Members Page] Query result:", { data, error });
@@ -128,6 +201,23 @@ export default function MembersAdminPage() {
     setFormMessage(null);
 
     try {
+      // Validate required fields
+      if (!formData.email || !formData.password || !formData.full_name || !formData.gender) {
+        setFormMessage("Vui lòng điền đầy đủ các trường bắt buộc");
+        setFormLoading(false);
+        return;
+      }
+
+      console.log("Sending create member request:", {
+        email: formData.email,
+        fullName: formData.full_name,
+        role: formData.role,
+        gender: formData.gender,
+        joinDate: formData.join_date,
+        dob: formData.dob,
+        hasPassword: !!formData.password
+      });
+
       const res = await fetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -137,8 +227,12 @@ export default function MembersAdminPage() {
           fullName: formData.full_name,
           role: formData.role,
           phoneNumber: formData.phone_number,
-          dob: formData.dob,
+          dob: formData.dob || null,
+          gender: formData.gender,
           deviceName: formData.device_name,
+          joinDate: formData.join_date || new Date().toISOString().split('T')[0],
+          pbHmSeconds: timeToSeconds(formData.pb_hm_time),
+          pbFmSeconds: timeToSeconds(formData.pb_fm_time),
         }),
       });
       const body = await res.json();
@@ -146,15 +240,20 @@ export default function MembersAdminPage() {
         setFormMessage(body.error || "Tạo tài khoản thất bại");
       } else {
         setFormMessage("✓ Tài khoản đã được tạo thành công!");
-        setFormData({ email: "", password: "", full_name: "", role: "member", phone_number: "", dob: "", device_name: "" });
+        setFormData({ email: "", password: "", full_name: "", role: "member", phone_number: "", dob: "", gender: "", device_name: "", join_date: new Date().toISOString().split('T')[0], pb_hm_time: "", pb_fm_time: "" });
+        setJoinDateDisplay(dateToDisplay(new Date().toISOString().split('T')[0]));
+        setDobDisplay("");
+        setEditingMember(null);
+        // Reload danh sách ngay lập tức
+        fetchMembers();
+        // Clear message sau 2s
         setTimeout(() => {
-          setShowAddForm(false);
           setFormMessage(null);
-          fetchMembers();
-        }, 1500);
+        }, 2000);
       }
     } catch (err: any) {
-      setFormMessage(err?.message || "Lỗi khi tạo tài khoản");
+      console.error("Create member error:", err);
+      setFormMessage("Lỗi kết nối: " + (err?.message || "Không thể kết nối đến server"));
     } finally {
       setFormLoading(false);
     }
@@ -168,15 +267,26 @@ export default function MembersAdminPage() {
     setFormMessage(null);
 
     try {
-      // Update profiles table
+      // Convert PB times to seconds
+      const pbHmSeconds = timeToSeconds(formData.pb_hm_time);
+      const pbFmSeconds = timeToSeconds(formData.pb_fm_time);
+
+      // Update profiles table with all fields
       const { error: profileError } = await supabase
         .from("profiles")
         .update({
           full_name: formData.full_name,
           phone_number: formData.phone_number || null,
           dob: formData.dob || null,
+          gender: formData.gender || null,
           device_name: formData.device_name || null,
+          join_date: formData.join_date || null,
           role: formData.role,
+          // PB fields - Admin edit = auto-approved
+          pb_hm_seconds: pbHmSeconds,
+          pb_fm_seconds: pbFmSeconds,
+          pb_hm_approved: pbHmSeconds !== null, // Auto-approve if value provided
+          pb_fm_approved: pbFmSeconds !== null, // Auto-approve if value provided
         })
         .eq("id", editingMember.id);
 
@@ -199,12 +309,16 @@ export default function MembersAdminPage() {
       }
 
       setFormMessage("✓ Cập nhật thành công!");
+      // Reload danh sách ngay lập tức
+      fetchMembers();
+      // Reset form và clear message sau 2s
       setTimeout(() => {
-        setShowEditForm(false);
         setEditingMember(null);
+        setFormData({ email: "", password: "", full_name: "", role: "member", phone_number: "", dob: "", gender: "", device_name: "", join_date: new Date().toISOString().split('T')[0], pb_hm_time: "", pb_fm_time: "" });
+        setJoinDateDisplay(dateToDisplay(new Date().toISOString().split('T')[0]));
+        setDobDisplay("");
         setFormMessage(null);
-        fetchMembers();
-      }, 1500);
+      }, 2000);
     } catch (err: any) {
       setFormMessage(err?.message || "Lỗi khi cập nhật");
     } finally {
@@ -235,17 +349,26 @@ export default function MembersAdminPage() {
 
   const openEditForm = (member: Member) => {
     setEditingMember(member);
+    const joinDate = member.join_date || new Date().toISOString().split('T')[0];
+    const dob = member.dob || "";
     setFormData({
       email: member.email,
       password: "",
       full_name: member.full_name,
       role: member.role,
       phone_number: member.phone_number || "",
-      dob: member.dob || "",
+      dob: dob,
+      gender: member.gender || "",
       device_name: member.device_name || "",
+      join_date: joinDate,
+      pb_hm_time: member.pb_hm_seconds ? formatTime(member.pb_hm_seconds) : "",
+      pb_fm_time: member.pb_fm_seconds ? formatTime(member.pb_fm_seconds) : "",
     });
-    setShowEditForm(true);
+    setJoinDateDisplay(dateToDisplay(joinDate));
+    setDobDisplay(dob ? dateToDisplay(dob) : "");
     setFormMessage(null);
+    // Scroll to form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -264,27 +387,15 @@ export default function MembersAdminPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Add Member Button */}
+        {/* Member Form (Create/Edit) - Always Visible */}
         <div className="mb-6">
-          <button
-            onClick={() => {
-              setShowAddForm(!showAddForm);
-              setShowEditForm(false);
-              setFormMessage(null);
-            }}
-            className="px-6 py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 shadow-md transition flex items-center gap-2"
-          >
-            <UserPlus size={20} />
-            {showAddForm ? "Đóng Form" : "Thêm Thành Viên Mới"}
-          </button>
-        </div>
-
-        {/* Add Member Form */}
-        {showAddForm && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-bold mb-4 text-gray-900">Tạo Tài Khoản Thành Viên Mới</h2>
-            <form onSubmit={handleAddMember} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-bold mb-4 text-gray-900">
+              {editingMember ? `✏️ Chỉnh Sửa: ${editingMember.full_name || editingMember.email}` : "➕ Thêm Thành Viên Mới"}
+            </h2>
+            <form onSubmit={editingMember ? handleEditMember : handleAddMember} className="space-y-4">
+              {/* Row 1: Email + Password + Vai trò + Ngày gia nhập (4 cột) */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email <span className="text-red-600">*</span>
@@ -292,12 +403,85 @@ export default function MembersAdminPage() {
                   <input
                     type="email"
                     required
+                    disabled={!!editingMember}
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${editingMember ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     placeholder="example@gmail.com"
                   />
                 </div>
+                <div>
+                  {!editingMember ? (
+                    <>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Mật khẩu <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        minLength={6}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        placeholder="Ít nhất 6 ký tự"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Mật khẩu</label>
+                      <div className="w-full border border-gray-200 rounded-lg px-3 py-2 bg-gray-50 text-sm text-gray-500">
+                        Chỉ nhập khi tạo mới
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
+                  <select
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="member">Thành Viên</option>
+                    <option value="mod_finance">Mod Tài Chính</option>
+                    <option value="mod_challenge">Mod Thử Thách</option>
+                    <option value="mod_member">Mod Thành Viên</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ngày gia nhập</label>
+                  <input
+                    type="text"
+                    value={joinDateDisplay}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setJoinDateDisplay(val);
+                      // Chỉ cập nhật formData nếu format hợp lệ dd/mm/yyyy
+                      if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+                        const converted = displayToDate(val);
+                        setFormData({ ...formData, join_date: converted });
+                      } else if (val === "") {
+                        // Nếu xóa trống, set về ngày hiện tại
+                        setFormData({ ...formData, join_date: new Date().toISOString().split('T')[0] });
+                      }
+                    }}
+                    onBlur={() => {
+                      // Khi rời khỏi input, nếu trống thì set về ngày hiện tại
+                      if (!joinDateDisplay) {
+                        const today = new Date().toISOString().split('T')[0];
+                        setFormData({ ...formData, join_date: today });
+                        setJoinDateDisplay(dateToDisplay(today));
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="dd/mm/yyyy"
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Họ và Tên + Giới tính + Số điện thoại + Ngày sinh (4 cột) */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Họ và Tên <span className="text-red-600">*</span>
@@ -307,82 +491,179 @@ export default function MembersAdminPage() {
                     required
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     placeholder="Nguyễn Văn A"
                   />
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Mật khẩu <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    placeholder="Tối thiểu 6 ký tự"
-                    minLength={6}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Vai trò
+                    Giới tính <span className="text-red-600">*</span>
                   </label>
                   <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    required
+                    value={formData.gender}
+                    onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                   >
-                    <option value="member">Thành Viên</option>
-                    <option value="mod_finance">Mod Tài Chính</option>
-                    <option value="mod_challenge">Mod Thử Thách</option>
-                    <option value="mod_member">Mod Thành Viên</option>
-                    <option value="admin">Admin</option>
+                    <option value="">Chọn giới tính</option>
+                    <option value="male">👨 Nam</option>
+                    <option value="female">👩 Nữ</option>
                   </select>
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
                   <input
                     type="tel"
                     value={formData.phone_number}
                     onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
                     placeholder="0912345678"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Ngày sinh</label>
                   <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    type="text"
+                    value={dobDisplay}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setDobDisplay(val);
+                      // Chỉ cập nhật formData nếu format hợp lệ dd/mm/yyyy
+                      if (/^\d{2}\/\d{2}\/\d{4}$/.test(val)) {
+                        const converted = displayToDate(val);
+                        setFormData({ ...formData, dob: converted });
+                      } else if (val === "") {
+                        // Nếu xóa trống, set về rỗng
+                        setFormData({ ...formData, dob: "" });
+                      }
+                    }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="dd/mm/yyyy"
                   />
                 </div>
+              </div>
+
+              {/* Row 4: Thiết bị + PB HM + PB FM */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Thiết bị</label>
                   <input
                     type="text"
                     value={formData.device_name}
                     onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                    placeholder="Garmin Forerunner"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Garmin, Apple Watch, Coros..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    PB HM <span className="text-xs text-gray-500">(HH:MM:SS)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pb_hm_time}
+                    onChange={(e) => setFormData({ ...formData, pb_hm_time: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="1:45:30"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    PB FM <span className="text-xs text-gray-500">(HH:MM:SS)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.pb_fm_time}
+                    onChange={(e) => setFormData({ ...formData, pb_fm_time: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="3:45:30"
                   />
                 </div>
               </div>
+
+              {/* Strava Info - Compact version (only when editing) */}
+              {editingMember && (
+                <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-300 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">🚴</span>
+                      <h3 className="text-sm font-bold text-orange-900">Strava Connection</h3>
+                    </div>
+                    {editingMember.strava_id && (
+                      <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">✓ Connected</span>
+                    )}
+                  </div>
+                  
+                  {editingMember.strava_id ? (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                      <div className="bg-white rounded p-2 border border-orange-200">
+                        <div className="text-gray-500 mb-1">Strava ID</div>
+                        <div className="font-mono font-semibold text-gray-900">{editingMember.strava_id}</div>
+                      </div>
+                      <div className="bg-white rounded p-2 border border-orange-200">
+                        <div className="text-gray-500 mb-1">Token Status</div>
+                        <div className="font-medium">{formatTokenExpiry(editingMember.strava_token_expires_at)}</div>
+                      </div>
+                      <div className="bg-white rounded p-2 border border-orange-200">
+                        <div className="text-gray-500 mb-1">Access Token</div>
+                        <div className="font-mono text-gray-900">{maskToken(editingMember.strava_access_token)}</div>
+                      </div>
+                      <div className="bg-white rounded p-2 border border-orange-200">
+                        <div className="text-gray-500 mb-1">Refresh Token</div>
+                        <div className="font-mono text-gray-900">{maskToken(editingMember.strava_refresh_token)}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded p-2 flex items-center gap-2 text-xs">
+                      <span>⚠️</span>
+                      <span className="text-yellow-800">Chưa kết nối Strava. Thành viên có thể kết nối qua trang Profile.</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Info note - Compact */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+                💡 <strong>PB:</strong> Admin nhập = tự động duyệt. Member tự nhập = chờ duyệt.
+                {!editingMember && <span className="ml-2">🚴 <strong>Strava:</strong> Tự động đồng bộ sau khi member kết nối.</span>}
+              </div>
+
+              {/* Action buttons */}
               <div className="flex items-center gap-4">
                 <button
                   type="submit"
                   disabled={formLoading}
                   className="px-6 py-2 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
                 >
-                  {formLoading ? "Đang tạo..." : "Tạo Tài Khoản"}
+                  {formLoading ? (editingMember ? "Đang lưu..." : "Đang tạo...") : (editingMember ? "💾 Lưu Thay Đổi" : "➕ Tạo Tài Khoản")}
                 </button>
+                {editingMember && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMember(null);
+                      setFormData({
+                        email: "",
+                        password: "",
+                        full_name: "",
+                        role: "member",
+                        phone_number: "",
+                        dob: "",
+                        gender: "",
+                        device_name: "",
+                        join_date: new Date().toISOString().split("T")[0],
+                        pb_hm_time: "",
+                        pb_fm_time: "",
+                      });
+                      setJoinDateDisplay(dateToDisplay(new Date().toISOString().split('T')[0]));
+                      setDobDisplay("");
+                      setFormMessage(null);
+                    }}
+                    className="px-6 py-2 bg-gray-500 text-white font-semibold rounded-lg hover:bg-gray-600 transition"
+                  >
+                    ❌ Hủy Chỉnh Sửa
+                  </button>
+                )}
                 {formMessage && (
                   <div
                     className={`text-sm px-4 py-2 rounded-lg ${
@@ -397,108 +678,7 @@ export default function MembersAdminPage() {
               </div>
             </form>
           </div>
-        )}
-
-        {/* Edit Member Form */}
-        {showEditForm && editingMember && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6 border-2 border-orange-500">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Chỉnh Sửa Thành Viên</h2>
-              <button onClick={() => setShowEditForm(false)} className="text-gray-500 hover:text-gray-700">
-                <X size={24} />
-              </button>
-            </div>
-            <form onSubmit={handleEditMember} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email (không thể đổi)</label>
-                  <input
-                    type="email"
-                    disabled
-                    value={formData.email}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 bg-gray-100 cursor-not-allowed"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Họ và Tên <span className="text-red-600">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.full_name}
-                    onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Vai trò</label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  >
-                    <option value="member">Thành Viên</option>
-                    <option value="mod_finance">Mod Tài Chính</option>
-                    <option value="mod_challenge">Mod Thử Thách</option>
-                    <option value="mod_member">Mod Thành Viên</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Số điện thoại</label>
-                  <input
-                    type="tel"
-                    value={formData.phone_number}
-                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ngày sinh</label>
-                  <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Thiết bị</label>
-                <input
-                  type="text"
-                  value={formData.device_name}
-                  onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                />
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  type="submit"
-                  disabled={formLoading}
-                  className="px-6 py-2 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md flex items-center gap-2"
-                >
-                  <Save size={16} />
-                  {formLoading ? "Đang lưu..." : "Lưu Thay Đổi"}
-                </button>
-                {formMessage && (
-                  <div
-                    className={`text-sm px-4 py-2 rounded-lg ${
-                      formMessage.includes("✓")
-                        ? "bg-green-50 text-green-700"
-                        : "bg-red-50 text-red-700"
-                    }`}
-                  >
-                    {formMessage}
-                  </div>
-                )}
-              </div>
-            </form>
-          </div>
-        )}
+        </div>
 
         {/* Members Table */}
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -538,12 +718,14 @@ export default function MembersAdminPage() {
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Tên</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Email</th>
+                    <th className="text-left py-3 px-4 font-bold text-gray-700">Giới tính</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">SĐT</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày sinh</th>
+                    <th className="text-left py-3 px-4 font-bold text-gray-700">PB HM</th>
+                    <th className="text-left py-3 px-4 font-bold text-gray-700">PB FM</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Thiết bị</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Vai Trò</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Gia Nhập</th>
-                    <th className="text-left py-3 px-4 font-bold text-gray-700">Rời CLB</th>
                     <th className="text-center py-3 px-4 font-bold text-gray-700">Trạng Thái</th>
                     <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
                   </tr>
@@ -551,10 +733,27 @@ export default function MembersAdminPage() {
                 <tbody>
                   {filteredMembers.map((member) => (
                     <tr key={member.id} className={`border-b border-gray-200 hover:bg-gray-50 ${!member.is_active ? 'bg-red-50' : ''}`}>
-                      <td className="py-3 px-4 font-semibold">{member.full_name}</td>
+                      <td className="py-3 px-4 font-semibold whitespace-nowrap max-w-[220px] truncate" title={member.full_name}>
+                        {member.full_name}
+                      </td>
                       <td className="py-3 px-4">{member.email}</td>
+                      <td className="py-3 px-4">
+                        {member.gender === 'male' ? '👨 Nam' : member.gender === 'female' ? '👩 Nữ' : 'N/A'}
+                      </td>
                       <td className="py-3 px-4">{member.phone_number || 'N/A'}</td>
-                      <td className="py-3 px-4">{formatDate(member.dob)}</td>
+                      <td className="py-3 px-4">{formatDateSimple(member.dob)}</td>
+                      <td className="py-3 px-4">
+                        <span className={member.pb_hm_approved ? 'text-green-700 font-semibold' : 'text-orange-600'}>
+                          {formatTime(member.pb_hm_seconds)}
+                          {member.pb_hm_seconds && !member.pb_hm_approved && ' ⏳'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={member.pb_fm_approved ? 'text-green-700 font-semibold' : 'text-orange-600'}>
+                          {formatTime(member.pb_fm_seconds)}
+                          {member.pb_fm_seconds && !member.pb_fm_approved && ' ⏳'}
+                        </span>
+                      </td>
                       <td className="py-3 px-4">{member.device_name || 'N/A'}</td>
                       <td className="py-3 px-4">
                         <span
@@ -569,8 +768,7 @@ export default function MembersAdminPage() {
                           {getRoleLabel(member.role)}
                         </span>
                       </td>
-                      <td className="py-3 px-4">{formatDate(member.join_date)}</td>
-                      <td className="py-3 px-4">{formatDate(member.leave_date)}</td>
+                      <td className="py-3 px-4">{formatDateSimple(member.join_date)}</td>
                       <td className="py-3 px-4 text-center">
                         {member.is_active ? (
                           <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-700">
@@ -578,7 +776,7 @@ export default function MembersAdminPage() {
                           </span>
                         ) : (
                           <span className="inline-flex px-2 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                            ✕ Đã rời
+                            ✕ Rời {formatDate(member.leave_date)}
                           </span>
                         )}
                       </td>
@@ -615,7 +813,6 @@ export default function MembersAdminPage() {
                 {searchEmail ? "Không tìm thấy thành viên nào khớp với email" : "Không có thành viên nào"}
               </p>
             </div>
-          )}
           )}
         </div>
 
