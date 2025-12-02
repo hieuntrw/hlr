@@ -276,62 +276,64 @@ CREATE TABLE IF NOT EXISTS lucky_draw_winners (
 
 CREATE INDEX IF NOT EXISTS idx_lucky_draw_challenge ON lucky_draw_winners(challenge_id);
 CREATE INDEX IF NOT EXISTS idx_lucky_draw_member ON lucky_draw_winners(member_id, status);
-
+/*
 -- Insert dữ liệu mặc định cho mốc thành tích FM nam
 INSERT INTO reward_milestones (race_type, gender, milestone_name, time_seconds, reward_description, cash_amount, priority)
 VALUES
-  ('FM', 'male', 'SUB300', 330*60, 'Kỉ niệm chương đặc biệt + 1 triệu', 1000000, 100),
-  ('FM', 'male', 'SUB315', 345*60, 'Cúp pha lê + 500k', 500000, 90),
-  ('FM', 'male', 'SUB330', 400*60, 'Kỉ niệm chương bạc + 300k', 300000, 80),
-  ('FM', 'male', 'SUB345', 415*60, 'KNC khung kính A5 + 200k', 200000, 70),
-  ('FM', 'male', 'SUB400', 445*60, 'KNC khung kính A5', 0, 60),
-  ('FM', 'male', 'Lần đầu hoàn thành', 999999, 'KNC A5 lần đầu', 0, 50)
+    ('FM', 'male', 'SUB245', 9900, 'KNC đặc biệt + 2tr', 2000000, 7),
+  ('FM', 'male', 'SUB300', 10800, 'KNC đặc biệt + 1tr5', 1500000, 6),
+  ('FM', 'male', 'SUB315', 11700, 'KNC đặc biệt + 1tr', 1000000, 5),
+  ('FM', 'male', 'SUB330', 12600, 'Bảng gỗ + 500k', 500000, 4),
+  ('FM', 'male', 'SUB345', 13500, 'Bảng gỗ', 0, 3),
+  ('FM', 'male', 'SUB400', 14400, 'KNC khung kính A5', 0, 2),
+  ('FM', 'male', 'Lần đầu hoàn thành', 999999, 'KNC A5 lần đầu', 0, 1)
 ON CONFLICT DO NOTHING;
 
 -- Insert dữ liệu mặc định cho mốc thành tích FM nữ
 INSERT INTO reward_milestones (race_type, gender, milestone_name, time_seconds, reward_description, cash_amount, priority)
 VALUES
-  ('FM', 'female', 'SUB315', 400*60, 'Kỉ niệm chương đặc biệt + 1 triệu', 1000000, 100),
-  ('FM', 'female', 'SUB330', 430*60, 'Cúp pha lê + 500k', 500000, 90),
-  ('FM', 'female', 'SUB345', 500*60, 'Kỉ niệm chương bạc + 300k', 300000, 80),
-  ('FM', 'female', 'SUB400', 530*60, 'KNC khung kính A5 + 200k', 200000, 70),
-  ('FM', 'female', 'SUB415', 600*60, 'KNC khung kính A5', 0, 60),
-  ('FM', 'female', 'Lần đầu hoàn thành', 999999, 'KNC A5 lần đầu', 0, 50)
+  ('FM', 'female', 'SUB300', 10800, 'KNC đặc biệt + 2tr', 2000000, 7),
+  ('FM', 'female', 'SUB315', 11700, 'KNC đặc biệt + 1tr5', 1500000, 6),
+  ('FM', 'female', 'SUB330', 12600, 'KNC đặc biệt + 1tr', 1000000, 5),
+  ('FM', 'female', 'SUB345', 13500, 'Bảng gỗ + 500k', 500000, 4),
+  ('FM', 'female', 'SUB400', 14400, 'Bảng gỗ', 0, 3),
+  ('FM', 'female', 'SUB415', 15300, 'KNC khung kính A5', 0, 2),
+  ('FM', 'female', 'Lần đầu hoàn thành', 999999, 'KNC khung kính A5', 0, 1)
 ON CONFLICT DO NOTHING;
 
 -- Insert dữ liệu mặc định cho mốc thành tích HM nam
 INSERT INTO reward_milestones (race_type, gender, milestone_name, time_seconds, reward_description, cash_amount, priority)
 VALUES
-  ('HM', 'male', 'SUB145', 105*60, 'Kỉ niệm chương đặc biệt + 500k', 500000, 100),
-  ('HM', 'male', 'SUB200', 120*60, 'Cúp pha lê + 300k', 300000, 90),
-  ('HM', 'male', 'SUB215', 135*60, 'Kỉ niệm chương bạc + 200k', 200000, 80),
-  ('HM', 'male', 'SUB230', 150*60, 'KNC khung kính A5 + 150k', 150000, 70),
-  ('HM', 'male', 'SUB245', 165*60, 'KNC khung kính A5', 0, 60),
-  ('HM', 'male', 'Lần đầu hoàn thành', 999999, 'KNC A5 lần đầu', 0, 50)
+    ('HM', 'female', 'SUB215', 8100, 'KNC khung kính A5', 0, 1),
+  ('HM', 'female', 'SUB200', 7200, 'Cúp pha lê', 0, 2),
+  ('HM', 'female', 'SUB145', 6300, 'Bảng gỗ', 0, 3),
+  ('HM', 'female', 'SUB130', 5400, 'Bảng gỗ + 500k', 500000, 4),
+  ('HM', 'female', 'SUB115', 4500, 'KNC đặc biệt + 1tr', 1000000, 5),
+  ('HM', 'female', 'SUB110', 4200, 'KNC đặc biệt + 1tr5', 1500000, 6)
 ON CONFLICT DO NOTHING;
 
 -- Insert dữ liệu mặc định cho mốc thành tích HM nữ
 INSERT INTO reward_milestones (race_type, gender, milestone_name, time_seconds, reward_description, cash_amount, priority)
 VALUES
-  ('HM', 'female', 'SUB200', 120*60, 'Kỉ niệm chương đặc biệt + 500k', 500000, 100),
-  ('HM', 'female', 'SUB215', 135*60, 'Cúp pha lê + 300k', 300000, 90),
-  ('HM', 'female', 'SUB230', 150*60, 'Kỉ niệm chương bạc + 200k', 200000, 80),
-  ('HM', 'female', 'SUB245', 165*60, 'KNC khung kính A5 + 150k', 150000, 70),
-  ('HM', 'female', 'SUB300', 180*60, 'KNC khung kính A5', 0, 60),
-  ('HM', 'female', 'Lần đầu hoàn thành', 999999, 'KNC A5 lần đầu', 0, 50)
+  ('HM', 'male', 'SUB200', 7200, 'KNC khung kính A5', 0, 1),
+  ('HM', 'male', 'SUB145', 6300, 'Cúp pha lê', 0, 2),
+  ('HM', 'male', 'SUB130', 5400, 'Bảng gỗ', 0, 3),
+  ('HM', 'male', 'SUB115', 4500, 'Bảng gỗ + 500k', 500000, 4),
+  ('HM', 'male', 'SUB110', 4200, 'KNC đặc biệt + 1tr', 1000000, 5),
+  ('HM', 'male', 'SUB105', 3900, 'KNC đặc biệt + 1tr5', 1500000, 6)
 ON CONFLICT DO NOTHING;
 
 -- Insert dữ liệu mặc định cho phần thưởng đứng bục
 INSERT INTO reward_podium_config (podium_type, rank, reward_description, cash_amount)
 VALUES
-  ('overall', 1, 'Kỉ niệm chương vàng overall + 500k', 500000),
-  ('overall', 2, 'Kỉ niệm chương bạc overall + 300k', 300000),
-  ('overall', 3, 'Kỉ niệm chương đồng overall + 200k', 200000),
-  ('age_group', 1, 'Kỉ niệm chương vàng lứa tuổi + 200k', 200000),
-  ('age_group', 2, 'Kỉ niệm chương bạc lứa tuổi + 150k', 150000),
-  ('age_group', 3, 'Kỉ niệm chương đồng lứa tuổi + 100k', 100000)
+  ('overall', 1, 'Kỉ niệm chương đặc biệt + 1tr', 1000000),
+  ('overall', 2, 'Kỉ niệm chương đặc biệt + 2tr', 2000000),
+  ('overall', 3, 'Kỉ niệm chương đặc biệt + 3tr', 3000000),
+  ('age_group', 1, 'Kỉ niệm chương đặc biệt + 500k', 500000),
+  ('age_group', 2, 'Kỉ niệm chương đặc biệt + 1tr', 1000000),
+  ('age_group', 3, 'Kỉ niệm chương đặc biệt + 1tr5', 1500000)
 ON CONFLICT DO NOTHING;
-
+*/
 -- RLS policies cho bảng reward_milestones (public read, admin manage)
 ALTER TABLE reward_milestones ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public can view active milestones" ON reward_milestones;
@@ -500,6 +502,22 @@ CREATE TRIGGER trg_auto_award_milestone
 AFTER INSERT OR UPDATE ON race_results
 FOR EACH ROW
 EXECUTE FUNCTION auto_award_milestone();
+
+-- =====================================================
+-- Migration 20251202: Add gender to profiles
+-- =====================================================
+ALTER TABLE profiles
+ADD COLUMN IF NOT EXISTS gender VARCHAR(10) CHECK (gender IN ('male', 'female'));
+
+CREATE INDEX IF NOT EXISTS idx_profiles_gender ON profiles(gender) WHERE gender IS NOT NULL;
+
+COMMENT ON COLUMN profiles.gender IS 'Member gender for milestone reward calculation (male/female)';
+
+-- =====================================================
+-- Migration 20251202: Remove password from profiles
+-- =====================================================
+-- Authentication now exclusively through Supabase Auth (Strava OAuth)
+ALTER TABLE profiles DROP COLUMN IF EXISTS password;
 
 -- =====================================================
 -- END OF CONSOLIDATED MIGRATIONS

@@ -88,21 +88,17 @@ export async function GET(request: NextRequest) {
 
     console.log("[Strava Callback] Saving tokens for user:", userId);
 
-    // Save Strava credentials to profile
+    // Update existing profile with Strava credentials (do not create new profile)
     const { error: updateError } = await supabase
       .from("profiles")
-      .upsert(
-        {
-          id: userId,
-          email: user.email,
-          strava_id: tokenData.athlete.id.toString(),
-          strava_access_token: tokenData.access_token,
-          strava_refresh_token: tokenData.refresh_token,
-          strava_token_expires_at: tokenData.expires_at,
-          full_name: athleteName || user.email,
-        },
-        { onConflict: "id" }
-      );
+      .update({
+        strava_id: tokenData.athlete.id.toString(),
+        strava_access_token: tokenData.access_token,
+        strava_refresh_token: tokenData.refresh_token,
+        strava_token_expires_at: tokenData.expires_at,
+        strava_athlete_name: athleteName || "Unknown",
+      })
+      .eq("id", userId);
 
     if (updateError) {
       console.error("[Strava Callback] Failed to save tokens:", updateError);

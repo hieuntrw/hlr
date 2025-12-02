@@ -12,6 +12,7 @@ import {
 // Mobile-first personal finance page for members
 export default function FinancePage() {
   const [user, setUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [pendingTotal, setPendingTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
@@ -32,6 +33,16 @@ export default function FinancePage() {
       const u = userData?.user || null;
       setUser(u);
       if (u) {
+        // Fetch profile for full_name
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', u.id)
+          .single();
+        if (profileData) {
+          setProfile(profileData);
+        }
+        
         const trs = await fetchUserTransactionsClient(supabase, u.id);
         setTransactions(trs);
         const pending = trs
@@ -293,7 +304,7 @@ export default function FinancePage() {
               <div className="bg-gray-50 rounded p-3 text-sm">
                 <div className="text-xs text-gray-500">Cú pháp chuyển khoản (ghi rõ để đối soát):</div>
                 <div className="mt-2 font-medium bg-white p-2 rounded">
-                  HLR {user?.user_metadata?.full_name || user?.email || 'Tên'} [Nội dung]
+                  HLR {profile?.full_name || user?.email || 'Tên'} [Nội dung]
                 </div>
                 <div className="mt-2 text-xs text-gray-500">Ví dụ: HLR Nguyễn Văn A Quỹ tháng 11/2025</div>
               </div>
@@ -301,7 +312,7 @@ export default function FinancePage() {
               <div className="flex gap-2">
                 <button className="flex-1 bg-green-600 text-white px-3 py-2 rounded" onClick={() => {
                   // For convenience copy text to clipboard (caveat: clipboard only available in browser)
-                  const txt = `HLR ${user?.user_metadata?.full_name || user?.email || ''}`;
+                  const txt = `HLR ${profile?.full_name || user?.email || ''}`;
                   navigator?.clipboard?.writeText(txt).then(() => alert('Đã sao chép cú pháp chuyển khoản'));
                 }}>Sao chép cú pháp</button>
                 <button className="flex-1 bg-slate-100 text-slate-700 px-3 py-2 rounded" onClick={() => setShowPayModal(false)}>Đóng</button>
