@@ -1,16 +1,37 @@
-import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase-client';
+import { NextResponse, NextRequest } from 'next/server';
+import { createServerClient } from '@supabase/ssr';
 
-export async function POST(request: Request, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
   try {
-    const body = await request.json();
-    const { user_id } = body;
-    if (!user_id) {
-      return NextResponse.json({ error: 'user_id required' }, { status: 400 });
+    // Create server supabase client to read session from cookies
+    const res = NextResponse.next();
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return request.cookies.get(name)?.value;
+          },
+          set() {
+            /* no-op on server route */
+          },
+          remove() {
+            /* no-op on server route */
+          },
+        },
+      }
+    );
+
+    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+    if (userError || !user) {
+      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
     }
 
-    const { error } = await supabase
+    const user_id = user.id;
+
+    const { error } = await supabaseAuth
       .from('challenge_participants')
       .delete()
       .eq('challenge_id', id)
