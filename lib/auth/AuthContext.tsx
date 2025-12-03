@@ -26,12 +26,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Get cached auth data for instant rendering
+  // Use localStorage for persistent session (30 days)
+  const CACHE_KEY = 'hlr_auth_cache';
+  const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
   const getCachedAuth = () => {
     if (typeof window === 'undefined') return null;
     try {
-      const cached = sessionStorage.getItem('hlr_auth_cache');
-      return cached ? JSON.parse(cached) : null;
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (!cached) return null;
+      const parsed = JSON.parse(cached);
+      // Check expiresAt
+      if (!parsed.expiresAt || Date.now() > parsed.expiresAt) return null;
+      return parsed;
     } catch {
       return null;
     }
@@ -40,10 +47,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setCachedAuth = (userData: User | null, profileData: Profile | null) => {
     if (typeof window === 'undefined') return;
     try {
-      sessionStorage.setItem('hlr_auth_cache', JSON.stringify({ 
-        user: userData, 
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        user: userData,
         profile: profileData,
-        timestamp: Date.now() 
+        timestamp: Date.now(),
+        expiresAt: Date.now() + CACHE_DURATION_MS
       }));
     } catch {}
   };
@@ -51,64 +59,60 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const clearCachedAuth = () => {
     if (typeof window === 'undefined') return;
     try {
-      sessionStorage.removeItem('hlr_auth_cache');
+      localStorage.removeItem(CACHE_KEY);
     } catch {}
   };
 
   const loadUserData = async (mounted: { current: boolean }) => {
-    console.log('[AuthContext] Starting loadUserData...');
+    const startAll = performance.now();
+    console.log('[AuthContext] PERF: loadUserData start', startAll);
     try {
-      console.log('[AuthContext] Calling supabase.auth.getUser()...');
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
-      console.log('[AuthContext] getUser response:', { user: authUser?.id, error: error?.message });
-      
-      if (!mounted.current) return;
-      
-      if (error || !authUser) {
-        console.log('[AuthContext] No user or error, setting loading to false');
-        if (mounted.current) {
-          setUser(null);
-          setProfile(null);
-          setIsLoading(false);
-          clearCachedAuth();
-        }
+      // Use cache if available and recent
+      const cached = getCachedAuth();
+      const isRecent = cached && cached.timestamp && (Date.now() - cached.timestamp < 5 * 60 * 1000);
+      if (cached && cached.user && isRecent) {
+        setUser(cached.user);
+        setProfile(cached.profile);
+        setIsLoading(false);
+        console.log('[AuthContext] PERF: used cached auth, duration:', (performance.now() - startAll).toFixed(2), 'ms');
         return;
       }
-
+      // Only fetch if cache is missing or expired
+      const startGetUser = performance.now();
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      const endGetUser = performance.now();
+      console.log('[AuthContext] PERF: getUser end', endGetUser, 'duration:', (endGetUser - startGetUser).toFixed(2), 'ms');
+      if (!mounted.current) return;
+      if (error || !authUser) {
+        setUser(null);
+        setProfile(null);
+        setIsLoading(false);
+        clearCachedAuth();
+        return;
+      }
       setUser(authUser);
-      console.log('[AuthContext] User set, loading profile...');
-
-      // Load profile data
+      const startProfile = performance.now();
       const { data: profileData } = await supabase
         .from("profiles")
         .select("id, full_name, role")
         .eq("id", authUser.id)
         .single();
-
-      console.log('[AuthContext] Profile loaded:', profileData?.full_name);
-
+      const endProfile = performance.now();
+      console.log('[AuthContext] PERF: profile query end', endProfile, 'duration:', (endProfile - startProfile).toFixed(2), 'ms');
       if (!mounted.current) return;
-
-      const profile: Profile = {
+      const profile = {
         id: authUser.id,
         full_name: profileData?.full_name || null,
         role: authUser.user_metadata?.role || profileData?.role
       };
-
       setProfile(profile);
       setCachedAuth(authUser, profile);
-      console.log('[AuthContext] Auth context ready');
     } catch (error) {
-      console.error('[AuthContext] Error loading user:', error);
-      if (mounted.current) {
-        setUser(null);
-        setProfile(null);
-      }
+      setUser(null);
+      setProfile(null);
     } finally {
-      if (mounted.current) {
-        console.log('[AuthContext] Setting isLoading to false');
-        setIsLoading(false);
-      }
+      setIsLoading(false);
+      console.log('[AuthContext] PERF: loadUserData end', performance.now(), 'total duration:', (performance.now() - startAll).toFixed(2), 'ms');
     }
   };
 
@@ -117,53 +121,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await loadUserData(mounted);
   };
 
+  // OPTIMIZED: Always verify session with Supabase on app load, even if cache is valid
   useEffect(() => {
     const mounted = { current: true };
-
-    // Safety timeout: if loading takes more than 10 seconds, force it to complete
     const timeoutId = setTimeout(() => {
       if (mounted.current) {
-        console.warn('[AuthContext] Loading timeout - forcing isLoading to false');
         setIsLoading(false);
       }
     }, 10000);
 
-    // Load cached data immediately for instant rendering
     const cached = getCachedAuth();
-    console.log('[AuthContext] Checking cache...', cached ? 'Found' : 'Not found');
-    if (cached && cached.user) {
-      // Only use cache if less than 5 minutes old
-      const isRecent = cached.timestamp && (Date.now() - cached.timestamp < 5 * 60 * 1000);
-      console.log('[AuthContext] Cache recent?', isRecent);
-      if (isRecent) {
-        console.log('[AuthContext] Using cached auth, setting isLoading = false');
-        setUser(cached.user);
-        setProfile(cached.profile);
-        setIsLoading(false); // ✅ Set loading to false immediately when using cache
-      }
+    const isRecent = cached && cached.expiresAt && Date.now() < cached.expiresAt;
+
+    if (cached && cached.user && isRecent) {
+      setUser(cached.user);
+      setProfile(cached.profile);
+      setIsLoading(false);
+      // Xác thực lại session với Supabase để đảm bảo hợp lệ
+      supabase.auth.getUser().then(({ data: { user: authUser }, error }) => {
+        if (!mounted.current) return;
+        if (error || !authUser) {
+          // Session không hợp lệ, xóa cache và yêu cầu đăng nhập lại
+          setUser(null);
+          setProfile(null);
+          setIsLoading(false);
+          clearCachedAuth();
+        } else {
+          // Nếu user hợp lệ, có thể cập nhật lại profile nếu cần
+          // (Chỉ fetch profile nếu user id khác hoặc cache hết hạn)
+          if (!cached.profile || cached.user.id !== authUser.id) {
+            supabase
+              .from("profiles")
+              .select("id, full_name, role")
+              .eq("id", authUser.id)
+              .single()
+              .then(({ data: profileData }) => {
+                if (!mounted.current) return;
+                const profile = {
+                  id: authUser.id,
+                  full_name: profileData?.full_name || null,
+                  role: authUser.user_metadata?.role || profileData?.role
+                };
+                setProfile(profile);
+                setCachedAuth(authUser, profile);
+              });
+          }
+        }
+      });
+    } else {
+      // Không có cache hoặc cache hết hạn, xác thực lại như cũ
+      loadUserData(mounted).then(() => {
+        clearTimeout(timeoutId);
+      });
     }
 
-    // Load fresh data from Supabase (will update cache)
-    loadUserData(mounted).then(() => {
-      clearTimeout(timeoutId);
-    });
-
-    // Listen for auth state changes
+    // Lắng nghe sự kiện Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted.current) return;
-
-      console.log('[AuthContext] Auth state changed:', event);
-
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
+        setIsLoading(false);
         clearCachedAuth();
       } else if (event === 'SIGNED_IN' && session?.user) {
         await loadUserData(mounted);
       } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        // Update user data on token refresh
         setUser(session.user);
-        // Profile data should still be valid
         if (profile) {
           setCachedAuth(session.user, profile);
         }
@@ -177,13 +200,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const isAdmin = user?.user_metadata?.role === 'admin' || profile?.role === 'admin';
-  const isMod = user?.user_metadata?.role ? 
-    ['admin', 'mod_finance', 'mod_challenge', 'mod_member'].includes(user.user_metadata.role) :
-    false;
+  const isAdmin = user?.user_metadata?.role === 'admin';
+  const isMod = user?.user_metadata?.role === 'mod';
+
+  const value = { user, profile, isLoading, isAdmin, isMod, refreshAuth };
 
   return (
-    <AuthContext.Provider value={{ user, profile, isLoading, isAdmin, isMod, refreshAuth }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -192,12 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
-}
-
-// Optional: Export a hook that returns null if not in provider (for gradual migration)
-export function useAuthOptional() {
-  return useContext(AuthContext);
 }

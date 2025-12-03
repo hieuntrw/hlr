@@ -23,18 +23,14 @@ export default function Header() {
           sessionStorage.removeItem('hlr_auth_cache');
         } catch {}
       }
-      
-      // Call logout API to clear cookies
-      await fetch('/api/auth/logout', { method: 'POST' });
-      
-      // Also sign out from Supabase client (AuthContext will handle state updates)
-      await supabase.auth.signOut();
-      
-      // Force reload to clear all state
+      // Call logout API to clear cookies/session (do not await)
+      fetch('/api/auth/logout', { method: 'POST' });
+      // Sign out from Supabase (do not await)
+      supabase.auth.signOut();
+      // Redirect immediately
       window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
-      // Even on error, try to redirect
       window.location.href = '/login';
     }
   };

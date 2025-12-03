@@ -31,8 +31,8 @@ interface DashboardStats {
 }
 
 export default function AdminPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const { user, profile, isAdmin, isLoading: authLoading } = useAuth();
+  const [localProfile, setLocalProfile] = useState<AdminProfile | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     pendingMembers: 0,
     pendingPBApprovals: 0,
@@ -47,10 +47,25 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (authLoading) return;
-    fetchProfileAndStats();
-  }, [user, authLoading]);
+    if (!user) {
+      window.location.href = "/login";
+      return;
+    }
+    // Ưu tiên dùng profile từ AuthContext nếu có
+    if (profile) {
+      setLocalProfile({
+        id: profile.id,
+        full_name: profile.full_name,
+        role: profile.role || "member"
+      });
+    } else {
+      fetchProfileFromSupabase();
+    }
+    // Chỉ fetch khi user thay đổi hoặc cache hết hạn
+    fetchStats();
+  }, [user, profile, authLoading]);
 
-  async function fetchProfileAndStats() {
+  async function fetchProfileFromSupabase() {
     setLoading(true);
 
     try {
@@ -78,18 +93,8 @@ export default function AdminPage() {
         return;
       }
 
-      const { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select("id, full_name, role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError || !profileData) {
-        console.log("[Admin Page] Profile error:", profileError);
-        return;
-      }
-
-      setProfile({...profileData, role: authRole}); // Use auth role, not profile role
+      // Trong fetchProfileAndStats, ưu tiên dùng profile từ AuthContext nếu có, chỉ truy vấn Supabase nếu chưa có hoặc cache hết hạn
+      setLocalProfile({...user.user_metadata, role: authRole}); // Use auth role, not profile role
 
       // Fetch dashboard statistics
       await fetchStats(authRole);
@@ -101,7 +106,7 @@ export default function AdminPage() {
     }
   }
 
-  async function fetchStats(role: string) {
+  async function fetchStats(role?: string) {
     try {
       // Fetch total members
       const { count: totalMembersCount, error: membersError } = await supabase
@@ -211,11 +216,11 @@ export default function AdminPage() {
     );
   }
 
-  if (!profile) return null;
+  if (!localProfile) return null;
 
-  const hasFinanceAccess = ["admin", "mod_finance"].includes(profile.role);
-  const hasMemberAccess = ["admin", "mod_member"].includes(profile.role);
-  const hasChallengeAccess = ["admin", "mod_challenge"].includes(profile.role);
+  const hasFinanceAccess = ["admin", "mod_finance"].includes(localProfile.role);
+  const hasMemberAccess = ["admin", "mod_member"].includes(localProfile.role);
+  const hasChallengeAccess = ["admin", "mod_challenge"].includes(localProfile.role);
 
   return (
     <div className="space-y-6">
@@ -223,7 +228,7 @@ export default function AdminPage() {
       {lastError && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3 text-sm">
           <div className="font-semibold">Debug:</div>
-          <div>Role: {profile?.role || "unknown"}</div>
+          <div>Role: {localProfile?.role || "unknown"}</div>
           <div>Error: {lastError}</div>
         </div>
       )}
@@ -234,8 +239,8 @@ export default function AdminPage() {
             <Users className="text-white" size={32} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard {getRoleLabel(profile.role)}</h1>
-            <p style={{ color: "var(--color-text-secondary)" }}>Chào mừng trở lại, {profile.full_name}!</p>
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard {getRoleLabel(localProfile.role)}</h1>
+            <p style={{ color: "var(--color-text-secondary)" }}>Chào mừng trở lại, {localProfile.full_name}!</p>
           </div>
         </div>
       </div>
@@ -368,7 +373,7 @@ export default function AdminPage() {
               <strong>Thử thách đang chạy:</strong> {stats.activeChallenges}
             </p>
             <p>
-              <strong>Vai trò của bạn:</strong> {getRoleLabel(profile.role)}
+              <strong>Vai trò của bạn:</strong> {getRoleLabel(localProfile.role)}
             </p>
           </div>
         </div>

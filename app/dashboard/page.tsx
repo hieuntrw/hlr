@@ -60,8 +60,8 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const connected = searchParams.get("strava_connected");
-  const { user, isLoading: authLoading } = useAuth(); // Add auth context with loading
-  
+  const { user, profile, isLoading: authLoading } = useAuth(); // Thêm profile từ AuthContext
+
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [personalStats, setPersonalStats] = useState<PersonalStats>({
     totalKm: 0,
@@ -85,7 +85,12 @@ function DashboardContent() {
     challengesCompleted: 0,
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [personalStatsLoading, setPersonalStatsLoading] = useState(true);
+  const [hallOfFameLoading, setHallOfFameLoading] = useState(true);
+  const [financeLoading, setFinanceLoading] = useState(true);
+  const [yearlyStatsLoading, setYearlyStatsLoading] = useState(true);
+  const [notificationsLoading, setNotificationsLoading] = useState(true);
 
   // Format time in seconds to MM:SS
   const formatTime = (seconds: number | null): string => {
@@ -98,6 +103,7 @@ function DashboardContent() {
   // Fetch Hall of Fame (top 3 per distance)
   async function fetchHallOfFame() {
     try {
+      setHallOfFameLoading(true);
       const { data: profiles } = await supabase
         .from("profiles")
         .select("full_name, pb_full_marathon_seconds, pb_half_marathon_seconds")
@@ -118,12 +124,15 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch hall of fame:", err);
+    } finally {
+      setHallOfFameLoading(false);
     }
   }
 
   // Fetch personal challenge stats
   async function fetchPersonalStats() {
     try {
+      setPersonalStatsLoading(true);
       const now = new Date();
       const month = now.getMonth() + 1;
       const year = now.getFullYear();
@@ -188,12 +197,15 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch personal stats:", err);
+    } finally {
+      setPersonalStatsLoading(false);
     }
   }
 
   // Fetch finance status
   async function fetchFinanceStatus() {
     try {
+      setFinanceLoading(true);
       // Using user from AuthContext
       if (!user) return;
 
@@ -228,12 +240,15 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch finance status:", err);
+    } finally {
+      setFinanceLoading(false);
     }
   }
 
   // Fetch yearly stats
   async function fetchYearlyStats() {
     try {
+      setYearlyStatsLoading(true);
       // Using user from AuthContext
       if (!user) return;
 
@@ -273,98 +288,130 @@ function DashboardContent() {
       }
     } catch (err) {
       console.error("Failed to fetch yearly stats:", err);
+    } finally {
+      setYearlyStatsLoading(false);
     }
   }
 
   // Fetch user profile
   async function fetchUserProfile() {
     try {
+      setProfileLoading(true);
       // Using user from AuthContext
       if (!user) return;
 
       console.log("[DEBUG] User ID:", user.id, "Email:", user.email);
 
-      // Truy vấn bảng profiles bằng email - chỉ lấy full_name
-      if (user.email) {
-        const { data: profile, error } = await supabase
+      // Truy vấn bảng profiles theo user.id (trường id của bảng profiles tương ứng với auth user id)
+      // Nếu không tìm thấy bằng id thì fallback sang tìm bằng email.
+      let profileResult: any = null;
+
+      const { data: profileById, error: errById } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (errById) console.warn('[DEBUG] Error fetching profile by id', errById);
+
+      if (profileById) {
+        profileResult = profileById;
+      } else if (user.email) {
+        const { data: profileByEmail, error: errByEmail } = await supabase
           .from("profiles")
-          .select("id, full_name, email")
+          .select("id, full_name, email, role")
           .eq("email", user.email)
           .maybeSingle();
-        
-        console.log("[DEBUG] Truy vấn profile bằng email:", user.email, "Result:", profile, "Error:", error);
 
-        if (profile) {
-          setUserProfile({
-            id: profile.id,
-            full_name: profile.full_name,
-            email: profile.email,
-            strava_id: null,
-            role: undefined,
-            pb_5k_seconds: null,
-            pb_10k_seconds: null,
-            pb_half_marathon_seconds: null,
-            pb_full_marathon_seconds: null,
-          });
-          console.log("[DEBUG] Đã set userProfile với full_name:", profile.full_name);
-        } else {
-          console.log("[DEBUG] Không tìm thấy profile với email:", user.email);
+        if (errByEmail) console.warn('[DEBUG] Error fetching profile by email', errByEmail);
+
+        if (profileByEmail) {
+          profileResult = profileByEmail;
         }
+      }
+
+      console.log("[DEBUG] Profile lookup result:", profileResult);
+
+      if (profileResult) {
+        setUserProfile({
+          id: profileResult.id,
+          full_name: profileResult.full_name,
+          email: profileResult.email,
+          strava_id: null,
+          role: profileResult.role,
+          pb_5k_seconds: null,
+          pb_10k_seconds: null,
+          pb_half_marathon_seconds: null,
+          pb_full_marathon_seconds: null,
+        });
+        console.log("[DEBUG] Đã set userProfile với full_name:", profileResult.full_name);
+      } else {
+        console.log("[DEBUG] Không tìm thấy profile cho user:", user.id, user.email);
       }
     } catch (err) {
       console.error("Failed to fetch user profile:", err);
+    } finally {
+      setProfileLoading(false);
     }
   }
 
   // Fetch notifications (mock for now)
   async function fetchNotifications() {
-    // TODO: Replace with real notifications from database
-    setNotifications([
-      {
-        id: "1",
-        message: "Giải chạy HLR Marathon sắp diễn ra ngày 15/12!",
-        type: "info",
-        date: new Date().toISOString(),
-      },
-      {
-        id: "2",
-        message: "Nhắc nhở: Đóng quỹ tháng 12 trước ngày 10/12",
-        type: "warning",
-        date: new Date().toISOString(),
-      },
-      {
-        id: "3",
-        message: "Chúc mừng 5 thành viên đạt PB mới tuần này!",
-        type: "success",
-        date: new Date().toISOString(),
-      },
-    ]);
+    setNotificationsLoading(true);
+    setTimeout(() => {
+      setNotifications([
+        {
+          id: "1",
+          message: "Giải chạy HLR Marathon sắp diễn ra ngày 15/12!",
+          type: "info",
+          date: new Date().toISOString(),
+        },
+        {
+          id: "2",
+          message: "Nhắc nhở: Đóng quỹ tháng 12 trước ngày 10/12",
+          type: "warning",
+          date: new Date().toISOString(),
+        },
+        {
+          id: "3",
+          message: "Chúc mừng 5 thành viên đạt PB mới tuần này!",
+          type: "success",
+          date: new Date().toISOString(),
+        },
+      ]);
+      setNotificationsLoading(false);
+    }, 500);
   }
 
   useEffect(() => {
-    (async () => {
-      // Wait for auth to finish loading
-      if (authLoading) return;
-      
-      // Using user from AuthContext
-      if (!user) {
-        router.push(`/login?redirect=${encodeURIComponent("/dashboard")}`);
-        return;
-      }
-
-      setLoading(true);
-      await Promise.all([
-        fetchUserProfile(),
-        fetchPersonalStats(),
-        fetchHallOfFame(),
-        fetchFinanceStatus(),
-        fetchYearlyStats(),
-        fetchNotifications(),
-      ]);
-      setLoading(false);
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading]);
+    if (authLoading) return;
+    if (!user) {
+      router.push(`/login?redirect=${encodeURIComponent("/dashboard")}`);
+      return;
+    }
+    // Ưu tiên dùng profile từ AuthContext nếu có
+    if (profile) {
+      setUserProfile({
+        id: profile.id,
+        full_name: profile.full_name,
+        email: user.email ?? null,
+        strava_id: null,
+        role: profile.role,
+        pb_5k_seconds: null,
+        pb_10k_seconds: null,
+        pb_half_marathon_seconds: null,
+        pb_full_marathon_seconds: null,
+      });
+      setProfileLoading(false);
+    } else {
+      fetchUserProfile();
+    }
+    fetchPersonalStats();
+    fetchHallOfFame();
+    fetchFinanceStatus();
+    fetchYearlyStats();
+    fetchNotifications();
+  }, [user, profile, authLoading]);
 
   const getProgressColor = (percent: number) => {
     if (percent >= 100) return "bg-green-600";
@@ -386,26 +433,32 @@ function DashboardContent() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-[var(--color-bg-secondary)]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
-          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Welcome Section */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Xin chào, {userProfile?.full_name}! 👋
-          </h1>
-          <p className="text-gray-600 mt-1">Chào mừng bạn quay lại với Hải Lăng Runners</p>
+        <div className="mb-6 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">
+              Xin chào, {profileLoading ? (
+                <span className="h-6 w-32 bg-gray-200 rounded animate-pulse inline-block" />
+              ) : (
+                (profile?.full_name ?? userProfile?.full_name ?? user?.email ?? "Thành viên")
+              )}! 👋
+            </h1>
+            <p className="text-gray-600 mt-1">Chào mừng bạn quay lại với Hải Lăng Runners</p>
+          </div>
+
+          {/* Admin shortcut button (single) */}
+          {(userProfile?.role === "admin" || userProfile?.role?.startsWith("mod_")) && (
+            <a
+              href="/admin"
+              className="inline-flex items-center px-4 py-2 rounded-lg font-medium shadow-sm"
+              style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
+            >
+              Quản trị
+            </a>
+          )}
         </div>
 
         {/* Main Dashboard Grid */}
@@ -510,7 +563,11 @@ function DashboardContent() {
                     <Target size={20} />
                     <p className="text-sm opacity-90">Tổng KM chạy</p>
                   </div>
-                  <p className="text-3xl font-bold">{yearlyStats.totalKm}</p>
+                  <p className="text-3xl font-bold">{yearlyStatsLoading ? (
+                    <span className="h-8 w-32 bg-gray-200 rounded animate-pulse inline-block" />
+                  ) : (
+                    yearlyStats.totalKm
+                  )}</p>
                 </div>
 
                 <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
@@ -518,7 +575,11 @@ function DashboardContent() {
                     <Star size={20} />
                     <p className="text-sm opacity-90">Tổng sao</p>
                   </div>
-                  <p className="text-3xl font-bold">{yearlyStats.totalStars}</p>
+                  <p className="text-3xl font-bold">{yearlyStatsLoading ? (
+                    <span className="h-8 w-32 bg-gray-200 rounded animate-pulse inline-block" />
+                  ) : (
+                    yearlyStats.totalStars
+                  )}</p>
                 </div>
 
                 <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
@@ -526,7 +587,11 @@ function DashboardContent() {
                     <Trophy size={20} />
                     <p className="text-sm opacity-90">Thử thách tham gia</p>
                   </div>
-                  <p className="text-3xl font-bold">{yearlyStats.challengesJoined}</p>
+                  <p className="text-3xl font-bold">{yearlyStatsLoading ? (
+                    <span className="h-8 w-32 bg-gray-200 rounded animate-pulse inline-block" />
+                  ) : (
+                    yearlyStats.challengesJoined
+                  )}</p>
                 </div>
 
                 <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
@@ -534,7 +599,11 @@ function DashboardContent() {
                     <Award size={20} />
                     <p className="text-sm opacity-90">Thử thách hoàn thành</p>
                   </div>
-                  <p className="text-3xl font-bold">{yearlyStats.challengesCompleted}</p>
+                  <p className="text-3xl font-bold">{yearlyStatsLoading ? (
+                    <span className="h-8 w-32 bg-gray-200 rounded animate-pulse inline-block" />
+                  ) : (
+                    yearlyStats.challengesCompleted
+                  )}</p>
                 </div>
               </div>
             </div>
@@ -564,7 +633,20 @@ function DashboardContent() {
               </div>
 
               <div className="space-y-3">
-                {hallOfFame.length > 0 ? (
+                {hallOfFameLoading ? (
+                  <div className="animate-pulse">
+                    {[...Array(3)].map((_, idx) => (
+                      <div key={idx} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                        <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
+                        <div className="flex-1">
+                          <p className="font-semibold text-sm bg-gray-200 rounded animate-pulse h-4 w-3/4"></p>
+                          <p className="text-xs bg-gray-200 rounded animate-pulse h-3 w-1/2"></p>
+                        </div>
+                        <p className="font-bold bg-gray-200 rounded animate-pulse h-4 w-1/4"></p>
+                      </div>
+                    ))}
+                  </div>
+                ) : hallOfFame.length > 0 ? (
                   hallOfFame.map((entry) => (
                     <div key={entry.rank} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
@@ -614,7 +696,11 @@ function DashboardContent() {
                 <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                   <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Số dư hiện tại</span>
                   <span className="font-bold" style={{ color: "var(--color-success)" }}>
-                    {financeStatus.balance.toLocaleString("vi-VN")} đ
+                    {financeLoading ? (
+                      <span className="h-4 w-24 bg-gray-200 rounded animate-pulse inline-block" />
+                    ) : (
+                      financeStatus.balance.toLocaleString("vi-VN")
+                    )} đ
                   </span>
                 </div>
 
@@ -624,7 +710,11 @@ function DashboardContent() {
                       <div className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: "var(--color-bg-primary)" }}>
                         <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Quỹ chưa đóng</span>
                         <span className="font-bold" style={{ color: "var(--color-warning)" }}>
-                          {financeStatus.unpaidFees.toLocaleString("vi-VN")} đ
+                          {financeLoading ? (
+                            <span className="h-4 w-24 bg-gray-200 rounded animate-pulse inline-block" />
+                          ) : (
+                            financeStatus.unpaidFees.toLocaleString("vi-VN")
+                          )} đ
                         </span>
                       </div>
                     )}
@@ -632,7 +722,11 @@ function DashboardContent() {
                       <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                         <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Phạt chưa đóng</span>
                         <span className="font-bold" style={{ color: "var(--color-error)" }}>
-                          {financeStatus.unpaidFines.toLocaleString("vi-VN")} đ
+                          {financeLoading ? (
+                            <span className="h-4 w-24 bg-gray-200 rounded animate-pulse inline-block" />
+                          ) : (
+                            financeStatus.unpaidFines.toLocaleString("vi-VN")
+                          )} đ
                         </span>
                       </div>
                     )}
@@ -660,59 +754,35 @@ function DashboardContent() {
               </div>
 
               <div className="space-y-3">
-                {notifications.map((notif) => (
-                  <div
-                    key={notif.id}
-                    className="p-3 rounded-lg border-l-4"
-                    style={{
-                      background: "var(--color-bg-primary)",
-                      borderLeftColor: notif.type === "warning" ? "var(--color-warning)" : notif.type === "success" ? "var(--color-success)" : "var(--color-info)"
-                    }}
-                  >
-                    <p className="text-sm" style={{ color: "var(--color-text-primary)" }}>{notif.message}</p>
+                {notificationsLoading ? (
+                  <div className="animate-pulse">
+                    {[...Array(3)].map((_, idx) => (
+                      <div key={idx} className="p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                        <div className="h-4 bg-gray-200 rounded animate-pulse mb-2"></div>
+                        <div className="h-3 bg-gray-200 rounded animate-pulse w-3/4"></div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : (
+                  notifications.map((notif) => (
+                    <div
+                      key={notif.id}
+                      className="p-3 rounded-lg border-l-4"
+                      style={{
+                        background: "var(--color-bg-primary)",
+                        borderLeftColor: notif.type === "warning" ? "var(--color-warning)" : notif.type === "success" ? "var(--color-success)" : "var(--color-info)"
+                      }}
+                    >
+                      <p className="text-sm" style={{ color: "var(--color-text-primary)" }}>{notif.message}</p>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Admin Quick Actions */}
-        {userProfile && (userProfile.role === "admin" || userProfile.role?.startsWith("mod_")) && (
-          <div className="bg-gradient-to-r from-gray-800 to-gray-700 rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-white mb-4">⚡ Quản trị nhanh</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <a
-                href="/admin/finance"
-                className="bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg p-4 text-white transition text-center"
-              >
-                <Wallet className="mx-auto mb-2" size={24} />
-                <p className="font-medium text-sm">Thu chi</p>
-              </a>
-              <a
-                href="/admin/pb-approval"
-                className="bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg p-4 text-white transition text-center"
-              >
-                <Trophy className="mx-auto mb-2" size={24} />
-                <p className="font-medium text-sm">Duyệt PB</p>
-              </a>
-              <a
-                href="/admin/members"
-                className="bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg p-4 text-white transition text-center"
-              >
-                <Target className="mx-auto mb-2" size={24} />
-                <p className="font-medium text-sm">Thành viên</p>
-              </a>
-              <a
-                href="/admin/challenges"
-                className="bg-white/10 hover:bg-white/20 backdrop-blur rounded-lg p-4 text-white transition text-center"
-              >
-                <Award className="mx-auto mb-2" size={24} />
-                <p className="font-medium text-sm">Thử thách</p>
-              </a>
-            </div>
-          </div>
-        )}
+        {/* Admin Quick Actions removed as requested */}
       </main>
     </div>
   );

@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import { User, Mail, Phone, Cake, Calendar, Watch, Activity, Target, CheckCircle, Clock, Star } from "lucide-react";
 
 import { useAuth } from "@/lib/auth/AuthContext";
 interface Profile {
   id: string;
-  full_name: string;
+  full_name: string | null;
   join_date?: string;
   device_name?: string;
   strava_id?: string;
@@ -46,10 +47,20 @@ interface ActivityData {
 
 interface MemberReward {
   id: string;
-  reward_type: string;
-  reward_name: string;
-  reward_amount: number;
-  awarded_at: string;
+  id: string;
+  user_id: string;
+  status: string;
+  awarded_date: string;
+  created_at: string;
+  reward_definition_id: string;
+  reward_definitions: {
+    id: string;
+    type: string;
+    category: string;
+    condition_label: string;
+    prize_description: string;
+    cash_amount: number;
+  } | null;
   status: string;
 }
 
@@ -187,8 +198,9 @@ function PBModal({
 }
 
 export default function ProfilePage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { user, profile, isLoading: authLoading } = useAuth();
+  const router = useRouter();
+  const [localProfile, setLocalProfile] = useState<Profile | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityData, setActivityData] = useState<ActivityData[]>([]);
   const [rewards, setRewards] = useState<MemberReward[]>([]);
@@ -208,26 +220,48 @@ export default function ProfilePage() {
   });
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
-  useEffect(() => {
-    fetchProfileData();
-  }, [user, authLoading]);
+  // Tách loading cho từng phần dữ liệu
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
+  const [rewardsLoading, setRewardsLoading] = useState(true);
 
   useEffect(() => {
-    if (showEditModal && profile) {
+    if (authLoading) return;
+    if (!user) {
+      router.push(`/login?redirect=${encodeURIComponent("/profile")}`);
+      return;
+    }
+    // Ưu tiên dùng profile từ AuthContext nếu có
+    if (profile) {
+      setLocalProfile(profile);
+      setProfileLoading(false);
+    } else {
+      setProfileLoading(true);
+      fetchProfileFromSupabase().finally(() => setProfileLoading(false));
+    }
+    // Fetch activities
+    setActivitiesLoading(true);
+    fetchActivities().finally(() => setActivitiesLoading(false));
+    // Fetch rewards
+    setRewardsLoading(true);
+    fetchRewards().finally(() => setRewardsLoading(false));
+  }, [user, profile, authLoading]);
+
+  useEffect(() => {
+    if (showEditModal && localProfile) {
       setEditFormData({
-        phone: profile.phone_number || "",
-        birth_date: profile.dob || "",
-        device_name: profile.device_name || "",
-        pb_hm_time: profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "",
-        pb_fm_time: profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "",
+        phone: localProfile.phone_number || "",
+        birth_date: localProfile.dob || "",
+        device_name: localProfile.device_name || "",
+        pb_hm_time: localProfile.pb_hm_seconds ? formatTime(localProfile.pb_hm_seconds) : "",
+        pb_fm_time: localProfile.pb_fm_seconds ? formatTime(localProfile.pb_fm_seconds) : "",
       });
     }
-  }, [showEditModal, profile]);
+  }, [showEditModal, localProfile]);
 
-  async function fetchProfileData() {
+  async function fetchProfileFromSupabase() {
     // Wait for auth to finish loading
     if (authLoading) return;
-    
     setLoading(true);
 
     try {
@@ -237,6 +271,13 @@ export default function ProfilePage() {
         return;
       }
 
+      // Log session/JWT/token for debugging
+      const session = supabase.auth.getSession ? await supabase.auth.getSession() : null;
+      console.log("[Profile] User:", user);
+      console.log("[Profile] Session:", session);
+      if (session && session.data && session.data.session) {
+        console.log("[Profile] JWT:", session.data.session.access_token);
+      }
       console.log("[Profile] Fetching for user:", user.id, user.email);
 
       // Fetch profile by ID first, then fallback to email if not found
@@ -276,7 +317,7 @@ export default function ProfilePage() {
       }
 
       console.log("[Profile] Profile loaded:", profileData);
-      setProfile(profileData);
+      setLocalProfile(profileData);
       
       // Check Strava connection and token validity
       const hasStravaId = !!profileData?.strava_id;
@@ -306,7 +347,7 @@ export default function ProfilePage() {
                 console.log("[Profile] Token refreshed successfully");
                 setStravaConnected(true);
                 // Reload profile data to get new token
-                fetchProfileData();
+                fetchProfileFromSupabase();
                 return;
               } else {
                 console.log("[Profile] Token refresh failed");
@@ -406,6 +447,79 @@ export default function ProfilePage() {
     }
   }
 
+  async function fetchActivities() {
+    if (!user) return;
+
+    try {
+      // Fetch recent activities (30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from("activities")
+        .select("id, name, distance, moving_time, elapsed_time, average_heartrate, average_cadence, total_elevation_gain, start_date, type, map_summary_polyline")
+        .eq("user_id", user.id)
+        .gte("start_date", thirtyDaysAgo.toISOString())
+        .order("start_date", { ascending: false });
+
+      if (activitiesError) {
+        console.error("Error fetching activities:", activitiesError);
+      } else if (activitiesData) {
+        setActivities(activitiesData);
+
+        // Aggregate activities by date for chart
+        const aggregatedData: { [key: string]: number } = {};
+
+        activitiesData.forEach((activity) => {
+          // Use ISO date (YYYY-MM-DD) for proper sorting
+          const date = new Date(activity.start_date).toISOString().split("T")[0];
+          const kmDistance = activity.distance / 1000;
+          aggregatedData[date] = (aggregatedData[date] || 0) + kmDistance;
+        });
+
+        // Generate full 30-day range (including days with no activities)
+        const chartData: ActivityData[] = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        for (let i = 29; i >= 0; i--) {
+          const date = new Date(today);
+          date.setDate(date.getDate() - i);
+          const dateStr = date.toISOString().split("T")[0];
+          chartData.push({
+            date: dateStr,
+            km: aggregatedData[dateStr] || 0
+          });
+        }
+
+        setActivityData(chartData);
+      }
+    } catch (err) {
+      console.error("Error fetching activities:", err);
+    }
+  }
+
+  async function fetchRewards() {
+    if (!user) return;
+
+    try {
+      // Fetch member rewards (milestone achievements) with join to reward_definitions
+      const { data: rewardsData, error: rewardsError } = await supabase
+        .from("member_rewards")
+        .select(`id, user_id, status, awarded_date, created_at, reward_definition_id, reward_definitions(id, type, category, condition_label, prize_description, cash_amount)`)
+        .eq("user_id", user.id)
+        .order("awarded_date", { ascending: false });
+
+      if (rewardsError) throw rewardsError;
+      if (rewardsData) {
+        setRewards(rewardsData as MemberReward[]);
+      }
+    } catch (err) {
+      console.error("Error fetching rewards:", err);
+      setRewards([]);
+    }
+  }
+
   async function handleStravaToggle() {
     if (stravaConnected) {
       // Disconnect
@@ -425,7 +539,7 @@ export default function ProfilePage() {
         setStravaConnected(false);
         alert("Đã ngắt kết nối Strava");
         // Reload profile to reflect changes
-        fetchProfileData();
+        fetchProfileFromSupabase();
       }
     } else {
       // Connect
@@ -453,7 +567,7 @@ export default function ProfilePage() {
         setSyncMessage(`✅ ${result.message || "Đồng bộ thành công!"}`);
         // Reload activities after sync
         setTimeout(() => {
-          fetchProfileData();
+          fetchProfileFromSupabase();
           setSyncMessage("");
         }, 2000);
       } else {
@@ -495,7 +609,7 @@ export default function ProfilePage() {
       } else {
         alert("Thành tích đã được gửi cho Admin duyệt!");
         setShowPBModal(false);
-        fetchProfileData();
+        fetchProfileFromSupabase();
       }
     } catch (err) {
       console.error("Error:", err);
@@ -506,7 +620,7 @@ export default function ProfilePage() {
   }
 
   async function handleUpdateProfile() {
-    if (!profile) return;
+    if (!localProfile) return;
     
     setUpdatingProfile(true);
     try {
@@ -521,7 +635,7 @@ export default function ProfilePage() {
           dob: editFormData.birth_date || null,
           device_name: editFormData.device_name || null,
         })
-        .eq("id", profile.id);
+        .eq("id", localProfile.id);
 
       if (error) {
         console.error("Error updating profile:", error);
@@ -534,7 +648,7 @@ export default function ProfilePage() {
 
       // Check HM PR update
       if (editFormData.pb_hm_time && editFormData.pb_hm_time !== "--:--:--") {
-        const currentHM = profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "";
+        const currentHM = localProfile.pb_hm_seconds ? formatTime(localProfile.pb_hm_seconds) : "";
         if (editFormData.pb_hm_time !== currentHM) {
           const [hours, minutes, seconds] = editFormData.pb_hm_time.split(":").map(Number);
           const totalSeconds = hours * 3600 + minutes * 60 + seconds;
@@ -550,7 +664,7 @@ export default function ProfilePage() {
 
       // Check FM PR update
       if (editFormData.pb_fm_time && editFormData.pb_fm_time !== "--:--:--") {
-        const currentFM = profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "";
+        const currentFM = localProfile.pb_fm_seconds ? formatTime(localProfile.pb_fm_seconds) : "";
         if (editFormData.pb_fm_time !== currentFM) {
           const [hours, minutes, seconds] = editFormData.pb_fm_time.split(":").map(Number);
           const totalSeconds = hours * 3600 + minutes * 60 + seconds;
@@ -578,7 +692,7 @@ export default function ProfilePage() {
       }
 
       setShowEditModal(false);
-      fetchProfileData();
+      fetchProfileFromSupabase();
     } catch (err) {
       console.error("Error:", err);
       alert("Có lỗi xảy ra");
@@ -598,7 +712,7 @@ export default function ProfilePage() {
     );
   }
 
-  if (!profile) {
+  if (!localProfile) {
     return (
       <div className="min-h-screen bg-[var(--color-bg-secondary)] flex items-center justify-center p-4">
         <div className="text-center">
@@ -626,12 +740,12 @@ export default function ProfilePage() {
                     <User size={64} style={{ color: 'var(--color-primary)' }} />
                   </div>
                   <div className="flex-1">
-                    <h1 className="text-2xl font-bold mb-3 text-gray-900">{profile.full_name}</h1>
+                    <h1 className="text-2xl font-bold mb-3 text-gray-900">{localProfile.full_name}</h1>
                     <div className="space-y-1.5 text-base text-gray-700">
-                      <p className="flex items-center gap-2"><Cake size={16} /> {formatDate(profile.dob)}</p>
-                      <p className="flex items-center gap-2"><Watch size={16} /> {profile.device_name || "Chưa cập nhật"}</p>
-                      <p className="flex items-center gap-2"><Phone size={16} /> {profile.phone_number || "Chưa cập nhật"}</p>
-                      <p className="flex items-center gap-2"><Calendar size={16} /> Gia nhập: {formatDate(profile.join_date)}</p>
+                      <p className="flex items-center gap-2"><Cake size={16} /> {formatDate(localProfile.dob)}</p>
+                      <p className="flex items-center gap-2"><Watch size={16} /> {localProfile.device_name || "Chưa cập nhật"}</p>
+                      <p className="flex items-center gap-2"><Phone size={16} /> {localProfile.phone_number || "Chưa cập nhật"}</p>
+                      <p className="flex items-center gap-2"><Calendar size={16} /> Gia nhập: {formatDate(localProfile.join_date)}</p>
                     </div>
                     <button
                       onClick={() => setShowEditModal(true)}
@@ -656,22 +770,22 @@ export default function ProfilePage() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium text-gray-700">HM</span>
                     <span className="text-sm font-mono text-gray-900 px-2 py-0.5">
-                      {profile.pb_hm_seconds ? formatTime(profile.pb_hm_seconds) : "--:--:--"}
+                      {localProfile.pb_hm_seconds ? formatTime(localProfile.pb_hm_seconds) : "--:--:--"}
                     </span>
-                    {profile.pb_hm_approved ? (
+                    {localProfile.pb_hm_approved ? (
                       <span className="text-xs" style={{ color: 'var(--color-success)' }}>✓</span>
-                    ) : profile.pb_hm_seconds ? (
+                    ) : localProfile.pb_hm_seconds ? (
                       <span className="text-xs text-yellow-600">⏳</span>
                     ) : null}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium text-gray-700">FM</span>
                     <span className="text-sm font-mono text-gray-900 px-2 py-0.5">
-                      {profile.pb_fm_seconds ? formatTime(profile.pb_fm_seconds) : "--:--:--"}
+                      {localProfile.pb_fm_seconds ? formatTime(localProfile.pb_fm_seconds) : "--:--:--"}
                     </span>
-                    {profile.pb_fm_approved ? (
+                    {localProfile.pb_fm_approved ? (
                       <span className="text-xs" style={{ color: 'var(--color-success)' }}>✓</span>
-                    ) : profile.pb_fm_seconds ? (
+                    ) : localProfile.pb_fm_seconds ? (
                       <span className="text-xs text-yellow-600">⏳</span>
                     ) : null}
                   </div>
@@ -719,7 +833,7 @@ export default function ProfilePage() {
                         <User size={16} style={{ color: 'var(--color-success)' }} />
                         <span className="text-gray-600 font-medium w-20 text-sm">Name:</span>
                         <span className="font-semibold text-gray-900">
-                          {profile.strava_athlete_name || "(Kết nối lại để cập nhật)"}
+                          {localProfile.strava_athlete_name || "(Kết nối lại để cập nhật)"}
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -727,7 +841,7 @@ export default function ProfilePage() {
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                         </svg>
                         <span className="text-gray-600 font-medium w-20 text-sm">Athlete ID:</span>
-                        <span className="font-mono text-gray-900">{profile.strava_id}</span>
+                        <span className="font-mono text-gray-900">{localProfile.strava_id}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <svg className="w-4 h-4" style={{ color: 'var(--color-success)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -735,7 +849,7 @@ export default function ProfilePage() {
                           <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                         </svg>
                         <span className="text-gray-600 font-medium w-20 text-sm">Token:</span>
-                        <span className="font-mono text-gray-900 truncate">{profile.strava_access_token ? `${profile.strava_access_token.substring(0, 15)}...` : 'N/A'}</span>
+                        <span className="font-mono text-gray-900 truncate">{localProfile.strava_access_token ? `${localProfile.strava_access_token.substring(0, 15)}...` : 'N/A'}</span>
                       </div>
                       <div className="flex items-center gap-3">
                         <svg className="w-4 h-4" style={{ color: 'var(--color-success)' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -743,7 +857,7 @@ export default function ProfilePage() {
                           <polyline points="12 6 12 12 16 14"></polyline>
                         </svg>
                         <span className="text-gray-600 font-medium w-20 text-sm">Expires:</span>
-                        <span className="font-mono text-gray-900">{profile.strava_token_expires_at ? new Date(profile.strava_token_expires_at * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</span>
+                        <span className="font-mono text-gray-900">{localProfile.strava_token_expires_at ? new Date(localProfile.strava_token_expires_at * 1000).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A'}</span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2">

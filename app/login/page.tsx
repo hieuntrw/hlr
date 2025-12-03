@@ -18,51 +18,41 @@ function LoginForm() {
 		setLoading(true);
 		setMessage(null);
 
+		const timeoutMs = 15000; // 15s to avoid false timeouts on slow networks
+		const startTime = Date.now();
+
 		try {
-			console.log("Attempting login with Supabase Auth...");
-			
-			// Simple: just use Supabase client auth directly
-			// Protect against network hangs by using a timeout wrapper
-			const timeoutMs = 10000; // 10 seconds
-			let result: any;
-			try {
-				result = await Promise.race([
-					supabase.auth.signInWithPassword({ email, password }),
-					new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeoutMs)),
-				]);
-			} catch (timeoutErr: any) {
-				console.error('Login request failed or timed out:', timeoutErr);
-				setMessage('Yêu cầu đăng nhập quá lâu. Vui lòng thử lại.');
-				setLoading(false);
-				return;
-			}
+			const result: any = await Promise.race([
+				supabase.auth.signInWithPassword({ email, password }),
+				new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeoutMs)),
+			]);
+
+			const endTime = Date.now();
+			console.log(`[Login] Supabase Auth response time: ${endTime - startTime}ms`);
+			console.log('[Login] Supabase Auth result:', result);
+
 			const { data, error } = result;
-
 			if (error) {
-				console.error("Login error:", error);
-				setMessage(error.message);
+				console.error('Login error:', error);
+				setMessage(error.message || 'Đăng nhập thất bại');
 				setLoading(false);
 				return;
 			}
 
-			if (!data.session || !data.user) {
-				console.error("No session or user returned");
-				setMessage("Đăng nhập thất bại. Vui lòng thử lại.");
+			if (!data || !data.session || !data.user) {
+				console.error('No session or user returned', result);
+				setMessage('Đăng nhập thất bại. Vui lòng thử lại.');
 				setLoading(false);
 				return;
 			}
 
-			console.log("✓ Login successful!");
-			console.log("  User:", data.user.email);
-			console.log("  Session:", data.session ? "created" : "missing");
-			
-			// Redirect to destination
-			console.log("Redirecting to:", redirectTo);
-			await new Promise(resolve => setTimeout(resolve, 100));
+			console.log('✓ Login successful! User:', data.user?.email);
+			// small delay for UX
+			await new Promise((r) => setTimeout(r, 100));
 			setLoading(false);
 			router.push(redirectTo);
 		} catch (err: any) {
-			console.error("Login exception:", err);
+			console.error('Login exception:', err);
 			setMessage(err?.message || String(err));
 			setLoading(false);
 		}
@@ -98,23 +88,18 @@ function LoginForm() {
 					</div>
 					<button
 						type="submit"
+						className="w-full py-3 px-4 rounded-lg font-semibold transition disabled:opacity-50 hover:opacity-90 disabled:hover:opacity-50 focus:outline-none"
+						style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
 						disabled={loading}
-						className="w-full px-4 py-3 font-semibold rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
-					style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
 					>
-						{loading ? "Đang đăng nhập..." : "Đăng nhập"}
+						{loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
 					</button>
-				{message && <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">{message}</div>}
-			</form>
-
-			<p className="text-xs text-gray-500 text-center mt-6">
-				Chưa có tài khoản? Liên hệ admin để được cấp quyền truy cập.
-			</p>
+					{message && <p className="text-red-600 text-sm mt-2">{message}</p>}
+				</form>
 			</div>
 		</main>
 	);
 }
-
 export default function LoginPage() {
 	return (
 		<Suspense fallback={
