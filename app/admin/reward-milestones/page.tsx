@@ -156,8 +156,8 @@ export default function RewardMilestonesPage() {
   if (loading) {
     return (
       <AdminLayout>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: "var(--color-primary)" }}></div>
         </div>
       </AdminLayout>
     );
@@ -169,12 +169,15 @@ export default function RewardMilestonesPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Trophy size={32} className="text-orange-600" />
+            <Trophy size={32} style={{ color: "var(--color-primary)" }} />
             <h1 className="text-3xl font-bold text-gray-900">Quản Lý Mốc Thành Tích</h1>
           </div>
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
+            style={{ background: "var(--color-primary)" }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             <Plus size={20} />
             Thêm Mốc
@@ -311,7 +314,7 @@ export default function RewardMilestonesPage() {
                             const editData = isEditing && editFormData ? editFormData : milestone;
                             
                             return (
-                              <tr key={milestone.id} className={isEditing ? "bg-blue-50" : ""}>
+                              <tr key={milestone.id} className={isEditing ? "" : ""} style={isEditing ? { background: "var(--color-info-bg, #DBEAFE)" } : {}}>
                                 <td className="px-4 py-3 text-sm">
                                   {isEditing ? (
                                     <input
@@ -414,7 +417,9 @@ export default function RewardMilestonesPage() {
                                     <div className="flex items-center justify-end gap-2">
                                       <button
                                         onClick={() => startEdit(milestone)}
-                                        className="text-blue-600 hover:text-blue-800"
+                                        style={{ color: "var(--color-primary)" }}
+                                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                                         title="Sửa"
                                       >
                                         <Edit size={18} />
@@ -423,7 +428,9 @@ export default function RewardMilestonesPage() {
                                         onClick={() =>
                                           handleUpdate(milestone.id, { is_active: !milestone.is_active })
                                         }
-                                        className="text-orange-600 hover:text-orange-800"
+                                        className="text-yellow-600"
+                                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                                         title={milestone.is_active ? "Tắt" : "Bật"}
                                       >
                                         {milestone.is_active ? "Tắt" : "Bật"}

@@ -188,10 +188,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen" style={{ background: "var(--color-bg-primary)" }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderBottomColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải...</p>
         </div>
       </div>
     );
@@ -202,55 +202,57 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const accessibleMenus = getAccessibleMenus(profile.role);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: "var(--color-bg-primary)" }}>
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 bg-white border-b border-gray-200 z-50 px-4 py-3">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 px-4 py-3" style={{ background: "var(--color-bg-secondary)", borderBottom: "1px solid var(--color-border)" }}>
         <div className="flex items-center justify-between">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="text-gray-600 hover:text-gray-900">
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} style={{ color: "var(--color-text-secondary)" }}>
             {sidebarOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
-          <h1 className="text-lg font-bold text-gray-900">Admin Panel</h1>
+          <h1 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Admin Panel</h1>
           <div className="w-6"></div>
         </div>
       </div>
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full bg-white border-r border-gray-200 transition-transform duration-300 z-40 ${
+        className={`fixed top-0 left-0 h-full transition-transform duration-300 z-40 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } lg:translate-x-0 w-64`}
+        style={{ background: "var(--color-bg-secondary)", borderRight: "1px solid var(--color-border)" }}
       >
         <div className="flex flex-col h-full">
           {/* Logo/Brand */}
-          <div className="px-6 py-5 border-b border-gray-200">
+          <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
             <Link href="/admin" className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-gradient-to-br from-orange-600 to-orange-700 rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center gradient-theme-primary">
                 <LayoutDashboard className="text-white" size={24} />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Admin Panel</h2>
-                <p className="text-xs text-gray-500">Hải Lăng Runners</p>
+                <h2 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Admin Panel</h2>
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Hải Lăng Runners</p>
               </div>
             </Link>
           </div>
 
           {/* Profile Section */}
-          <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 to-orange-100">
+          <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-bg-primary)" }}>
             <div className="flex items-center gap-3">
               {profile.avatar_url ? (
                 <img
                   src={profile.avatar_url}
                   alt={profile.full_name}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-orange-300"
+                  className="w-12 h-12 rounded-full object-cover border-2"
+                  style={{ borderColor: "var(--color-primary)" }}
                 />
               ) : (
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full flex items-center justify-center gradient-theme-primary">
                   <User className="text-white" size={24} />
                 </div>
               )}
               <div className="flex-1 min-w-0">
-                <p className="font-semibold text-gray-900 truncate">{profile.full_name}</p>
-                <p className="text-xs text-orange-600 font-medium">{getRoleLabel(profile.role)}</p>
+                <p className="font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>{profile.full_name}</p>
+                <p className="text-xs font-medium" style={{ color: "var(--color-primary)" }}>{getRoleLabel(profile.role)}</p>
               </div>
             </div>
           </div>
@@ -266,11 +268,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     key={item.link}
                     href={item.link}
                     onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all ${
-                      isActive
-                        ? "bg-gradient-to-r from-orange-600 to-orange-700 text-white shadow-md"
-                        : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
+                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all"
+                    style={isActive ? {
+                      background: "var(--color-primary)",
+                      color: "var(--color-text-inverse)",
+                      boxShadow: "var(--shadow-md)"
+                    } : {
+                      color: "var(--color-text-secondary)"
+                    }}
                   >
                     <Icon size={20} />
                     <span>{item.title}</span>
@@ -281,17 +286,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </nav>
 
           {/* Actions */}
-          <div className="px-3 py-4 border-t border-gray-200 space-y-2">
+          <div className="px-3 py-4 space-y-2" style={{ borderTop: "1px solid var(--color-border)" }}>
             <Link
               href="/dashboard"
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-orange-600 hover:bg-orange-50 transition-all"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all"
+              style={{ color: "var(--color-primary)" }}
             >
               <Home size={20} />
               <span>Trang Chủ</span>
             </Link>
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium text-red-600 hover:bg-red-50 transition-all"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all"
+              style={{ color: "var(--color-error)" }}
             >
               <LogOut size={20} />
               <span>Đăng Xuất</span>

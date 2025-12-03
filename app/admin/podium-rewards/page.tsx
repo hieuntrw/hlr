@@ -3,6 +3,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { Star, Plus, CheckCircle, Clock, Calendar, User } from "lucide-react";
 
 interface Race {
@@ -41,6 +42,7 @@ interface PodiumReward {
 }
 
 export default function PodiumRewardsPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [configs, setConfigs] = useState<PodiumConfig[]>([]);
   const [rewards, setRewards] = useState<PodiumReward[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -55,8 +57,9 @@ export default function PodiumRewardsPage() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     loadData();
-  }, []);
+  }, [user, authLoading]);
 
   const loadData = async () => {
     try {
@@ -148,8 +151,8 @@ export default function PodiumRewardsPage() {
 
   const handleMarkDelivered = async (rewardId: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // user from AuthContext
+if (!user) return;
 
       const { error } = await supabase
         .from("member_podium_rewards")
@@ -178,7 +181,7 @@ export default function PodiumRewardsPage() {
     return (
       <AdminLayout>
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: "var(--color-primary)" }}></div>
         </div>
       </AdminLayout>
     );
@@ -190,12 +193,15 @@ export default function PodiumRewardsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Star size={32} className="text-orange-600" />
+            <Star size={32} style={{ color: "var(--color-primary)" }} />
             <h1 className="text-3xl font-bold text-gray-900">Quản Lý Phần Thưởng Đứng Bục</h1>
           </div>
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
+            style={{ background: "var(--color-primary)" }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             <Plus size={20} />
             Thêm Phần Thưởng
@@ -203,12 +209,12 @@ export default function PodiumRewardsPage() {
         </div>
 
         {/* Current Configs Info */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-bold text-blue-900 mb-2">Cấu hình hiện tại:</h3>
+        <div className="rounded-lg p-4" style={{ background: "#DBEAFE", border: "1px solid #93C5FD" }}>
+          <h3 className="font-bold mb-2" style={{ color: "#1E3A8A" }}>Cấu hình hiện tại:</h3>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <h4 className="font-semibold text-blue-800">Chung cuộc:</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
+              <h4 className="font-semibold" style={{ color: "#1E40AF" }}>Chung cuộc:</h4>
+              <ul className="text-sm space-y-1" style={{ color: "#1D4ED8" }}>
                 {configs
                   .filter((c) => c.podium_type === "overall")
                   .map((c) => (
@@ -219,8 +225,8 @@ export default function PodiumRewardsPage() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold text-blue-800">Lứa tuổi:</h4>
-              <ul className="text-sm text-blue-700 space-y-1">
+              <h4 className="font-semibold" style={{ color: "#1E40AF" }}>Lứa tuổi:</h4>
+              <ul className="text-sm space-y-1" style={{ color: "#1D4ED8" }}>
                 {configs
                   .filter((c) => c.podium_type === "age_group")
                   .map((c) => (
@@ -354,7 +360,7 @@ export default function PodiumRewardsPage() {
                       <span className="text-gray-500">({reward.member.email})</span>
                     </div>
                     <p className="text-gray-800 mb-1">{reward.reward_description}</p>
-                    <p className="text-orange-600 font-bold">{formatCurrency(reward.cash_amount)}</p>
+                    <p className="font-bold" style={{ color: "var(--color-primary)" }}>{formatCurrency(reward.cash_amount)}</p>
                     {reward.notes && (
                       <p className="text-sm text-gray-600 mt-2">
                         <strong>Ghi chú:</strong> {reward.notes}

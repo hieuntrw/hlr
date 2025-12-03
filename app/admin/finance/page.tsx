@@ -5,6 +5,7 @@ import RejectModal from "./RejectModal";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface Transaction {
   id: string;
@@ -40,11 +41,11 @@ function formatCash(amount: number): string {
 
 function getTypeColor(type: string): string {
   const colors: { [key: string]: string } = {
-    fund_collection: "bg-orange-100 text-orange-800",
+    fund_collection: "bg-blue-100 text-blue-800",
     fine: "bg-red-100 text-red-800",
     donation: "bg-green-100 text-green-800",
-    expense: "bg-orange-100 text-orange-800",
-    reward_payout: "bg-orange-100 text-orange-800",
+    expense: "bg-purple-100 text-purple-800",
+    reward_payout: "bg-yellow-100 text-yellow-800",
   };
   return colors[type] || "bg-gray-100 text-gray-800";
 }
@@ -61,6 +62,7 @@ function getTypeLabel(type: string): string {
 }
 
 export default function FinancePage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,14 +73,13 @@ export default function FinancePage() {
   const [filterType, setFilterType] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchTransactions();
-  }, []);
+  }, [user, authLoading]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
 
     console.log('[Finance Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
 
@@ -205,11 +206,11 @@ export default function FinancePage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold">💰 Quản Lý Thu/Chi</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>💰 Quản Lý Thu/Chi</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -240,9 +241,10 @@ export default function FinancePage() {
             onClick={() => setFilterType(null)}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === null
-                ? "bg-orange-600 text-white"
+                ? "text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
+            style={filterType === null ? { background: "var(--color-primary)" } : {}}
           >
             Tất Cả
           </button>
@@ -250,9 +252,10 @@ export default function FinancePage() {
             onClick={() => setFilterType("fund_collection")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "fund_collection"
-                ? "bg-orange-600 text-white"
+                ? "text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
+            style={filterType === "fund_collection" ? { background: "var(--color-primary)" } : {}}
           >
             Thu Quỹ
           </button>
@@ -260,9 +263,10 @@ export default function FinancePage() {
             onClick={() => setFilterType("fine")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "fine"
-                ? "bg-orange-600 text-white"
+                ? "text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
+            style={filterType === "fine" ? { background: "var(--color-primary)" } : {}}
           >
             Phạt
           </button>
@@ -270,9 +274,10 @@ export default function FinancePage() {
             onClick={() => setFilterType("expense")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "expense"
-                ? "bg-orange-600 text-white"
+                ? "text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
+            style={filterType === "expense" ? { background: "var(--color-primary)" } : {}}
           >
             Chi Tiêu
           </button>
@@ -280,9 +285,10 @@ export default function FinancePage() {
             onClick={() => setFilterType("reward_payout")}
             className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
               filterType === "reward_payout"
-                ? "bg-orange-600 text-white"
+                ? "text-white"
                 : "bg-white text-gray-700 hover:bg-gray-100"
             }`}
+            style={filterType === "reward_payout" ? { background: "var(--color-primary)" } : {}}
           >
             Thưởng
           </button>

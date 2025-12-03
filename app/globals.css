@@ -2,11 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme CSS Variables - Applied by ThemeContext */
 :root {
-  --color-primary: #f97316;
-  --color-primary-dark: #ea580c;
-  --color-primary-light: #fb923c;
-  --color-accent: #fdba74;
+  /* Colors - Default Orange Theme */
+  --color-primary: #F97316;
+  --color-primary-dark: #EA580C;
+  --color-primary-light: #FB923C;
+  
+  --color-accent: #FDBA74;
+  --color-accent-dark: #F59E0B;
+  --color-accent-light: #FED7AA;
+  
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #FFF7ED;
+  --color-bg-tertiary: #FFEDD5;
+  
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #FFFFFF;
+  
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-error: #EF4444;
+  --color-info: #3B82F6;
+  
+  --color-border: #E5E7EB;
+  --color-border-light: #F3F4F6;
+  --color-border-dark: #D1D5DB;
+  
+  /* Fonts */
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-heading: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 1.875rem;
+  --font-size-4xl: 2.25rem;
+  --font-size-5xl: 3rem;
+  
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+  
+  /* Spacing */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-full: 9999px;
+  
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
 }
 
 * {
@@ -19,6 +86,88 @@ html {
   scroll-behavior: smooth;
 }
 
+/* Base styles */
 body {
-  @apply bg-gray-50 text-gray-900 font-sans;
+  font-family: var(--font-family);
+  color: var(--color-text-primary);
+  background-color: #F9FAFB;
+  line-height: var(--line-height-normal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Custom utility classes using CSS variables */
+@layer utilities {
+  .text-theme-primary {
+    color: var(--color-primary);
+  }
+  
+  .bg-theme-primary {
+    background-color: var(--color-primary);
+  }
+  
+  .border-theme-primary {
+    border-color: var(--color-primary);
+  }
+  
+  .text-theme-accent {
+    color: var(--color-accent);
+  }
+  
+  .bg-theme-accent {
+    background-color: var(--color-accent);
+  }
+  
+  .gradient-theme-primary {
+    background: linear-gradient(to right, var(--color-primary-light), var(--color-primary-dark));
+  }
+  
+  .shadow-theme {
+    box-shadow: var(--shadow-md);
+  }
+  
+  .shadow-theme-lg {
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .rounded-theme {
+    border-radius: var(--radius-lg);
+  }
+  
+  .space-theme {
+    padding: var(--space-md);
+  }
+}
+
+/* Responsive font sizes */
+@media (max-width: 640px) {
+  :root {
+    --font-size-3xl: 1.5rem;
+    --font-size-4xl: 1.875rem;
+    --font-size-5xl: 2.25rem;
+  }
+}
+
+/* Dark mode overrides */
+html.dark {
+  --color-bg-primary: #1F2937;
+  --color-bg-secondary: #111827;
+  --color-bg-tertiary: #374151;
+  
+  --color-text-primary: #F9FAFB;
+  --color-text-secondary: #D1D5DB;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #111827;
+  
+  --color-border: #374151;
+  --color-border-light: #4B5563;
+  --color-border-dark: #1F2937;
+}
+
+html.dark body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
 }

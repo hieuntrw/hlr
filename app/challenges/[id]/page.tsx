@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { ClipboardList, User, Gift, Frown, Lock } from "lucide-react";
 
 interface Challenge {
@@ -70,6 +71,7 @@ function formatPace(seconds: number): string {
 }
 
 export default function ChallengePage({ params }: { params: { id: string } }) {
+  const { user, isLoading: authLoading } = useAuth();
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [participants, setParticipants] = useState<ParticipantWithActivity[]>([]);
   const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
@@ -85,16 +87,16 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const TARGET_OPTIONS = [70, 100, 150, 200, 250, 300];
 
   useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
     fetchData();
-  }, [params.id]);
+  }, [params.id, user, authLoading]);
 
   async function fetchData() {
     setLoading(true);
 
     // Get current user
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
     setCurrentUser(user?.id || null);
 
     try {
@@ -263,8 +265,8 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải dữ liệu...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
@@ -272,10 +274,10 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
   if (!challenge) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "var(--color-bg-secondary)" }}>
         <div className="text-center">
-          <p className="text-gray-600 text-lg">Không tìm thấy thử thách</p>
-          <Link href="/challenges" className="text-blue-600 hover:underline mt-4 inline-block">
+          <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Không tìm thấy thử thách</p>
+          <Link href="/challenges" className="mt-4 inline-block hover:underline" style={{ color: "var(--color-primary)" }}>
             ← Quay lại danh sách
           </Link>
         </div>
@@ -284,15 +286,15 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: "var(--color-bg-secondary)" }}>
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
+      <div className="py-8 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
-          <Link href="/challenges" className="text-blue-100 hover:text-white mb-4 inline-block">
+          <Link href="/challenges" className="mb-4 inline-block hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
             ← Quay lại
           </Link>
-          <h1 className="text-4xl md:text-5xl font-bold mb-2">{challenge.title}</h1>
-          <p className="text-blue-100">
+          <h1 className="text-4xl md:text-5xl font-bold mb-2" style={{ color: "var(--color-text-inverse)" }}>{challenge.title}</h1>
+          <p style={{ color: "var(--color-text-inverse)", opacity: 0.9 }}>
             {formatDate(challenge.start_date)} - {formatDate(challenge.end_date)}
           </p>
         </div>
@@ -474,8 +476,8 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                               </div>
                             </td>
                             <td className="py-4 px-2 text-right">
-                              <div className="font-bold text-blue-600">{p.actual_km} km</div>
-                              <div className="text-xs text-gray-500">
+                              <div className="font-bold" style={{ color: "var(--color-primary)" }}>{p.actual_km} km</div>
+                              <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
                                 Mục tiêu: {p.target_km} km
                               </div>
                             </td>

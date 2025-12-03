@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface TransactionSummary {
   type: string;
@@ -16,6 +17,7 @@ function formatCash(amount: number): string {
 }
 
 export default function FinanceReportPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [summary, setSummary] = useState<TransactionSummary[]>([]);
   const [totalIncome, setTotalIncome] = useState(0);
@@ -23,14 +25,13 @@ export default function FinanceReportPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchReport();
-  }, []);
+  }, [user, authLoading]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
     if (!user) {
       router.push("/debug-login");
       return;
@@ -94,11 +95,11 @@ export default function FinanceReportPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">📊 Báo Cáo Quỹ</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>📊 Báo Cáo Quỹ</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -144,7 +145,7 @@ export default function FinanceReportPage() {
 
               <div className="bg-white rounded-lg shadow-md p-6">
                 <p className="text-gray-600 text-sm">Tổng Giao Dịch</p>
-                <p className="text-2xl font-bold text-orange-600 mt-2">
+                <p className="text-2xl font-bold mt-2" style={{ color: "var(--color-primary)" }}>
                   {summary.reduce((sum, s) => sum + s.count, 0)}
                 </p>
               </div>
@@ -182,8 +183,8 @@ export default function FinanceReportPage() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
-                          className="bg-orange-600 h-2 rounded-full transition-all"
-                          style={{ width: `${percentage}%` }}
+                          className="h-2 rounded-full transition-all"
+                          style={{ width: `${percentage}%`, background: "var(--color-primary)" }}
                         ></div>
                       </div>
                       <p className="text-xs text-gray-600 mt-1">{percentage}% của tổng</p>

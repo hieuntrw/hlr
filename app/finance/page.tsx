@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import QRCode from 'qrcode';
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   fetchUserTransactionsClient,
   fetchPublicFundStatsClient,
@@ -11,7 +12,7 @@ import {
 
 // Mobile-first personal finance page for members
 export default function FinancePage() {
-  const [user, setUser] = useState<any>(null);
+  const { user, isLoading: authLoading } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [pendingTotal, setPendingTotal] = useState<number>(0);
@@ -28,22 +29,24 @@ export default function FinancePage() {
 
   useEffect(() => {
     (async () => {
+      // Wait for auth to finish loading
+      if (authLoading) return;
+      
       setLoading(true);
-      const { data: userData } = await supabase.auth.getUser();
-      const u = userData?.user || null;
-      setUser(u);
-      if (u) {
+      // user from AuthContext
+
+      if (user) {
         // Fetch profile for full_name
         const { data: profileData } = await supabase
           .from('profiles')
           .select('full_name')
-          .eq('id', u.id)
+          .eq('id', user.id)
           .single();
         if (profileData) {
           setProfile(profileData);
         }
         
-        const trs = await fetchUserTransactionsClient(supabase, u.id);
+        const trs = await fetchUserTransactionsClient(supabase, user.id);
         setTransactions(trs);
         const pending = trs
           .filter((t: any) => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' || t.payment_status === 'submitted'))
@@ -62,7 +65,7 @@ export default function FinancePage() {
       setPublicFund(stats);
       setLoading(false);
     })();
-  }, []);
+  }, [user, authLoading]);
 
   // Note: data access uses client-friendly functions from lib/services/financeService
 
@@ -117,21 +120,21 @@ export default function FinancePage() {
 
   if (loading) {
     return (
-      <div className="p-4">
-        <div className="animate-pulse h-6 bg-slate-200 rounded w-3/4 mb-4" />
-        <div className="animate-pulse h-40 bg-slate-200 rounded" />
+      <div className="min-h-screen bg-[var(--color-bg-secondary)] p-4">
+        <div className="animate-pulse rounded w-3/4 mb-4" style={{ height: "24px", background: "var(--color-bg-tertiary)" }} />
+        <div className="animate-pulse rounded" style={{ height: "160px", background: "var(--color-bg-tertiary)" }} />
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       <div className="p-4 max-w-3xl mx-auto">
         <h1 className="text-2xl font-semibold mb-4">Tài chính cá nhân</h1>
 
       {/* Personal Summary Card */}
       <section className="mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-4">
+        <div className="rounded-lg shadow-sm p-4" style={{ background: "var(--color-bg-secondary)" }}>
           <div className="flex items-center justify-between">
             <div>
               <div className="text-sm text-gray-500">Số tiền cần thanh toán</div>
@@ -162,13 +165,19 @@ export default function FinancePage() {
       <div className="mb-4">
         <div className="flex gap-2">
           <button
-            className={`px-3 py-2 rounded-md text-sm ${activeTab === 'personal' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 shadow-sm'}`}
+            className="px-3 py-2 rounded-md text-sm"
+            style={
+              activeTab === 'personal'
+                ? { background: "var(--color-primary)", color: "var(--color-text-inverse)" }
+                : { background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", boxShadow: "var(--shadow-sm)" }
+            }
             onClick={() => setActiveTab('personal')}
           >
             Lịch sử giao dịch
           </button>
           <button
-            className={`px-3 py-2 rounded-md text-sm ${activeTab === 'report' ? 'bg-slate-800 text-white' : 'bg-white text-slate-700 shadow-sm'}`}
+            className="px-3 py-2 rounded-md text-sm"
+            style={activeTab === 'report' ? { background: "var(--color-primary)", color: "var(--color-text-inverse)" } : { background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", boxShadow: "var(--shadow-sm)" }}
             onClick={() => setActiveTab('report')}
           >
             Báo cáo Quỹ CLB
@@ -178,10 +187,10 @@ export default function FinancePage() {
 
       {activeTab === 'personal' && (
         <section>
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="rounded-lg shadow-sm overflow-hidden" style={{ background: "var(--color-bg-secondary)", boxShadow: "var(--shadow-sm)" }}>
             <div className="w-full overflow-x-auto">
               <table className="min-w-full divide-y">
-                <thead className="bg-gray-50">
+                <thead style={{ background: "var(--color-bg-tertiary)" }}>
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Ngày</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Loại</th>
@@ -190,14 +199,14 @@ export default function FinancePage() {
                     <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Trạng thái</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y">
+                <tbody className="divide-y" style={{ background: "var(--color-bg-secondary)" }}>
                   {transactions.length === 0 && (
                     <tr>
                       <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">Không có giao dịch</td>
                     </tr>
                   )}
                   {transactions.map((t) => (
-                    <tr key={t.id} className="hover:bg-gray-50">
+                    <tr key={t.id} className="hover:opacity-95" style={{ background: "var(--color-bg-secondary)" }}>
                       <td className="px-4 py-3 text-sm text-gray-600">{new Date(t.created_at).toLocaleString('vi-VN')}</td>
                       <td className="px-4 py-3 text-sm text-gray-600 capitalize">{t.type}</td>
                       <td className="px-4 py-3 text-sm text-gray-600">{t.description}</td>
@@ -235,7 +244,7 @@ export default function FinancePage() {
 
       {activeTab === 'report' && (
         <section>
-          <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <div className="rounded-lg shadow-sm p-4 mb-4" style={{ background: "var(--color-bg-secondary)" }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-gray-500">Tổng Quỹ hiện tại</div>
@@ -246,7 +255,7 @@ export default function FinancePage() {
             <div className="mt-2 text-xs text-gray-500">Số dư tính bằng tổng thu - tổng chi ghi trong hệ thống.</div>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm p-4">
+          <div className="rounded-lg shadow-sm p-4" style={{ background: "var(--color-bg-secondary)" }}>
             <h3 className="text-sm font-medium mb-3">10 khoản Chi gần nhất</h3>
             {publicFund.recentExpenses.length === 0 && (
               <div className="text-sm text-gray-500">Không có khoản chi nào.</div>
@@ -273,7 +282,7 @@ export default function FinancePage() {
       {showPayModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowPayModal(false)} />
-          <div className="relative w-full sm:w-96 bg-white rounded-t-lg sm:rounded-lg shadow-lg p-4">
+          <div className="relative w-full sm:w-96 rounded-t-lg sm:rounded-lg shadow-lg p-4" style={{ background: "var(--color-bg-secondary)" }}>
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Hướng dẫn chuyển khoản</h2>
@@ -303,7 +312,7 @@ export default function FinancePage() {
 
               <div className="bg-gray-50 rounded p-3 text-sm">
                 <div className="text-xs text-gray-500">Cú pháp chuyển khoản (ghi rõ để đối soát):</div>
-                <div className="mt-2 font-medium bg-white p-2 rounded">
+                <div className="mt-2 font-medium p-2 rounded" style={{ background: "var(--color-bg-tertiary)" }}>
                   HLR {profile?.full_name || user?.email || 'Tên'} [Nội dung]
                 </div>
                 <div className="mt-2 text-xs text-gray-500">Ví dụ: HLR Nguyễn Văn A Quỹ tháng 11/2025</div>
@@ -326,7 +335,7 @@ export default function FinancePage() {
       {showUploadModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setShowUploadModal(false)} />
-          <div className="relative w-full sm:w-96 bg-white rounded-t-lg sm:rounded-lg shadow-lg p-4">
+          <div className="relative w-full sm:w-96 rounded-t-lg sm:rounded-lg shadow-lg p-4" style={{ background: "var(--color-bg-secondary)" }}>
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-lg font-semibold">Tải biên lai chuyển khoản</h2>
@@ -344,7 +353,7 @@ export default function FinancePage() {
               )}
 
               <div className="flex gap-2">
-                <button disabled={!receiptFile || uploadingReceipt} className="flex-1 bg-blue-600 text-white px-3 py-2 rounded" onClick={handleUploadReceipt}>
+                <button disabled={!receiptFile || uploadingReceipt} className="flex-1 px-3 py-2 rounded text-white" style={{ background: "var(--color-primary)" }} onClick={handleUploadReceipt}>
                   {uploadingReceipt ? 'Đang tải...' : 'Gửi biên lai'}
                 </button>
                 <button className="flex-1 bg-slate-100 text-slate-700 px-3 py-2 rounded" onClick={() => setShowUploadModal(false)}>Hủy</button>

@@ -1,64 +1,34 @@
 "use client";
 
-import { Activity, LogOut, User, Menu, X, Shield } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Activity, LogOut, User, Menu, X, Shield, Moon, Sun } from "lucide-react";
+import { useState } from "react";
 import { supabase } from "@/lib/supabase-client";
 import { usePathname } from "next/navigation";
+import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 // Common Header Component for all pages
 export default function Header() {
   const pathname = usePathname();
-  const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    // Get current user
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      console.log('[Header] User loaded:', user?.email, 'Role:', user?.user_metadata?.role);
-      setUser(user);
-
-      if (user) {
-        // Get user profile for display info (full_name only)
-        const { data } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-        console.log('[Header] Profile loaded:', data?.full_name);
-        setProfile(data);
-      } else {
-        setProfile(null);
-      }
-    })();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setProfile(null);
-      } else if (event === 'SIGNED_IN' && session) {
-        setUser(session.user);
-        console.log('[Header] User signed in:', session.user?.email, 'Role:', session.user?.user_metadata?.role);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  const { darkMode, toggleDarkMode } = useTheme();
+  const { user, profile, isLoading } = useAuth(); // Use AuthContext instead of local state
 
   const handleLogout = async () => {
     try {
+      // Clear all caches
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.removeItem('hlr_user_cache');
+          sessionStorage.removeItem('hlr_auth_cache');
+        } catch {}
+      }
+      
       // Call logout API to clear cookies
       await fetch('/api/auth/logout', { method: 'POST' });
       
-      // Also sign out from Supabase client
+      // Also sign out from Supabase client (AuthContext will handle state updates)
       await supabase.auth.signOut();
-      
-      setUser(null);
-      setProfile(null);
       
       // Force reload to clear all state
       window.location.href = '/login';
@@ -81,14 +51,19 @@ export default function Header() {
   };
 
   const getRoleBadgeColor = (role: string): string => {
-    const colors: { [key: string]: string } = {
-      admin: "bg-red-100 text-red-700",
-      mod_finance: "bg-orange-100 text-orange-700",
-      mod_challenge: "bg-purple-100 text-purple-700",
-      mod_member: "bg-green-100 text-green-700",
-      member: "bg-gray-100 text-gray-700",
+    // Use empty string, will use inline styles instead
+    return "";
+  };
+  
+  const getRoleBadgeStyle = (role: string): React.CSSProperties => {
+    const styles: Record<string, React.CSSProperties> = {
+      admin: { backgroundColor: 'var(--color-error)', color: 'white', opacity: 0.9 },
+      mod_finance: { backgroundColor: 'var(--color-primary)', color: 'white', opacity: 0.85 },
+      mod_challenge: { backgroundColor: 'var(--color-info)', color: 'white', opacity: 0.85 },
+      mod_member: { backgroundColor: 'var(--color-success)', color: 'white', opacity: 0.85 },
+      member: { backgroundColor: 'var(--color-border-dark)', color: 'var(--color-text-primary)' },
     };
-    return colors[role] || "bg-gray-100 text-gray-700";
+    return styles[role] || { backgroundColor: 'var(--color-border-dark)', color: 'var(--color-text-primary)' };
   };
 
   const isActive = (path: string) => pathname === path;
@@ -99,7 +74,7 @@ export default function Header() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <a href="/dashboard" className="flex items-center gap-2 shrink-0">
-            <Activity size={32} className="text-orange-600" />
+            <Activity size={32} style={{ color: "var(--color-primary)" }} />
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block">Hải Lăng Runners</h1>
             <h1 className="text-xl font-bold text-gray-900 sm:hidden">HLR</h1>
           </a>
@@ -110,110 +85,148 @@ export default function Header() {
               <>
                 <a
                   href="/challenges"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/challenges') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/challenges') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Thử thách
                 </a>
                 <a
                   href="/hall-of-fame"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/hall-of-fame') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/hall-of-fame') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Bảng vàng
                 </a>
                 <a
                   href="/races"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/races') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/races') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Races
                 </a>
                 <a
                   href="/rewards"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/rewards') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/rewards') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quà tặng
                 </a>
                 <a
                   href="/finance"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/finance') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/finance') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quỹ CLB
                 </a>
                 <a
                   href="/rules"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/rules') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/rules') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quy định
                 </a>
                 <a
                   href="/profile"
-                  className={`px-2 py-1.5 rounded-lg text-xs font-medium transition ${
-                    isActive('/profile') 
-                      ? 'bg-orange-50 text-orange-600' 
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
+                  style={isActive('/profile') 
+                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                    : { color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                  onMouseLeave={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Thành viên
                 </a>
                 {user?.user_metadata?.role && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(user.user_metadata.role) && (
                   <a
                     href="/admin"
-                    className="ml-2 px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold transition flex items-center gap-1"
+                    className="ml-2 px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1"
+                    style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                   >
                     <Shield size={16} />
                     Quản trị
                   </a>
                 )}
-                <div className="flex items-center gap-2 ml-4 pl-4 border-l border-gray-300">
-                  <div className="flex flex-col items-end">
-                    <div className="flex items-center gap-2">
-                      <User size={16} className="text-gray-600" />
-                      <span className="text-sm font-medium text-gray-900">
-                        {user.email}
-                      </span>
-                    </div>
+                <div className="flex flex-col items-end gap-1 ml-4 pl-4 border-l" style={{ borderColor: "var(--color-border)" }}>
+                  {/* Row 1: Email + Role Badge */}
+                  <div className="flex items-center gap-1.5">
+                    <User size={16} style={{ color: "var(--color-text-secondary)" }} />
+                    <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
+                      {user.email}
+                    </span>
                     {user?.user_metadata?.role && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full mt-1 ${getRoleBadgeColor(user.user_metadata.role)}`}>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(user.user_metadata.role)}>
                         {getRoleLabel(user.user_metadata.role)}
                       </span>
                     )}
                   </div>
-                  <button
-                    onClick={handleLogout}
-                    className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition"
-                    title="Đăng xuất"
-                  >
-                    <LogOut size={16} />
-                  </button>
+                  
+                  {/* Row 2: Theme Settings + Dark Mode + Logout */}
+                  <div className="flex items-center gap-2">
+                    <a
+                      href="/profile/theme"
+                      className="text-xs hover:opacity-80 transition"
+                      style={{ color: "var(--color-text-secondary)" }}
+                      title="Cài đặt giao diện"
+                    >
+                      🎨 Theme
+                    </a>
+                    <span style={{ color: "var(--color-border)" }}>|</span>
+                    <button
+                      onClick={toggleDarkMode}
+                      className="text-xs hover:opacity-80 transition flex items-center gap-1"
+                      style={{ color: "var(--color-text-secondary)" }}
+                      title={darkMode ? "Chế độ sáng" : "Chế độ tối"}
+                    >
+                      {darkMode ? <Sun size={14} /> : <Moon size={14} />}
+                      {darkMode ? "Sáng" : "Tối"}
+                    </button>
+                    <span style={{ color: "var(--color-border)" }}>|</span>
+                    <button
+                      onClick={handleLogout}
+                      className="flex items-center gap-1 text-xs hover:opacity-80 transition"
+                      style={{ color: "var(--color-error)" }}
+                      title="Đăng xuất"
+                    >
+                      <LogOut size={14} />
+                      Thoát
+                    </button>
+                  </div>
                 </div>
               </>
+            ) : isLoading ? (
+              // Show minimal loading state instead of login button during initial load
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-8 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
+              </div>
             ) : (
               <a
                 href="/login"
-                className="text-white bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg transition font-semibold"
+                className="px-4 py-2 rounded-lg transition font-semibold"
+                style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
               >
                 Đăng nhập
               </a>
@@ -223,7 +236,10 @@ export default function Header() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden text-gray-700 hover:text-orange-600 p-2"
+            className="lg:hidden p-2 transition"
+            style={{ color: "var(--color-text-secondary)" }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
           >
             {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -243,84 +259,114 @@ export default function Header() {
                       </span>
                     </div>
                     {user?.user_metadata?.role && (
-                      <span className={`inline-block text-xs px-2 py-1 rounded-full ${getRoleBadgeColor(user.user_metadata.role)}`}>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(user.user_metadata.role)}>
                         {getRoleLabel(user.user_metadata.role)}
                       </span>
                     )}
+                    {/* Mobile Theme Settings & Dark Mode */}
+                    <div className="flex items-center gap-3 mt-3">
+                      <a
+                        href="/profile/theme"
+                        className="text-sm transition"
+                        style={{ color: "var(--color-text-secondary)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
+                        onClick={() => setMobileMenuOpen(false)}
+                      >
+                        🎨 Cài đặt theme
+                      </a>
+                      <button
+                        onClick={toggleDarkMode}
+                        className="text-sm transition flex items-center gap-1"
+                        style={{ color: "var(--color-text-secondary)" }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
+                      >
+                        {darkMode ? <Sun size={16} /> : <Moon size={16} />}
+                        {darkMode ? "Sáng" : "Tối"}
+                      </button>
+                    </div>
                   </div>
                   <a
                     href="/challenges"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/challenges')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/challenges') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Thử thách
                   </a>
                   <a
                     href="/hall-of-fame"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/hall-of-fame')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/hall-of-fame') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Bảng vàng
                   </a>
                   <a
                     href="/races"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/races')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/races') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Races
                   </a>
                   <a
                     href="/rewards"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/rewards')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/rewards') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quà tặng
                   </a>
                   <a
                     href="/finance"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/finance')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/finance') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quỹ CLB
                   </a>
                   <a
                     href="/rules"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/rules')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/rules') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quy định
                   </a>
                   <a
                     href="/profile"
-                    className={`px-3 py-2 rounded-lg font-medium ${
-                      isActive('/profile')
-                        ? 'bg-orange-50 text-orange-600'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
+                    className="px-3 py-2 rounded-lg font-medium transition"
+                    style={isActive('/profile') 
+                      ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
+                      : { color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
+                    onMouseLeave={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Thành viên
@@ -328,7 +374,8 @@ export default function Header() {
                   {user?.user_metadata?.role && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(user.user_metadata.role) && (
                     <a
                       href="/admin"
-                      className="px-3 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold text-center flex items-center justify-center gap-1"
+                      className="px-3 py-2 rounded-lg font-semibold text-center flex items-center justify-center gap-1 transition"
+                      style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                       onClick={() => setMobileMenuOpen(false)}
                     >
                       <Shield size={16} />
@@ -343,10 +390,17 @@ export default function Header() {
                     <span>Đăng xuất</span>
                   </button>
                 </>
+              ) : isLoading ? (
+                // Show loading skeleton for mobile menu during initial load
+                <div className="space-y-2">
+                  <div className="h-10 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
+                  <div className="h-10 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
+                </div>
               ) : (
                 <a
                   href="/login"
-                  className="text-white bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg font-semibold text-center"
+                  className="px-4 py-2 rounded-lg font-semibold text-center transition"
+                  style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Đăng nhập

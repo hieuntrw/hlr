@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
 import { Trophy, Target, Wallet, Star, TrendingUp, Award, AlertCircle } from "lucide-react";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface UserProfile {
   id: string;
@@ -59,6 +60,7 @@ function DashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const connected = searchParams.get("strava_connected");
+  const { user, isLoading: authLoading } = useAuth(); // Add auth context with loading
   
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [personalStats, setPersonalStats] = useState<PersonalStats>({
@@ -129,9 +131,6 @@ function DashboardContent() {
       const startDate = new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
       const endDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) return;
 
       // Get current month challenge
@@ -195,9 +194,7 @@ function DashboardContent() {
   // Fetch finance status
   async function fetchFinanceStatus() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Using user from AuthContext
       if (!user) return;
 
       // Get all transactions for user
@@ -237,9 +234,7 @@ function DashboardContent() {
   // Fetch yearly stats
   async function fetchYearlyStats() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Using user from AuthContext
       if (!user) return;
 
       const year = new Date().getFullYear();
@@ -284,9 +279,7 @@ function DashboardContent() {
   // Fetch user profile
   async function fetchUserProfile() {
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Using user from AuthContext
       if (!user) return;
 
       console.log("[DEBUG] User ID:", user.id, "Email:", user.email);
@@ -350,9 +343,10 @@ function DashboardContent() {
 
   useEffect(() => {
     (async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // Wait for auth to finish loading
+      if (authLoading) return;
+      
+      // Using user from AuthContext
       if (!user) {
         router.push(`/login?redirect=${encodeURIComponent("/dashboard")}`);
         return;
@@ -370,7 +364,7 @@ function DashboardContent() {
       setLoading(false);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user, authLoading]);
 
   const getProgressColor = (percent: number) => {
     if (percent >= 100) return "bg-green-600";
@@ -384,7 +378,7 @@ function DashboardContent() {
       case "completed":
         return <span className="px-2 py-1 text-xs bg-green-100 text-green-800 rounded-full">✓ Hoàn thành</span>;
       case "in_progress":
-        return <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-full">⏳ Đang thực hiện</span>;
+        return <span className="px-2 py-1 text-xs rounded-full" style={{ background: "var(--color-info-bg, #DBEAFE)", color: "var(--color-info, #1E40AF)" }}>⏳ Đang thực hiện</span>;
       case "failed":
         return <span className="px-2 py-1 text-xs bg-red-100 text-red-800 rounded-full">✗ Chưa đạt</span>;
       default:
@@ -394,16 +388,17 @@ function DashboardContent() {
 
   if (loading) {
     return (
-      <div>
-        <div className="flex items-center justify-center h-screen">
-          <div className="text-gray-500">Đang tải dữ liệu...</div>
+      <div className="flex items-center justify-center min-h-screen bg-[var(--color-bg-secondary)]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div>
+    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Welcome Section */}
         <div className="mb-6">
@@ -420,51 +415,58 @@ function DashboardContent() {
           <div className="lg:col-span-2 space-y-6">
             
             {/* Personal Challenge Widget */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Target className="text-orange-600" size={24} />
-                  <h2 className="text-xl font-bold text-gray-900">Thử thách tháng này</h2>
+            <div className="rounded-xl shadow-lg border p-6" style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)" }}>
+              <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <h2 className="text-xl font-bold text-white">Thử thách tháng này</h2>
+                  </div>
+                  <a
+                    href="/challenges"
+                    className="text-sm font-medium px-3 py-1 rounded-lg"
+                    style={{ color: "var(--color-text-inverse)", background: "rgba(255,255,255,0.2)" }}
+                  >
+                    Chi tiết →
+                  </a>
                 </div>
-                <a
-                  href="/challenges"
-                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
-                >
-                  Chi tiết →
-                </a>
               </div>
 
               <div className="mb-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-gray-800">{personalStats.challengeName}</h3>
+                  <h3 className="font-semibold" style={{ color: "var(--color-text-primary)" }}>{personalStats.challengeName}</h3>
                   {getStatusBadge(personalStats.status)}
                 </div>
               </div>
 
               {personalStats.status === "not_joined" ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500 mb-4">Bạn chưa tham gia thử thách tháng này</p>
+                  <p className="mb-4" style={{ color: "var(--color-text-secondary)" }}>Bạn chưa tham gia thử thách tháng này</p>
                   <a
                     href="/challenges"
-                    className="inline-block px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                    className="inline-block px-6 py-2 rounded-lg transition"
+                    style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                   >
                     Tham gia ngay
                   </a>
                 </div>
               ) : (
                 <div>
-                  <div className="grid grid-cols-3 gap-4 mb-4">
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-600 mb-1">Tổng KM</p>
-                      <p className="text-2xl font-bold text-orange-600">{personalStats.totalKm.toFixed(1)}</p>
+                    <div className="grid grid-cols-3 gap-4 mb-4">
+                    <div className="rounded-lg p-3" style={{ background: "var(--color-bg-secondary)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--color-text-secondary)" }}>Tổng KM</p>
+                      <p className="text-2xl font-bold" style={{ color: "var(--color-primary)" }}>{personalStats.totalKm.toFixed(1)}</p>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-600 mb-1">Mục tiêu</p>
-                      <p className="text-2xl font-bold text-orange-600">{personalStats.targetKm}</p>
+                    <div className="rounded-lg p-3" style={{ background: "var(--color-bg-secondary)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--color-text-secondary)" }}>Mục tiêu</p>
+                      <p className="text-2xl font-bold" style={{ color: "var(--color-primary)" }}>{personalStats.targetKm}</p>
                     </div>
-                    <div className="bg-orange-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-600 mb-1">Pace TB</p>
-                      <p className="text-2xl font-bold text-orange-600">{personalStats.avgPace || "—"}</p>
+                    <div className="rounded-lg p-3" style={{ background: "var(--color-bg-secondary)" }}>
+                      <p className="text-xs mb-1" style={{ color: "var(--color-text-secondary)" }}>Pace TB</p>
+                      <p className="text-2xl font-bold" style={{ color: "var(--color-primary)" }}>{personalStats.avgPace || "—"}</p>
                     </div>
                   </div>
 
@@ -494,14 +496,16 @@ function DashboardContent() {
             </div>
 
             {/* Yearly Stats Widget */}
-            <div className="bg-gradient-to-br from-orange-600 to-orange-500 rounded-xl shadow-lg p-6 text-white">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={24} />
+            <div className="rounded-xl shadow-lg p-6 gradient-theme-primary" style={{ color: "var(--color-text-inverse)" }}>
+              <div className="flex items-center gap-3 mb-4">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
                 <h2 className="text-xl font-bold">Thống kê năm {new Date().getFullYear()}</h2>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-white/10 backdrop-blur rounded-lg p-4">
+                <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div className="flex items-center gap-2 mb-2">
                     <Target size={20} />
                     <p className="text-sm opacity-90">Tổng KM chạy</p>
@@ -509,7 +513,7 @@ function DashboardContent() {
                   <p className="text-3xl font-bold">{yearlyStats.totalKm}</p>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur rounded-lg p-4">
+                <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div className="flex items-center gap-2 mb-2">
                     <Star size={20} />
                     <p className="text-sm opacity-90">Tổng sao</p>
@@ -517,7 +521,7 @@ function DashboardContent() {
                   <p className="text-3xl font-bold">{yearlyStats.totalStars}</p>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur rounded-lg p-4">
+                <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div className="flex items-center gap-2 mb-2">
                     <Trophy size={20} />
                     <p className="text-sm opacity-90">Thử thách tham gia</p>
@@ -525,7 +529,7 @@ function DashboardContent() {
                   <p className="text-3xl font-bold">{yearlyStats.challengesJoined}</p>
                 </div>
 
-                <div className="bg-white/10 backdrop-blur rounded-lg p-4">
+                <div className="backdrop-blur rounded-lg p-4" style={{ background: "rgba(255,255,255,0.1)" }}>
                   <div className="flex items-center gap-2 mb-2">
                     <Award size={20} />
                     <p className="text-sm opacity-90">Thử thách hoàn thành</p>
@@ -540,63 +544,76 @@ function DashboardContent() {
           <div className="space-y-6">
             
             {/* Hall of Fame Widget */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Trophy className="text-orange-600" size={24} />
-                  <h2 className="text-xl font-bold text-gray-900">Bảng vàng</h2>
+            <div className="rounded-xl shadow-lg p-6" style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)", border: "1px solid" }}>
+              <div className="rounded-lg p-3 mb-4 shadow-lg gradient-theme-primary">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    <h2 className="text-lg font-bold" style={{ color: "var(--color-text-inverse)" }}>Bảng vàng</h2>
+                  </div>
+                  <a
+                    href="/hall-of-fame"
+                    className="text-sm font-medium px-3 py-1 rounded-lg"
+                    style={{ color: "var(--color-text-inverse)", background: "rgba(255,255,255,0.2)" }}
+                  >
+                    Xem tất cả →
+                  </a>
                 </div>
-                <a
-                  href="/hall-of-fame"
-                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
-                >
-                  Xem tất cả →
-                </a>
               </div>
 
               <div className="space-y-3">
                 {hallOfFame.length > 0 ? (
                   hallOfFame.map((entry) => (
-                    <div key={entry.rank} className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
+                    <div key={entry.rank} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                         entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
                         entry.rank === 2 ? "bg-gray-300 text-gray-800" :
-                        "bg-orange-300 text-orange-900"
-                      }`}>
+                        ""
+                      }`}
+                      style={entry.rank === 3 ? { background: "var(--color-primary)", color: "var(--color-text-inverse)" } : {}}
+                      >
                         {entry.rank}
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{entry.name}</p>
-                        <p className="text-xs text-gray-600">{entry.distance}</p>
+                        <p className="font-semibold text-sm" style={{ color: "var(--color-text-primary)" }}>{entry.name}</p>
+                        <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>{entry.distance}</p>
                       </div>
-                      <p className="font-bold text-orange-600">{entry.time}</p>
+                      <p className="font-bold" style={{ color: "var(--color-primary)" }}>{entry.time}</p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-center text-gray-500 py-4 text-sm">Chưa có dữ liệu</p>
+                  <p className="text-center py-4 text-sm" style={{ color: "var(--color-text-secondary)" }}>Chưa có dữ liệu</p>
                 )}
               </div>
             </div>
 
             {/* Finance Status Widget */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Wallet className="text-orange-600" size={24} />
-                  <h2 className="text-xl font-bold text-gray-900">Tình hình quỹ</h2>
+            <div className="rounded-xl shadow-lg p-6" style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)", border: "1px solid" }}>
+              <div className="rounded-lg p-3 mb-4 shadow-lg gradient-theme-primary">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                      <rect x="2" y="5" width="20" height="14" rx="2"/>
+                      <path d="M2 10h20"/>
+                    </svg>
+                    <h2 className="text-lg font-bold" style={{ color: "var(--color-text-inverse)" }}>Tình hình quỹ</h2>
+                  </div>
+                  <a
+                    href="/finance"
+                    className="text-sm font-medium px-3 py-1 rounded-lg"
+                    style={{ color: "var(--color-text-inverse)", background: "rgba(255,255,255,0.2)" }}
+                  >
+                    Chi tiết →
+                  </a>
                 </div>
-                <a
-                  href="/finance"
-                  className="text-sm text-orange-600 hover:text-orange-700 font-medium"
-                >
-                  Chi tiết →
-                </a>
               </div>
 
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
-                  <span className="text-sm text-gray-700">Số dư hiện tại</span>
-                  <span className="font-bold text-green-600">
+                <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                  <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Số dư hiện tại</span>
+                  <span className="font-bold" style={{ color: "var(--color-success)" }}>
                     {financeStatus.balance.toLocaleString("vi-VN")} đ
                   </span>
                 </div>
@@ -604,17 +621,17 @@ function DashboardContent() {
                 {financeStatus.hasOutstanding && (
                   <div>
                     {financeStatus.unpaidFees > 0 && (
-                      <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg mb-2">
-                        <span className="text-sm text-gray-700">Quỹ chưa đóng</span>
-                        <span className="font-bold text-yellow-600">
+                      <div className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: "var(--color-bg-primary)" }}>
+                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Quỹ chưa đóng</span>
+                        <span className="font-bold" style={{ color: "var(--color-warning)" }}>
                           {financeStatus.unpaidFees.toLocaleString("vi-VN")} đ
                         </span>
                       </div>
                     )}
                     {financeStatus.unpaidFines > 0 && (
-                      <div className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                        <span className="text-sm text-gray-700">Phạt chưa đóng</span>
-                        <span className="font-bold text-red-600">
+                      <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Phạt chưa đóng</span>
+                        <span className="font-bold" style={{ color: "var(--color-error)" }}>
                           {financeStatus.unpaidFines.toLocaleString("vi-VN")} đ
                         </span>
                       </div>
@@ -624,32 +641,35 @@ function DashboardContent() {
 
                 {!financeStatus.hasOutstanding && (
                   <div className="text-center py-2">
-                    <p className="text-sm text-green-600">✓ Bạn đã hoàn thành nghĩa vụ tài chính</p>
+                    <p className="text-sm" style={{ color: "var(--color-success)" }}>✓ Bạn đã hoàn thành nghĩa vụ tài chính</p>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Notifications Widget */}
-            <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-              <div className="flex items-center gap-2 mb-4">
-                <AlertCircle className="text-orange-600" size={24} />
-                <h2 className="text-xl font-bold text-gray-900">Thông báo</h2>
+            <div className="rounded-xl shadow-lg p-6" style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)", border: "1px solid" }}>
+              <div className="rounded-lg p-3 mb-4 shadow-lg gradient-theme-primary">
+                <div className="flex items-center gap-3">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                  </svg>
+                  <h2 className="text-lg font-bold" style={{ color: "var(--color-text-inverse)" }}>Thông báo</h2>
+                </div>
               </div>
 
               <div className="space-y-3">
                 {notifications.map((notif) => (
                   <div
                     key={notif.id}
-                    className={`p-3 rounded-lg border-l-4 ${
-                      notif.type === "warning"
-                        ? "bg-yellow-50 border-yellow-500"
-                        : notif.type === "success"
-                        ? "bg-green-50 border-green-500"
-                        : "bg-blue-50 border-blue-500"
-                    }`}
+                    className="p-3 rounded-lg border-l-4"
+                    style={{
+                      background: "var(--color-bg-primary)",
+                      borderLeftColor: notif.type === "warning" ? "var(--color-warning)" : notif.type === "success" ? "var(--color-success)" : "var(--color-info)"
+                    }}
                   >
-                    <p className="text-sm text-gray-800">{notif.message}</p>
+                    <p className="text-sm" style={{ color: "var(--color-text-primary)" }}>{notif.message}</p>
                   </div>
                 ))}
               </div>

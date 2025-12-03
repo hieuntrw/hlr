@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import Link from "next/link";
 import {
   Users,
@@ -30,6 +31,7 @@ interface DashboardStats {
 }
 
 export default function AdminPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     pendingMembers: 0,
@@ -44,16 +46,15 @@ export default function AdminPage() {
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) return;
     fetchProfileAndStats();
-  }, []);
+  }, [user, authLoading]);
 
   async function fetchProfileAndStats() {
     setLoading(true);
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      // user from AuthContext
 
       console.log("[Admin Page] User from auth:", user);
       console.log("[Admin Page] User metadata:", user?.user_metadata);
@@ -203,8 +204,8 @@ export default function AdminPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderBottomColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải...</p>
         </div>
       </div>
     );
@@ -227,14 +228,14 @@ export default function AdminPage() {
         </div>
       )}
       {/* Header */}
-      <div className="bg-white rounded-lg shadow-md p-6">
+      <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
         <div className="flex items-center gap-4">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center gradient-theme-primary">
             <Users className="text-white" size={32} />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Dashboard {getRoleLabel(profile.role)}</h1>
-            <p className="text-gray-600">Chào mừng trở lại, {profile.full_name}!</p>
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard {getRoleLabel(profile.role)}</h1>
+            <p style={{ color: "var(--color-text-secondary)" }}>Chào mừng trở lại, {profile.full_name}!</p>
           </div>
         </div>
       </div>
@@ -244,21 +245,21 @@ export default function AdminPage() {
         {/* Pending Members Widget */}
         {hasMemberAccess && (
           <Link href="/admin/members">
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-orange-500">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-primary)" }}>
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Users className="text-orange-600" size={24} />
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Users style={{ color: "var(--color-primary)" }} size={24} />
                 </div>
                 {stats.pendingMembers > 0 && (
-                  <span className="bg-orange-100 text-orange-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "var(--color-bg-primary)", color: "var(--color-primary)" }}>
                     {stats.pendingMembers}
                   </span>
                 )}
               </div>
-              <h3 className="text-gray-600 text-sm font-medium mb-1">Thành Viên Chờ Duyệt</h3>
-              <p className="text-3xl font-bold text-gray-900">{stats.pendingMembers}</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Thành Viên Chờ Duyệt</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.pendingMembers}</p>
               {stats.pendingMembers > 0 && (
-                <p className="text-orange-600 text-xs mt-2 flex items-center gap-1">
+                <p className="text-xs mt-2 flex items-center gap-1" style={{ color: "var(--color-primary)" }}>
                   <AlertCircle size={14} />
                   Cần xử lý
                 </p>
@@ -270,21 +271,21 @@ export default function AdminPage() {
         {/* Pending PB Approvals Widget */}
         {hasMemberAccess && (
           <Link href="/admin/pb-approval">
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-green-500">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-success)" }}>
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <CheckCircle className="text-green-600" size={24} />
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <CheckCircle style={{ color: "var(--color-success)" }} size={24} />
                 </div>
                 {stats.pendingPBApprovals > 0 && (
-                  <span className="bg-green-100 text-green-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "var(--color-bg-primary)", color: "var(--color-success)" }}>
                     {stats.pendingPBApprovals}
                   </span>
                 )}
               </div>
-              <h3 className="text-gray-600 text-sm font-medium mb-1">PB Chờ Duyệt</h3>
-              <p className="text-3xl font-bold text-gray-900">{stats.pendingPBApprovals}</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>PB Chờ Duyệt</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.pendingPBApprovals}</p>
               {stats.pendingPBApprovals > 0 && (
-                <p className="text-green-600 text-xs mt-2 flex items-center gap-1">
+                <p className="text-xs mt-2 flex items-center gap-1" style={{ color: "var(--color-success)" }}>
                   <AlertCircle size={14} />
                   Cần xử lý
                 </p>
@@ -296,16 +297,16 @@ export default function AdminPage() {
         {/* Fund Status Widget */}
         {hasFinanceAccess && (
           <Link href="/admin/finance">
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-orange-500">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-primary)" }}>
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Wallet className="text-orange-600" size={24} />
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Wallet style={{ color: "var(--color-primary)" }} size={24} />
                 </div>
-                <TrendingUp className="text-orange-600" size={20} />
+                <TrendingUp style={{ color: "var(--color-primary)" }} size={20} />
               </div>
-              <h3 className="text-gray-600 text-sm font-medium mb-1">Tổng Quỹ</h3>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalFund)}</p>
-              <p className="text-orange-600 text-xs mt-2">Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Tổng Quỹ</h3>
+              <p className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{formatCurrency(stats.totalFund)}</p>
+              <p className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
             </div>
           </Link>
         )}
@@ -313,15 +314,15 @@ export default function AdminPage() {
         {/* Active Challenges Widget */}
         {hasChallengeAccess && (
           <Link href="/admin/challenges">
-            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4 border-purple-500">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-accent)" }}>
               <div className="flex items-center justify-between mb-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Target className="text-orange-600" size={24} />
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Target style={{ color: "var(--color-primary)" }} size={24} />
                 </div>
               </div>
-              <h3 className="text-gray-600 text-sm font-medium mb-1">Thử Thách Đang Diễn Ra</h3>
-              <p className="text-3xl font-bold text-gray-900">{stats.activeChallenges}</p>
-              <p className="text-orange-600 text-xs mt-2">Tổng thành viên: {stats.totalMembers}</p>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Thử Thách Đang Diễn Ra</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.activeChallenges}</p>
+              <p className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>Tổng thành viên: {stats.totalMembers}</p>
             </div>
           </Link>
         )}
@@ -331,19 +332,20 @@ export default function AdminPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pending Fines */}
         {hasFinanceAccess && stats.pendingFines > 0 && (
-          <div className="bg-white rounded-lg shadow-md p-6">
+          <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                <AlertCircle className="text-red-600" size={20} />
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                <AlertCircle style={{ color: "var(--color-error)" }} size={20} />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Phạt Chờ Xử Lý</h3>
+              <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Phạt Chờ Xử Lý</h3>
             </div>
-            <p className="text-gray-600 mb-4">
-              Có <strong className="text-red-600">{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
+            <p className="mb-4" style={{ color: "var(--color-text-secondary)" }}>
+              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
             </p>
             <Link
               href="/admin/finance"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
+              style={{ background: "var(--color-error)", color: "var(--color-text-inverse)" }}
             >
               Xử lý ngay →
             </Link>
@@ -351,14 +353,14 @@ export default function AdminPage() {
         )}
 
         {/* System Info */}
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg shadow-md p-6 border-l-4 border-orange-600">
+        <div className="rounded-lg shadow-md p-6 border-l-4" style={{ background: "var(--color-bg-primary)", borderLeftColor: "var(--color-primary)" }}>
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-              <Calendar className="text-orange-600" size={20} />
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-secondary)" }}>
+              <Calendar style={{ color: "var(--color-primary)" }} size={20} />
             </div>
-            <h3 className="text-lg font-bold text-gray-900">Thông Tin Hệ Thống</h3>
+            <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Thông Tin Hệ Thống</h3>
           </div>
-          <div className="space-y-2 text-sm text-gray-700">
+          <div className="space-y-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>
             <p>
               <strong>Tổng thành viên:</strong> {stats.totalMembers}
             </p>

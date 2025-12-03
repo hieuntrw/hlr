@@ -3,6 +3,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { Gift, Plus, CheckCircle, Clock, User } from "lucide-react";
 
 interface Challenge {
@@ -30,6 +31,7 @@ interface LuckyDrawWinner {
 }
 
 export default function LuckyDrawPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [winners, setWinners] = useState<LuckyDrawWinner[]>([]);
   const [members, setMembers] = useState<any[]>([]);
@@ -42,8 +44,9 @@ export default function LuckyDrawPage() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     loadData();
-  }, []);
+  }, [user, authLoading]);
 
   const loadData = async () => {
     try {
@@ -110,8 +113,8 @@ export default function LuckyDrawPage() {
 
   const handleMarkDelivered = async (winnerId: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      // user from AuthContext
+if (!user) return;
 
       const { error } = await supabase
         .from("lucky_draw_winners")
@@ -135,8 +138,8 @@ export default function LuckyDrawPage() {
   if (loading) {
     return (
       <AdminLayout>
-        <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: "var(--color-primary)" }}></div>
         </div>
       </AdminLayout>
     );
@@ -148,12 +151,15 @@ export default function LuckyDrawPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Gift size={32} className="text-orange-600" />
+            <Gift size={32} style={{ color: "var(--color-primary)" }} />
             <h1 className="text-3xl font-bold text-gray-900">Quản Lý Quay Số May Mắn</h1>
           </div>
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition"
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
+            style={{ background: "var(--color-primary)" }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             <Plus size={20} />
             Thêm Người Trúng
@@ -235,7 +241,7 @@ export default function LuckyDrawPage() {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <Gift size={24} className="text-orange-500" />
+                      <Gift size={24} style={{ color: "var(--color-primary)" }} />
                       <h3 className="text-xl font-bold text-gray-900">
                         {winner.challenge.name} - Tháng {winner.challenge.month}/{winner.challenge.year}
                       </h3>

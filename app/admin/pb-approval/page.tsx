@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface PBRecord {
   id: string;
@@ -44,19 +45,19 @@ function formatPace(seconds: number, distance: string): string {
 }
 
 export default function PBApprovalPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [pendingPBs, setPendingPBs] = useState<PBRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchPendingPBs();
-  }, []);
+  }, [user, authLoading]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
     if (!user) {
       router.push("/debug-login");
       return;
@@ -141,11 +142,11 @@ export default function PBApprovalPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">✅ Duyệt Thành Tích Cá Nhân</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>✅ Duyệt PB Chờ Xử Lý</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -177,11 +178,11 @@ export default function PBApprovalPage() {
                   <tr key={pb.id} className="border-b border-gray-200 hover:bg-gray-50">
                     <td className="py-3 px-4 font-semibold">{pb.profile?.full_name}</td>
                     <td className="py-3 px-4 text-center">
-                      <span className="inline-flex px-2 py-1 bg-orange-100 text-orange-800 rounded text-xs font-semibold">
+                      <span className="inline-flex px-2 py-1 rounded text-xs font-semibold" style={{ background: "var(--color-info-bg, #DBEAFE)", color: "var(--color-info, #1E40AF)" }}>
                         {pb.distance === "HM" ? "HM (21km)" : "FM (42km)"}
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-orange-600">
+                    <td className="py-3 px-4 text-right font-bold" style={{ color: "var(--color-primary)" }}>
                       {formatTime(pb.time_seconds)}
                     </td>
                     <td className="py-3 px-4 text-right text-gray-600">
@@ -193,7 +194,10 @@ export default function PBApprovalPage() {
                         href={pb.evidence_link}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-orange-600 hover:text-orange-800 font-semibold"
+                        className="font-semibold"
+                        style={{ color: "var(--color-primary)" }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                       >
                         🔗 Xem
                       </a>

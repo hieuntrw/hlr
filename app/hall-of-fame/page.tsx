@@ -36,7 +36,7 @@ function formatTime(seconds: number): string {
 
 // Medal component for top 3
 function getMedalIcon(rank: number) {
-  const colors = ["text-yellow-400", "text-gray-400", "text-orange-600"];
+  const colors = ["text-yellow-400", "text-gray-400", "text-[var(--color-primary)]"];
   return <Medal size={32} className={colors[rank - 1] || "text-gray-300"} />;
 }
 
@@ -91,7 +91,7 @@ function TopCards({ data, pbField }: { data: ProfilePB[]; pbField: string }) {
       {data.map((person, idx) => {
         const pbValue = person[pbField as keyof ProfilePB] as number || 0;
         return (
-          <div key={person.id} className="flex items-center gap-4 p-4 rounded-xl bg-white shadow border-l-4 border-[var(--color-primary)]">
+          <div key={person.id} className="flex items-center gap-4 p-4 rounded-xl shadow border-l-4" style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-primary)" }}>
             <div className="w-14 h-14 rounded-full bg-gradient-to-tr from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center text-white font-bold text-2xl">
               {person.full_name.charAt(0).toUpperCase()}
             </div>
@@ -218,7 +218,7 @@ export default function HallOfFamePage() {
 
   return (
     <div>
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100">
+      <div className="min-h-screen bg-[var(--color-bg-secondary)]">
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tabs */}
@@ -229,11 +229,12 @@ export default function HallOfFamePage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-6 py-3 rounded-lg font-semibold whitespace-nowrap transition-all flex items-center gap-2 ${
+                className={`px-6 py-3 rounded-lg font-semibold whitespace-nowrap transition-all flex items-center gap-2`}
+                style={
                   activeTab === tab.id
-                    ? "bg-blue-600 text-white shadow-lg"
-                    : "bg-white text-gray-700 hover:bg-gray-100 border-2 border-transparent hover:border-blue-300"
-                }`}
+                    ? { background: "var(--color-primary)", color: "var(--color-text-inverse)", boxShadow: "var(--shadow-lg)" }
+                    : { background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)", border: "2px solid transparent" }
+                }
               >
                 <IconComponent size={20} />
                 {tab.label}
@@ -245,8 +246,8 @@ export default function HallOfFamePage() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Đang tải dữ liệu...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+              <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
             </div>
           </div>
         ) : (
@@ -254,7 +255,14 @@ export default function HallOfFamePage() {
             {/* Top 3 Podium */}
             {top3.length > 0 && (
               <div className="mb-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Trophy size={28} className="text-yellow-500" /> Top 3 - Bục Vinh Quang</h2>
+                <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                  <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                    <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                    </svg>
+                    Top 3 - Bục Vinh Quang
+                  </h2>
+                </div>
                 <Podium data={top3} pbField={pbField} />
               </div>
             )}
@@ -262,7 +270,17 @@ export default function HallOfFamePage() {
             {/* Top 4-10 Cards */}
             {top4_10.length > 0 && (
               <div className="mb-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Medal size={28} className="text-blue-500" /> Top 4-10</h2>
+                <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                  <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <circle cx="12" cy="8" r="5"/>
+                      <path d="M20 21a8 8 0 1 0-16 0"/>
+                      <circle cx="18" cy="8" r="3"/>
+                      <circle cx="6" cy="8" r="3"/>
+                    </svg>
+                    Top 4-10
+                  </h2>
+                </div>
                 <TopCards data={top4_10} pbField={pbField} />
               </div>
             )}
@@ -270,14 +288,24 @@ export default function HallOfFamePage() {
             {/* Top 11+ List */}
             {top11Plus.length > 0 && (
               <div className="mb-12">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Users size={28} className="text-gray-600" /> Danh Sách Còn Lại</h2>
+                <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                  <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                      <circle cx="9" cy="7" r="4"/>
+                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                    </svg>
+                    Danh Sách Còn Lại
+                  </h2>
+                </div>
                 <LeaderboardList data={top11Plus} pbField={pbField} />
               </div>
             )}
 
             {leaderboard.length === 0 && (
-              <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-                <p className="text-gray-500 text-lg">Chưa có dữ liệu PB được duyệt cho danh mục này</p>
+              <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: "var(--color-bg-secondary)" }}>
+                <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Chưa có dữ liệu PB được duyệt cho danh mục này</p>
               </div>
             )}
           </>

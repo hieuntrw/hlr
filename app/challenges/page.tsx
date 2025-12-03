@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
 import { Calendar, CheckCircle, Clock, PlayCircle, XCircle, Lock, Flag, List, User } from "lucide-react";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface Challenge {
   id: string;
@@ -36,8 +37,8 @@ function getStatusBadge(challenge: Challenge) {
 
   if (now < start) {
     return (
-      <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-semibold">
-        <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "var(--color-info-bg, #DBEAFE)", color: "var(--color-info, #1E40AF)" }}>
+        <span className="w-2 h-2 rounded-full" style={{ background: "var(--color-info, #2563EB)" }}></span>
         Sắp diễn ra
       </span>
     );
@@ -50,8 +51,8 @@ function getStatusBadge(challenge: Challenge) {
     );
   } else {
     return (
-      <span className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm font-semibold">
-        <span className="w-2 h-2 bg-gray-600 rounded-full"></span>
+      <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold" style={{ background: "var(--color-bg-primary)", color: "var(--color-text-secondary)" }}>
+        <span className="w-2 h-2 rounded-full" style={{ background: "var(--color-text-secondary)" }}></span>
         Đã kết thúc
       </span>
     );
@@ -61,10 +62,10 @@ function getStatusBadge(challenge: Challenge) {
 function ChallengeCard({ challenge }: { challenge: ChallengeWithParticipation }) {
   return (
     <Link href={`/challenges/${challenge.id}`}>
-      <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all overflow-hidden cursor-pointer border-l-4 border-[var(--color-primary)]">
+      <div className="rounded-xl shadow-md hover:shadow-xl transition-all overflow-hidden cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-primary)" }}>
         <div className="p-6">
           <div className="flex items-start justify-between mb-4">
-            <h3 className="text-xl font-bold text-[var(--color-primary)] flex-1">{challenge.title}</h3>
+            <h3 className="text-xl font-bold flex-1" style={{ color: "var(--color-primary)" }}>{challenge.title}</h3>
             {challenge.user_participates && (
               <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded flex items-center gap-1">
                 <CheckCircle size={14} />
@@ -74,7 +75,7 @@ function ChallengeCard({ challenge }: { challenge: ChallengeWithParticipation })
           </div>
 
           <div className="space-y-3 mb-4">
-            <div className="flex items-center gap-2 text-gray-600">
+            <div className="flex items-center gap-2" style={{ color: "var(--color-text-secondary)" }}>
               <Calendar size={18} />
               <span className="text-sm">
                 {formatDate(challenge.start_date)} - {formatDate(challenge.end_date)}
@@ -86,8 +87,8 @@ function ChallengeCard({ challenge }: { challenge: ChallengeWithParticipation })
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-            <span className="text-sm text-[var(--color-accent)] font-medium">Chi tiết →</span>
+          <div className="flex items-center justify-between pt-4" style={{ borderTop: "1px solid var(--color-border)" }}>
+            <span className="text-sm font-medium" style={{ color: "var(--color-accent)" }}>Chi tiết →</span>
             {challenge.is_locked && (
               <span className="text-xs text-red-600 font-semibold flex items-center gap-1">
                 <Lock size={12} /> Đã khóa
@@ -104,24 +105,20 @@ export default function ChallengesPage() {
   const [activeTab, setActiveTab] = useState<"my" | "all">("my");
   const [challenges, setChallenges] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
+  const { user, isLoading: authLoading } = useAuth(); // Use auth context
+  const currentUser = user?.id || null;
 
   useEffect(() => {
-    fetchCurrentUser();
-  }, []);
-
-  useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+    
     if (currentUser) {
       fetchChallenges();
+    } else if (!user) {
+      // No user logged in
+      setLoading(false);
     }
-  }, [activeTab, currentUser]);
-
-  async function fetchCurrentUser() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    setCurrentUser(user?.id || null);
-  }
+  }, [activeTab, currentUser, user, authLoading]);
 
   async function fetchChallenges() {
     setLoading(true);
@@ -191,25 +188,31 @@ export default function ChallengesPage() {
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 py-8">
           {/* Tabs */}
-          <div className="flex gap-2 mb-8 border-b border-gray-300">
+          <div className="flex gap-2 mb-8" style={{ borderBottom: "1px solid var(--color-border)" }}>
             <button
               onClick={() => setActiveTab("all")}
-              className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
-                activeTab === "all"
-                  ? "text-[var(--color-primary)] border-[var(--color-primary)]"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
-              }`}
+              className="px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2"
+              style={activeTab === "all" ? {
+                color: "var(--color-primary)",
+                borderBottomColor: "var(--color-primary)"
+              } : {
+                color: "var(--color-text-secondary)",
+                borderBottomColor: "transparent"
+              }}
             >
               <List size={20} />
               Tất Cả Thử Thách
             </button>
             <button
               onClick={() => setActiveTab("my")}
-              className={`px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2 ${
-                activeTab === "my"
-                  ? "text-[var(--color-primary)] border-[var(--color-primary)]"
-                  : "text-gray-600 border-transparent hover:text-gray-900"
-              }`}
+              className="px-6 py-3 font-semibold transition-all border-b-2 flex items-center gap-2"
+              style={activeTab === "my" ? {
+                color: "var(--color-primary)",
+                borderBottomColor: "var(--color-primary)"
+              } : {
+                color: "var(--color-text-secondary)",
+                borderBottomColor: "transparent"
+              }}
             >
               <User size={20} />
               Thử Thách Của Tôi
@@ -219,8 +222,8 @@ export default function ChallengesPage() {
           {loading ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Đang tải dữ liệu...</p>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderBottomColor: "var(--color-primary)" }}></div>
+                <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
               </div>
             </div>
           ) : displayChallenges.length > 0 ? (
@@ -230,8 +233,8 @@ export default function ChallengesPage() {
               ))}
             </div>
           ) : (
-            <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-              <p className="text-gray-500 text-lg">
+            <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: "var(--color-bg-secondary)" }}>
+              <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>
                 {activeTab === "my" ? "Bạn chưa tham gia thử thách nào" : "Chưa có thử thách"}
               </p>
             </div>

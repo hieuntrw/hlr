@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface Challenge {
   id: string;
@@ -24,6 +25,7 @@ function formatDate(dateStr: string): string {
 }
 
 export default function ChallengesAdminPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,14 +37,13 @@ export default function ChallengesAdminPage() {
   });
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchChallenges();
-  }, []);
+  }, [user, authLoading]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
 
     console.log('[Challenges Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
 
@@ -119,11 +120,11 @@ export default function ChallengesAdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">🏃 Tạo/Sửa Thử Thách</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>🏃 Tạo/Sửa Thử Thách</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -136,7 +137,10 @@ export default function ChallengesAdminPage() {
         <div className="mb-6">
           <button
             onClick={() => setShowForm(!showForm)}
-            className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            className="text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            style={{ background: "var(--color-primary)" }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             {showForm ? "✕ Đóng Form" : "➕ Tạo Thử Thách Mới"}
           </button>
@@ -251,7 +255,10 @@ export default function ChallengesAdminPage() {
                     <td className="py-3 px-4 text-center">
                       <Link
                         href={`/challenges/${challenge.id}`}
-                        className="text-orange-600 hover:text-orange-800 font-semibold"
+                        className="font-semibold"
+                        style={{ color: "var(--color-primary)" }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                       >
                         Xem
                       </Link>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { Gift, Trophy, Star, Calendar, CheckCircle, Clock } from "lucide-react";
 
 interface MilestoneReward {
@@ -60,7 +61,7 @@ interface LuckyDrawWin {
 }
 
 export default function RewardsPage() {
-  const [user, setUser] = useState<any>(null);
+  const { user, isLoading: authLoading } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
@@ -77,16 +78,19 @@ export default function RewardsPage() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user, authLoading]);
 
   const loadData = async () => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+    
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      // user from AuthContext
       if (!user) {
         window.location.href = "/login";
         return;
       }
-      setUser(user);
+      // user already from AuthContext
 
       // Get profile
       const { data: profileData } = await supabase
@@ -175,73 +179,77 @@ export default function RewardsPage() {
   };
 
   const getStatusBadge = (status: string) => {
-    const badges: { [key: string]: { label: string; color: string } } = {
-      pending: { label: "Chờ duyệt", color: "bg-yellow-100 text-yellow-700" },
-      approved: { label: "Đã duyệt", color: "bg-blue-100 text-blue-700" },
-      delivered: { label: "Đã trao", color: "bg-green-100 text-green-700" },
-      rejected: { label: "Từ chối", color: "bg-red-100 text-red-700" },
+    const badges: { [key: string]: { label: string; style: React.CSSProperties } } = {
+      pending: { label: "Chờ duyệt", style: { backgroundColor: 'var(--color-warning)', color: 'white', opacity: 0.9 } },
+      approved: { label: "Đã duyệt", style: { backgroundColor: 'var(--color-info)', color: 'white', opacity: 0.9 } },
+      delivered: { label: "Đã trao", style: { backgroundColor: 'var(--color-success)', color: 'white', opacity: 0.9 } },
+      rejected: { label: "Từ chối", style: { backgroundColor: 'var(--color-error)', color: 'white', opacity: 0.9 } },
     };
     const badge = badges[status] || badges.pending;
-    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${badge.color}`}>{badge.label}</span>;
+    return <span className="px-2 py-1 rounded-full text-xs font-medium" style={badge.style}>{badge.label}</span>;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100 flex items-center justify-center">
+      <div className="min-h-screen bg-[var(--color-bg-secondary)] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Đang tải dữ liệu...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100">
+    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       <div className="max-w-7xl mx-auto px-4 py-8">
         
         {/* Tabs */}
         <div className="flex gap-2 mb-8 overflow-x-auto pb-2 border-b border-gray-300">
           <button
             onClick={() => setActiveTab("fm")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap ${
+            className="flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap"
+            style={
               activeTab === "fm"
-                ? "bg-white text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:bg-white/50"
-            }`}
+                ? { background: "var(--color-bg-secondary)", color: "var(--color-primary)", borderBottom: "2px solid var(--color-primary)" }
+                : { color: "var(--color-text-secondary)", background: "transparent" }
+            }
           >
             <Trophy size={20} />
             Mốc FM
           </button>
           <button
             onClick={() => setActiveTab("hm")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap ${
+            className="flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap"
+            style={
               activeTab === "hm"
-                ? "bg-white text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:bg-white/50"
-            }`}
+                ? { background: "var(--color-bg-secondary)", color: "var(--color-primary)", borderBottom: "2px solid var(--color-primary)" }
+                : { color: "var(--color-text-secondary)", background: "transparent" }
+            }
           >
             <Trophy size={20} />
             Mốc HM
           </button>
           <button
             onClick={() => setActiveTab("podium")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap ${
+            className="flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap"
+            style={
               activeTab === "podium"
-                ? "bg-white text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:bg-white/50"
-            }`}
+                ? { background: "var(--color-bg-secondary)", color: "var(--color-primary)", borderBottom: "2px solid var(--color-primary)" }
+                : { color: "var(--color-text-secondary)", background: "transparent" }
+            }
           >
             <Star size={20} />
             Đứng bục ({podiumRewards.length})
           </button>
           <button
             onClick={() => setActiveTab("lucky")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap ${
+            className="flex items-center gap-2 px-4 py-2 rounded-t-lg font-medium transition whitespace-nowrap"
+            style={
               activeTab === "lucky"
-                ? "bg-white text-orange-600 border-b-2 border-orange-600"
-                : "text-gray-600 hover:bg-white/50"
-            }`}
+                ? { background: "var(--color-bg-secondary)", color: "var(--color-primary)", borderBottom: "2px solid var(--color-primary)" }
+                : { color: "var(--color-text-secondary)", background: "transparent" }
+            }
           >
             <Gift size={20} />
             Quay số ({luckyDrawWins.length})
@@ -251,9 +259,16 @@ export default function RewardsPage() {
         {/* FM Milestones */}
         {activeTab === "fm" && (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Mốc Thành Tích Full Marathon</h2>
+            <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+              <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Mốc Thành Tích Full Marathon
+              </h2>
+            </div>
             {fmMilestones.length === 0 ? (
-              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+              <div className="rounded-lg p-8 text-center" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>
                 Chưa có cấu hình mốc thành tích
               </div>
             ) : (
@@ -271,14 +286,14 @@ export default function RewardsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-xl font-bold text-gray-900">{milestone.milestone_name}</h3>
-                            {achieved && <CheckCircle size={24} className="text-green-500" />}
+                            {achieved && <CheckCircle size={24} style={{ color: 'var(--color-success)' }} />}
                           </div>
                           <p className="text-gray-600 mb-2">
                             <strong>Thời gian:</strong> {formatTime(milestone.time_seconds)}
                           </p>
                           <p className="text-gray-800 font-medium mb-1">{milestone.reward_description}</p>
                           {milestone.cash_amount > 0 && (
-                            <p className="text-orange-600 font-bold">{formatCurrency(milestone.cash_amount)}</p>
+                            <p className="font-bold" style={{ color: 'var(--color-primary)' }}>{formatCurrency(milestone.cash_amount)}</p>
                           )}
                         </div>
                       </div>
@@ -293,9 +308,16 @@ export default function RewardsPage() {
         {/* HM Milestones */}
         {activeTab === "hm" && (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Mốc Thành Tích Half Marathon</h2>
+            <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+              <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Mốc Thành Tích Half Marathon
+              </h2>
+            </div>
             {hmMilestones.length === 0 ? (
-              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+              <div className="rounded-lg p-8 text-center" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>
                 Chưa có cấu hình mốc thành tích
               </div>
             ) : (
@@ -313,14 +335,14 @@ export default function RewardsPage() {
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2">
                             <h3 className="text-xl font-bold text-gray-900">{milestone.milestone_name}</h3>
-                            {achieved && <CheckCircle size={24} className="text-green-500" />}
+                            {achieved && <CheckCircle size={24} style={{ color: 'var(--color-success)' }} />}
                           </div>
                           <p className="text-gray-600 mb-2">
                             <strong>Thời gian:</strong> {formatTime(milestone.time_seconds)}
                           </p>
                           <p className="text-gray-800 font-medium mb-1">{milestone.reward_description}</p>
                           {milestone.cash_amount > 0 && (
-                            <p className="text-orange-600 font-bold">{formatCurrency(milestone.cash_amount)}</p>
+                            <p className="font-bold" style={{ color: 'var(--color-primary)' }}>{formatCurrency(milestone.cash_amount)}</p>
                           )}
                         </div>
                       </div>
@@ -335,15 +357,22 @@ export default function RewardsPage() {
         {/* Podium Rewards */}
         {activeTab === "podium" && (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Phần Thưởng Đứng Bục</h2>
+            <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+              <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                Phần Thưởng Đứng Bục
+              </h2>
+            </div>
             {podiumRewards.length === 0 ? (
-              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+              <div className="rounded-lg p-8 text-center" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>
                 Bạn chưa có phần thưởng đứng bục nào
               </div>
             ) : (
               <div className="grid gap-4">
                 {podiumRewards.map((reward) => (
-                  <div key={reward.id} className="bg-white rounded-lg p-6 shadow-md">
+                  <div key={reward.id} className="rounded-lg p-6 shadow-md" style={{ background: "var(--color-bg-secondary)" }}>
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
@@ -357,12 +386,12 @@ export default function RewardsPage() {
                           {reward.race.name} - {new Date(reward.race.date).toLocaleDateString("vi-VN")}
                         </p>
                         <p className="text-gray-800 font-medium mb-1">{reward.reward_description}</p>
-                        <p className="text-orange-600 font-bold">{formatCurrency(reward.cash_amount)}</p>
+                        <p className="font-bold" style={{ color: 'var(--color-primary)' }}>{formatCurrency(reward.cash_amount)}</p>
                       </div>
                       <div>{getStatusBadge(reward.status)}</div>
                     </div>
                     {reward.delivered_at && (
-                      <p className="text-sm text-green-600 flex items-center gap-1">
+                      <p className="text-sm flex items-center gap-1" style={{ color: 'var(--color-success)' }}>
                         <CheckCircle size={16} />
                         Đã trao: {new Date(reward.delivered_at).toLocaleDateString("vi-VN")}
                       </p>
@@ -377,19 +406,28 @@ export default function RewardsPage() {
         {/* Lucky Draw Wins */}
         {activeTab === "lucky" && (
           <div className="space-y-4">
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Quà Tặng Quay Số May Mắn</h2>
+            <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+              <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                  <path d="M3 9h18"/>
+                  <path d="M9 21V9"/>
+                </svg>
+                Quà Tặng Quay Số May Mắn
+              </h2>
+            </div>
             {luckyDrawWins.length === 0 ? (
-              <div className="bg-white rounded-lg p-8 text-center text-gray-500">
+              <div className="rounded-lg p-8 text-center" style={{ background: "var(--color-bg-secondary)", color: "var(--color-text-secondary)" }}>
                 Bạn chưa trúng quay số may mắn nào
               </div>
             ) : (
               <div className="grid gap-4">
                 {luckyDrawWins.map((win) => (
-                  <div key={win.id} className="bg-white rounded-lg p-6 shadow-md">
+                  <div key={win.id} className="rounded-lg p-6 shadow-md" style={{ background: "var(--color-bg-secondary)" }}>
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <Gift size={24} className="text-orange-500" />
+                          <Gift size={24} style={{ color: 'var(--color-primary)' }} />
                           <h3 className="text-xl font-bold text-gray-900">
                             Thử thách tháng {win.challenge.month}/{win.challenge.year}
                           </h3>
@@ -399,7 +437,7 @@ export default function RewardsPage() {
                       <div>{getStatusBadge(win.status)}</div>
                     </div>
                     {win.delivered_at && (
-                      <p className="text-sm text-green-600 flex items-center gap-1">
+                      <p className="text-sm var(--color-success) flex items-center gap-1">
                         <CheckCircle size={16} />
                         Đã trao: {new Date(win.delivered_at).toLocaleDateString("vi-VN")}
                       </p>

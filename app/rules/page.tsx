@@ -106,7 +106,7 @@ export default function Rules() {
   ];
 
   return (
-    <>
+    <div className="min-h-screen bg-[var(--color-bg-secondary)]">
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Quy định CLB</h1>
@@ -119,21 +119,25 @@ export default function Rules() {
         <div className="flex gap-4 mb-8 border-b border-gray-200">
           <button
             onClick={() => setActiveTab("rewards")}
-            className={`pb-4 px-4 font-semibold transition border-b-2 ${
-              activeTab === "rewards"
-                ? "border-primary-600 text-primary-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            }`}
+            className="pb-4 px-4 font-semibold transition"
+            style={{
+              borderBottom: activeTab === "rewards" ? "2px solid var(--color-primary)" : "2px solid transparent",
+              color: activeTab === "rewards" ? "var(--color-primary)" : "#6B7280"
+            }}
+            onMouseEnter={(e) => { if (activeTab !== "rewards") e.currentTarget.style.color = "#111827"; }}
+            onMouseLeave={(e) => { if (activeTab !== "rewards") e.currentTarget.style.color = "#6B7280"; }}
           >
             Giải thưởng & Milestone
           </button>
           <button
             onClick={() => setActiveTab("fees")}
-            className={`pb-4 px-4 font-semibold transition border-b-2 ${
-              activeTab === "fees"
-                ? "border-primary-600 text-primary-600"
-                : "border-transparent text-gray-600 hover:text-gray-900"
-            }`}
+            className="pb-4 px-4 font-semibold transition"
+            style={{
+              borderBottom: activeTab === "fees" ? "2px solid var(--color-primary)" : "2px solid transparent",
+              color: activeTab === "fees" ? "var(--color-primary)" : "#6B7280"
+            }}
+            onMouseEnter={(e) => { if (activeTab !== "fees") e.currentTarget.style.color = "#111827"; }}
+            onMouseLeave={(e) => { if (activeTab !== "fees") e.currentTarget.style.color = "#6B7280"; }}
           >
             Quy định tài chính
           </button>
@@ -154,12 +158,13 @@ export default function Rules() {
                 {hmRewards.map((reward, idx) => (
                   <div
                     key={idx}
-                    className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition"
+                    className="rounded-lg border p-4 hover:shadow-md transition"
+                    style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)", boxShadow: "var(--shadow-sm)" }}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-bold">
+                          <span className="inline-block px-3 py-1 rounded-full text-sm font-bold" style={{ backgroundColor: "var(--color-info)", color: "white", opacity: 0.9 }}>
                             {reward.condition}
                           </span>
                           <span className="text-gray-500 text-sm">
@@ -169,7 +174,7 @@ export default function Rules() {
                         <p className="text-gray-600">{reward.prizeDescription}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-blue-600">
+                        <p className="text-2xl font-bold" style={{ color: "var(--color-info)" }}>
                           ₫{reward.cashAmount}
                         </p>
                       </div>
@@ -191,12 +196,13 @@ export default function Rules() {
                 {fmRewards.map((reward, idx) => (
                   <div
                     key={idx}
-                    className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition"
+                    className="rounded-lg border p-4 hover:shadow-md transition"
+                    style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)", boxShadow: "var(--shadow-sm)" }}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-1">
-                          <span className="inline-block px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm font-bold">
+                          <span className="inline-block px-3 py-1 rounded-full text-sm font-bold" style={{ backgroundColor: "var(--color-primary)", color: "white", opacity: 0.9 }}>
                             {reward.condition}
                           </span>
                           <span className="text-gray-500 text-sm">
@@ -206,7 +212,7 @@ export default function Rules() {
                         <p className="text-gray-600">{reward.prizeDescription}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold text-purple-600">
+                        <p className="text-2xl font-bold" style={{ color: "var(--color-primary)" }}>
                           ₫{reward.cashAmount}
                         </p>
                       </div>
@@ -250,7 +256,8 @@ export default function Rules() {
               {fundingRules.map((rule, idx) => (
                 <div
                   key={idx}
-                  className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-md transition"
+                  className="rounded-lg border overflow-hidden hover:shadow-md transition"
+                  style={{ background: "var(--color-bg-secondary)", borderColor: "var(--color-border)" }}
                 >
                   <div className="bg-gradient-to-r from-primary-500 to-primary-600 p-4 text-white">
                     <div className="flex items-center justify-between">
@@ -273,14 +280,14 @@ export default function Rules() {
             </div>
 
             {/* Summary Box */}
-            <div className="bg-blue-50 rounded-lg border border-blue-200 p-6">
+            <div className="rounded-lg border p-6" style={{ backgroundColor: "var(--color-bg-tertiary)", borderColor: "var(--color-info)" }}>
               <h3 className="text-lg font-bold text-gray-900 mb-4">
                 📊 Tóm tắt Tài chính
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-gray-600 text-sm mb-1">Quỹ hàng tháng</p>
-                  <p className="text-2xl font-bold text-blue-600">50,000 VND</p>
+                  <p className="text-2xl font-bold" style={{ color: "var(--color-info)" }}>50,000 VND</p>
                   <p className="text-xs text-gray-500 mt-1">/ thành viên</p>
                 </div>
                 <div>
@@ -290,7 +297,7 @@ export default function Rules() {
                 </div>
                 <div>
                   <p className="text-gray-600 text-sm mb-1">Tổng quỹ hàng năm</p>
-                  <p className="text-2xl font-bold text-green-600">~6,000,000 VND</p>
+                  <p className="text-2xl font-bold" style={{ color: "var(--color-success)" }}>~6,000,000 VND</p>
                   <p className="text-xs text-gray-500 mt-1">cho 10 thành viên</p>
                 </div>
               </div>
@@ -331,6 +338,6 @@ export default function Rules() {
           </div>
         )}
       </main>
-    </>
+    </div>
   );
 }

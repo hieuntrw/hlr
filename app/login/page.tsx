@@ -22,10 +22,21 @@ function LoginForm() {
 			console.log("Attempting login with Supabase Auth...");
 			
 			// Simple: just use Supabase client auth directly
-			const { data, error } = await supabase.auth.signInWithPassword({
-				email,
-				password,
-			});
+			// Protect against network hangs by using a timeout wrapper
+			const timeoutMs = 10000; // 10 seconds
+			let result: any;
+			try {
+				result = await Promise.race([
+					supabase.auth.signInWithPassword({ email, password }),
+					new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeoutMs)),
+				]);
+			} catch (timeoutErr: any) {
+				console.error('Login request failed or timed out:', timeoutErr);
+				setMessage('Yêu cầu đăng nhập quá lâu. Vui lòng thử lại.');
+				setLoading(false);
+				return;
+			}
+			const { data, error } = result;
 
 			if (error) {
 				console.error("Login error:", error);
@@ -47,6 +58,8 @@ function LoginForm() {
 			
 			// Redirect to destination
 			console.log("Redirecting to:", redirectTo);
+			await new Promise(resolve => setTimeout(resolve, 100));
+			setLoading(false);
 			router.push(redirectTo);
 		} catch (err: any) {
 			console.error("Login exception:", err);
@@ -66,7 +79,7 @@ function LoginForm() {
 						<input
 							value={email}
 							onChange={(e) => setEmail(e.target.value)}
-							className="mt-1 block w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition"
+							className="mt-1 block w-full border border-gray-300 rounded-lg px-4 py-3  transition"
 							type="email"
 							required
 							placeholder="example@gmail.com"
@@ -77,7 +90,7 @@ function LoginForm() {
 						<input
 							value={password}
 							onChange={(e) => setPassword(e.target.value)}
-							className="mt-1 block w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition"
+							className="mt-1 block w-full border border-gray-300 rounded-lg px-4 py-3  transition"
 							type="password"
 							required
 							placeholder="••••••••"
@@ -86,7 +99,8 @@ function LoginForm() {
 					<button
 						type="submit"
 						disabled={loading}
-						className="w-full px-4 py-3 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
+						className="w-full px-4 py-3 font-semibold rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
+					style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
 					>
 						{loading ? "Đang đăng nhập..." : "Đăng nhập"}
 					</button>
@@ -106,7 +120,7 @@ export default function LoginPage() {
 		<Suspense fallback={
 			<main className="min-h-screen bg-gray-50 flex items-center justify-center">
 				<div className="text-center">
-					<div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+					<div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
 					<p className="text-gray-600">Đang tải...</p>
 				</div>
 			</main>

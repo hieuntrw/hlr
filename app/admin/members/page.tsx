@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import { Edit, Trash2, UserPlus, X, Save } from "lucide-react";
 
 interface Member {
@@ -99,6 +100,7 @@ function formatTokenExpiry(expiresAt: string | null): string {
 }
 
 export default function MembersAdminPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
@@ -124,9 +126,10 @@ export default function MembersAdminPage() {
   const [formLoading, setFormLoading] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchMembers();
-  }, []);
+  }, [user, authLoading]);
 
   useEffect(() => {
     // Filter members by email
@@ -141,9 +144,7 @@ export default function MembersAdminPage() {
   }, [searchEmail, members]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
     if (!user) {
       router.push("/debug-login");
       return;
@@ -374,11 +375,11 @@ export default function MembersAdminPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">👥 Quản Lý Thành Viên</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>👥 Quản Lý Thành Viên</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -406,7 +407,7 @@ export default function MembersAdminPage() {
                     disabled={!!editingMember}
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${editingMember ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 ${editingMember ? 'bg-gray-100 cursor-not-allowed' : ''}`}
                     placeholder="example@gmail.com"
                   />
                 </div>
@@ -422,7 +423,7 @@ export default function MembersAdminPage() {
                         minLength={6}
                         value={formData.password}
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                         placeholder="Ít nhất 6 ký tự"
                       />
                     </>
@@ -440,7 +441,7 @@ export default function MembersAdminPage() {
                   <select
                     value={formData.role}
                     onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                   >
                     <option value="member">Thành Viên</option>
                     <option value="mod_finance">Mod Tài Chính</option>
@@ -474,7 +475,7 @@ export default function MembersAdminPage() {
                         setJoinDateDisplay(dateToDisplay(today));
                       }
                     }}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="dd/mm/yyyy"
                   />
                 </div>
@@ -491,7 +492,7 @@ export default function MembersAdminPage() {
                     required
                     value={formData.full_name}
                     onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="Nguyễn Văn A"
                   />
                 </div>
@@ -503,7 +504,7 @@ export default function MembersAdminPage() {
                     required
                     value={formData.gender}
                     onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                   >
                     <option value="">Chọn giới tính</option>
                     <option value="male">👨 Nam</option>
@@ -516,7 +517,7 @@ export default function MembersAdminPage() {
                     type="tel"
                     value={formData.phone_number}
                     onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="0912345678"
                   />
                 </div>
@@ -537,7 +538,7 @@ export default function MembersAdminPage() {
                         setFormData({ ...formData, dob: "" });
                       }
                     }}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="dd/mm/yyyy"
                   />
                 </div>
@@ -551,7 +552,7 @@ export default function MembersAdminPage() {
                     type="text"
                     value={formData.device_name}
                     onChange={(e) => setFormData({ ...formData, device_name: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="Garmin, Apple Watch, Coros..."
                   />
                 </div>
@@ -563,7 +564,7 @@ export default function MembersAdminPage() {
                     type="text"
                     value={formData.pb_hm_time}
                     onChange={(e) => setFormData({ ...formData, pb_hm_time: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="1:45:30"
                   />
                 </div>
@@ -575,7 +576,7 @@ export default function MembersAdminPage() {
                     type="text"
                     value={formData.pb_fm_time}
                     onChange={(e) => setFormData({ ...formData, pb_fm_time: e.target.value })}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2"
                     placeholder="3:45:30"
                   />
                 </div>
@@ -583,11 +584,11 @@ export default function MembersAdminPage() {
 
               {/* Strava Info - Compact version (only when editing) */}
               {editingMember && (
-                <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-300 rounded-lg p-4">
+                <div className="rounded-lg p-4" style={{ background: "linear-gradient(to right, #FEF3C7, #FDE68A)", border: "1px solid #FCD34D" }}>
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-xl">🚴</span>
-                      <h3 className="text-sm font-bold text-orange-900">Strava Connection</h3>
+                      <h3 className="text-sm font-bold" style={{ color: "var(--color-text-primary)" }}>Strava Connection</h3>
                     </div>
                     {editingMember.strava_id && (
                       <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-full font-medium">✓ Connected</span>
@@ -596,19 +597,19 @@ export default function MembersAdminPage() {
                   
                   {editingMember.strava_id ? (
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-                      <div className="bg-white rounded p-2 border border-orange-200">
+                      <div className="bg-white rounded p-2" style={{ border: "1px solid #E5E7EB" }}>
                         <div className="text-gray-500 mb-1">Strava ID</div>
                         <div className="font-mono font-semibold text-gray-900">{editingMember.strava_id}</div>
                       </div>
-                      <div className="bg-white rounded p-2 border border-orange-200">
+                      <div className="bg-white rounded p-2" style={{ border: "1px solid #E5E7EB" }}>
                         <div className="text-gray-500 mb-1">Token Status</div>
                         <div className="font-medium">{formatTokenExpiry(editingMember.strava_token_expires_at)}</div>
                       </div>
-                      <div className="bg-white rounded p-2 border border-orange-200">
+                      <div className="bg-white rounded p-2" style={{ border: "1px solid #E5E7EB" }}>
                         <div className="text-gray-500 mb-1">Access Token</div>
                         <div className="font-mono text-gray-900">{maskToken(editingMember.strava_access_token)}</div>
                       </div>
-                      <div className="bg-white rounded p-2 border border-orange-200">
+                      <div className="bg-white rounded p-2" style={{ border: "1px solid #E5E7EB" }}>
                         <div className="text-gray-500 mb-1">Refresh Token</div>
                         <div className="font-mono text-gray-900">{maskToken(editingMember.strava_refresh_token)}</div>
                       </div>
@@ -623,7 +624,7 @@ export default function MembersAdminPage() {
               )}
 
               {/* Info note - Compact */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-800">
+              <div className="rounded-lg p-3 text-xs" style={{ background: "#DBEAFE", border: "1px solid #93C5FD", color: "#1E40AF" }}>
                 💡 <strong>PB:</strong> Admin nhập = tự động duyệt. Member tự nhập = chờ duyệt.
                 {!editingMember && <span className="ml-2">🚴 <strong>Strava:</strong> Tự động đồng bộ sau khi member kết nối.</span>}
               </div>
@@ -633,7 +634,10 @@ export default function MembersAdminPage() {
                 <button
                   type="submit"
                   disabled={formLoading}
-                  className="px-6 py-2 bg-orange-600 text-white font-semibold rounded-lg hover:bg-orange-700 disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
+                  className="px-6 py-2 text-white font-semibold rounded-lg disabled:opacity-60 disabled:cursor-not-allowed transition shadow-md"
+                  style={{ background: "var(--color-primary)" }}
+                  onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.opacity = '0.9')}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                 >
                   {formLoading ? (editingMember ? "Đang lưu..." : "Đang tạo...") : (editingMember ? "💾 Lưu Thay Đổi" : "➕ Tạo Tài Khoản")}
                 </button>
@@ -691,7 +695,7 @@ export default function MembersAdminPage() {
                 value={searchEmail}
                 onChange={(e) => setSearchEmail(e.target.value)}
                 placeholder="Nhập email để tìm kiếm..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2"
               />
               {searchEmail && (
                 <button
@@ -743,13 +747,13 @@ export default function MembersAdminPage() {
                       <td className="py-3 px-4">{member.phone_number || 'N/A'}</td>
                       <td className="py-3 px-4">{formatDateSimple(member.dob)}</td>
                       <td className="py-3 px-4">
-                        <span className={member.pb_hm_approved ? 'text-green-700 font-semibold' : 'text-orange-600'}>
+                        <span className={member.pb_hm_approved ? 'text-green-700 font-semibold' : 'text-yellow-600'}>
                           {formatTime(member.pb_hm_seconds)}
                           {member.pb_hm_seconds && !member.pb_hm_approved && ' ⏳'}
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span className={member.pb_fm_approved ? 'text-green-700 font-semibold' : 'text-orange-600'}>
+                        <span className={member.pb_fm_approved ? 'text-green-700 font-semibold' : 'text-yellow-600'}>
                           {formatTime(member.pb_fm_seconds)}
                           {member.pb_fm_seconds && !member.pb_fm_approved && ' ⏳'}
                         </span>
@@ -761,8 +765,8 @@ export default function MembersAdminPage() {
                             member.role.includes("admin")
                               ? "bg-red-100 text-red-800"
                               : member.role.includes("mod")
-                              ? "bg-orange-100 text-orange-800"
-                              : "bg-orange-100 text-orange-800"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-purple-100 text-purple-800"
                           }`}
                         >
                           {getRoleLabel(member.role)}
@@ -784,7 +788,10 @@ export default function MembersAdminPage() {
                         <div className="flex items-center justify-center gap-2">
                           <button 
                             onClick={() => openEditForm(member)}
-                            className="text-orange-600 hover:text-orange-800 font-semibold flex items-center gap-1"
+                            className="font-semibold flex items-center gap-1"
+                            style={{ color: "var(--color-primary)" }}
+                            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
+                            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                             title="Sửa thông tin"
                           >
                             <Edit size={16} />

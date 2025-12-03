@@ -76,50 +76,16 @@ export async function POST(request: NextRequest) {
 
     console.log("[Strava Sync] User:", user.id);
 
-    // Get user's Strava credentials
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
-      .eq("id", user.id)
-      .single();
+    // Get valid Strava access token (auto-refreshes if expired)
+    const { getValidStravaToken } = await import("@/lib/strava-token");
+    const accessToken = await getValidStravaToken(user.id);
 
-    if (profileError || !profile?.strava_access_token) {
-      console.error("[Strava Sync] No Strava connection:", profileError);
+    if (!accessToken) {
+      console.error("[Strava Sync] No valid Strava token");
       return NextResponse.json(
-        { error: "Strava not connected" },
+        { error: "Strava not connected or token invalid" },
         { status: 400 }
       );
-    }
-
-    // Check if token is expired and refresh if needed
-    let accessToken = profile.strava_access_token;
-    const tokenExpiresAt = new Date(profile.strava_token_expires_at * 1000);
-    const now = new Date();
-
-    if (tokenExpiresAt <= now && profile.strava_refresh_token) {
-      console.log("[Strava Sync] Token expired, refreshing...");
-      
-      const refreshResponse = await fetch(`${request.nextUrl.origin}/api/strava/refresh-token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      });
-
-      if (!refreshResponse.ok) {
-        return NextResponse.json(
-          { error: "Failed to refresh token" },
-          { status: 401 }
-        );
-      }
-
-      // Get new token
-      const { data: updatedProfile } = await supabase
-        .from("profiles")
-        .select("strava_access_token")
-        .eq("id", user.id)
-        .single();
-
-      accessToken = updatedProfile?.strava_access_token || accessToken;
     }
 
     // Calculate date 40 days ago

@@ -29,6 +29,9 @@ interface RaceResultRow {
   age_group_rank?: number;
   evidence_link?: string;
   is_pr?: boolean;
+  approved?: boolean;
+  category?: string;
+  milestone_name?: string;
   profile?: { full_name: string };
 }
 
@@ -286,8 +289,8 @@ export default function AdminRaceDetailPage() {
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-orange-600 to-orange-700 flex items-center justify-center">
-                    <Activity className="text-white" />
+                  <div className="w-12 h-12 rounded-lg flex items-center justify-center gradient-theme-primary">
+                    <Activity style={{ color: "var(--color-text-inverse)" }} />
                   </div>
                   <div>
                     <h1 className="text-2xl font-bold text-gray-900">{race.name}</h1>
@@ -296,7 +299,7 @@ export default function AdminRaceDetailPage() {
                     </p>
                   </div>
                 </div>
-                <Link href="/admin/races" className="text-orange-600 font-medium">← Quay lại</Link>
+                <Link href="/admin/races" className="font-medium" style={{ color: "var(--color-primary)" }}>← Quay lại</Link>
               </div>
             </div>
           </>
@@ -385,7 +388,10 @@ export default function AdminRaceDetailPage() {
               <button
                 type="submit"
                 disabled={!form.user_id || saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-60"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-60"
+                style={{ background: "var(--color-primary)" }}
+                onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.opacity = '0.9')}
+                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
               >
                 {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
                 Lưu kết quả
@@ -427,12 +433,15 @@ export default function AdminRaceDetailPage() {
                         <td className="py-2 px-3">{r.official_rank || "-"}</td>
                         <td className="py-2 px-3">{r.age_group_rank || "-"}</td>
                         <td className="py-2 px-3">{r.is_pr ? <CheckCircle className="text-green-600" size={18} /> : "-"}</td>
-                        <td className="py-2 px-3">{r.approved ? <CheckCircle className="text-blue-600" size={18} /> : "-"}</td>
+                        <td className="py-2 px-3">{r.approved ? <CheckCircle size={18} style={{ color: "var(--color-primary)" }} /> : "-"}</td>
                         <td className="py-2 px-3">{r.milestone_name || "-"}</td>
                         <td className="py-2 px-3 text-right">
                           {(!r.approved) ? (
                             <button
-                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs"
+                              className="px-3 py-1.5 text-white rounded text-xs"
+                              style={{ background: "var(--color-primary)" }}
+                              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                               onClick={async () => {
                                 try {
                                   await supabase.from("race_results").update({ approved: true, is_pr: true }).eq("id", r.id);
@@ -462,7 +471,7 @@ export default function AdminRaceDetailPage() {
                         </td>
                         <td className="py-2 px-3">
                           {r.evidence_link ? (
-                            <a className="text-orange-600" href={r.evidence_link} target="_blank">Link</a>
+                            <a style={{ color: "var(--color-primary)" }} href={r.evidence_link} target="_blank">Link</a>
                           ) : (
                             "-"
                           )}

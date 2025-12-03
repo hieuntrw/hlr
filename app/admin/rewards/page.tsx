@@ -133,12 +133,15 @@ export default function AdminRewardsPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <Trophy className="text-orange-600" size={32} />
+            <Trophy size={32} style={{ color: "var(--color-primary)" }} />
             <h1 className="text-3xl font-bold text-gray-900">Quản lý Mốc Thưởng</h1>
           </div>
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition"
+            style={{ background: "var(--color-primary)" }}
+            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
           >
             <Plus size={20} />
             Thêm mốc thưởng
@@ -212,7 +215,10 @@ export default function AdminRewardsPage() {
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => setEditing(reward.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-orange-600 hover:bg-orange-50 rounded transition mr-2"
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded transition mr-2"
+                          style={{ color: "var(--color-primary)" }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(var(--color-primary-rgb, 249 115 22), 0.1)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                           <Edit size={16} />
                           Sửa
@@ -344,7 +350,10 @@ function RewardForm({
         </button>
         <button
           onClick={onSave}
-          className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+          className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition"
+          style={{ background: "var(--color-primary)" }}
+          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
         >
           <Save size={16} />
           Lưu

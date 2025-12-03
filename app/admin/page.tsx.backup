@@ -1,0 +1,377 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase-client";
+import Link from "next/link";
+import {
+  Users,
+  CheckCircle,
+  Wallet,
+  TrendingUp,
+  AlertCircle,
+  Calendar,
+  Target,
+} from "lucide-react";
+
+interface AdminProfile {
+  id: string;
+  full_name: string;
+  role: string;
+}
+
+interface DashboardStats {
+  pendingMembers: number;
+  pendingPBApprovals: number;
+  totalFund: number;
+  monthlyCollection: number;
+  pendingFines: number;
+  activeChallenges: number;
+  totalMembers: number;
+}
+
+export default function AdminPage() {
+  const [profile, setProfile] = useState<AdminProfile | null>(null);
+  const [stats, setStats] = useState<DashboardStats>({
+    pendingMembers: 0,
+    pendingPBApprovals: 0,
+    totalFund: 0,
+    monthlyCollection: 0,
+    pendingFines: 0,
+    activeChallenges: 0,
+    totalMembers: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [lastError, setLastError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchProfileAndStats();
+  }, []);
+
+  async function fetchProfileAndStats() {
+    setLoading(true);
+
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      console.log("[Admin Page] User from auth:", user);
+      console.log("[Admin Page] User metadata:", user?.user_metadata);
+      console.log("[Admin Page] User role from metadata:", user?.user_metadata?.role);
+
+      if (!user) {
+        console.log("[Admin Page] No user, redirecting to login");
+        window.location.href = "/login";
+        return;
+      }
+
+      // Get role from Supabase Auth metadata
+      const authRole = user.user_metadata?.role;
+      console.log("[Admin Page] Auth role:", authRole);
+
+      // Check if user has admin/mod permissions
+      const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
+      if (!authRole || !validRoles.includes(authRole)) {
+        console.log("[Admin Page] Invalid role, redirecting to dashboard");
+        window.location.href = "/dashboard";
+        return;
+      }
+
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, full_name, role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profileData) {
+        console.log("[Admin Page] Profile error:", profileError);
+        return;
+      }
+
+      setProfile({...profileData, role: authRole}); // Use auth role, not profile role
+
+      // Fetch dashboard statistics
+      await fetchStats(authRole);
+    } catch (err) {
+      console.error("[Admin Page] Unexpected error:", err);
+      setLastError(String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function fetchStats(role: string) {
+    try {
+      // Fetch total members
+      const { count: totalMembersCount, error: membersError } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("is_active", true);
+
+      if (membersError) {
+        console.error("Members count error:", membersError);
+        setLastError(`Members: ${membersError.message}`);
+      }
+
+      // Fetch active challenges (not locked)
+      const { count: activeChallengesCount, error: challengesError } = await supabase
+        .from("challenges")
+        .select("*", { count: "exact", head: true })
+        .eq("is_locked", false);
+
+      if (challengesError) {
+        console.error("Challenges count error:", challengesError);
+        setLastError(`Challenges: ${challengesError.message}`);
+      }
+
+      // Fetch pending transactions
+      const { count: pendingTransactionsCount, error: pendingError } = await supabase
+        .from("transactions")
+        .select("*", { count: "exact", head: true })
+        .eq("payment_status", "pending");
+
+      if (pendingError) {
+        console.error("Pending transactions error:", pendingError);
+        setLastError(`Pending: ${pendingError.message}`);
+      }
+
+      // Calculate fund balance from approved transactions
+      const { data: fundData, error: fundError } = await supabase
+        .from("transactions")
+        .select("amount, type")
+        .eq("payment_status", "paid");
+
+      if (fundError) {
+        console.error("Fund data error:", fundError);
+        setLastError(`Fund: ${fundError.message}`);
+      }
+
+      let totalFund = 0;
+      if (fundData) {
+        fundData.forEach((t) => {
+          if (t.type === "fund_collection" || t.type === "fine" || t.type === "donation") {
+            totalFund += t.amount;
+          } else if (t.type === "expense" || t.type === "reward_payout") {
+            totalFund -= t.amount;
+          }
+        });
+      }
+
+      setStats({
+        pendingMembers: 0, // TODO: implement when status column is added
+        pendingPBApprovals: 0, // TODO: implement when approval columns are added
+        totalFund: totalFund,
+        monthlyCollection: 0, // TODO: calculate current month
+        pendingFines: pendingTransactionsCount || 0,
+        activeChallenges: activeChallengesCount || 0,
+        totalMembers: totalMembersCount || 0,
+      });
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+      setLastError(String(err));
+      // Set default stats on error
+      setStats({
+        pendingMembers: 0,
+        pendingPBApprovals: 0,
+        totalFund: 0,
+        monthlyCollection: 0,
+        pendingFines: 0,
+        activeChallenges: 0,
+        totalMembers: 0,
+      });
+    }
+  }
+
+  const getRoleLabel = (role: string): string => {
+    const labels: { [key: string]: string } = {
+      admin: "Super Admin",
+      mod_finance: "Mod Tài Chính",
+      mod_challenge: "Mod Thử Thách",
+      mod_member: "Mod Thành Viên",
+    };
+    return labels[role] || role;
+  };
+
+  const formatCurrency = (amount: number): string => {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency: "VND",
+    }).format(amount);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderBottomColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) return null;
+
+  const hasFinanceAccess = ["admin", "mod_finance"].includes(profile.role);
+  const hasMemberAccess = ["admin", "mod_member"].includes(profile.role);
+  const hasChallengeAccess = ["admin", "mod_challenge"].includes(profile.role);
+
+  return (
+    <div className="space-y-6">
+      {/* Debug Panel (only visible when lastError exists) */}
+      {lastError && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-3 text-sm">
+          <div className="font-semibold">Debug:</div>
+          <div>Role: {profile?.role || "unknown"}</div>
+          <div>Error: {lastError}</div>
+        </div>
+      )}
+      {/* Header */}
+      <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center gradient-theme-primary">
+            <Users className="text-white" size={32} />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>Dashboard {getRoleLabel(profile.role)}</h1>
+            <p style={{ color: "var(--color-text-secondary)" }}>Chào mừng trở lại, {profile.full_name}!</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Pending Members Widget */}
+        {hasMemberAccess && (
+          <Link href="/admin/members">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-primary)" }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Users style={{ color: "var(--color-primary)" }} size={24} />
+                </div>
+                {stats.pendingMembers > 0 && (
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "var(--color-bg-primary)", color: "var(--color-primary)" }}>
+                    {stats.pendingMembers}
+                  </span>
+                )}
+              </div>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Thành Viên Chờ Duyệt</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.pendingMembers}</p>y)" }}>{stats.pendingMembers}</p>
+              {stats.pendingMembers > 0 && (
+                <p className="text-xs mt-2 flex items-center gap-1" style={{ color: "var(--color-primary)" }}>
+                  <AlertCircle size={14} />
+                  Cần xử lý
+                </p>
+              )}
+            </div>
+          </Link>
+        )}
+
+        {/* Pending PB Approvals Widget */}
+        {hasMemberAccess && (
+          <Link href="/admin/pb-approval">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-success)" }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <CheckCircle style={{ color: "var(--color-success)" }} size={24} />
+                </div>
+                {stats.pendingPBApprovals > 0 && (
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "var(--color-bg-primary)", color: "var(--color-success)" }}>
+                    {stats.pendingPBApprovals}
+                  </span>
+                )}
+              </div>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>PB Chờ Duyệt</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.pendingPBApprovals}</p>
+              {stats.pendingPBApprovals > 0 && (
+                <p className="text-xs mt-2 flex items-center gap-1" style={{ color: "var(--color-success)" }}>
+                  <AlertCircle size={14} />
+                  Cần xử lý
+                </p>
+              )}
+            </div>
+          </Link>
+        )}
+
+        {/* Fund Status Widget */}
+        {hasFinanceAccess && (
+          <Link href="/admin/finance">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-primary)" }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Wallet style={{ color: "var(--color-primary)" }} size={24} />
+                </div>
+                <TrendingUp style={{ color: "var(--color-primary)" }} size={20} />
+              </div>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Tổng Quỹ</h3>
+              <p className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{formatCurrency(stats.totalFund)}</p>
+              <p className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
+            </div>
+          </Link>
+        )}
+
+        {/* Active Challenges Widget */}
+        {hasChallengeAccess && (
+          <Link href="/admin/challenges">
+            <div className="rounded-lg shadow-md p-6 hover:shadow-xl transition-shadow cursor-pointer border-l-4" style={{ background: "var(--color-bg-secondary)", borderLeftColor: "var(--color-accent)" }}>
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                  <Target style={{ color: "var(--color-primary)" }} size={24} />
+                </div>
+              </div>
+              <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Thử Thách Đang Diễn Ra</h3>
+              <p className="text-3xl font-bold" style={{ color: "var(--color-text-primary)" }}>{stats.activeChallenges}</p>
+              <p className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>Tổng thành viên: {stats.totalMembers}</p>
+            </div>
+          </Link>
+        )}
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Pending Fines */}
+        {hasFinanceAccess && stats.pendingFines > 0 && (
+          <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
+                <AlertCircle style={{ color: "var(--color-error)" }} size={20} />
+              </div>
+              <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Phạt Chờ Xử Lý</h3>
+            </div>
+            <p className="mb-4" style={{ color: "var(--color-text-secondary)" }}>
+              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
+            </p>
+            <Link
+              href="/admin/finance"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
+              style={{ background: "var(--color-error)", color: "var(--color-text-inverse)" }}
+            >
+              Xử lý ngay →
+            </Link>
+          </div>
+        )}
+
+        {/* System Info */}
+        <div className="rounded-lg shadow-md p-6 border-l-4" style={{ background: "var(--color-bg-primary)", borderLeftColor: "var(--color-primary)" }}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-secondary)" }}>
+              <Calendar style={{ color: "var(--color-primary)" }} size={20} />
+            </div>
+            <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Thông Tin Hệ Thống</h3>
+          </div>
+          <div className="space-y-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+            <p>
+              <strong>Tổng thành viên:</strong> {stats.totalMembers}
+            </p>
+            <p>
+              <strong>Thử thách đang chạy:</strong> {stats.activeChallenges}
+            </p>
+            <p>
+              <strong>Vai trò của bạn:</strong> {getRoleLabel(profile.role)}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

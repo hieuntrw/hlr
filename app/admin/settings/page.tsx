@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 
 interface SystemSetting {
   key: string;
@@ -12,6 +13,7 @@ interface SystemSetting {
 }
 
 export default function SettingsPage() {
+  const { user, isAdmin, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,14 +21,13 @@ export default function SettingsPage() {
   const [editingValue, setEditingValue] = useState("");
 
   useEffect(() => {
+    if (authLoading) return;
     checkRole();
     fetchSettings();
-  }, []);
+  }, [user, authLoading]);
 
   async function checkRole() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // user from AuthContext
     if (!user) {
       router.push("/debug-login");
       return;
@@ -83,11 +84,11 @@ export default function SettingsPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-gradient-to-r from-orange-600 to-orange-700 text-white py-6 px-4">
+      <div className="py-6 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold">⚙️ Cài Đặt Hệ Thống</h1>
-            <Link href="/admin" className="text-blue-100 hover:text-white">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>⚙️ Cài Đặt Hệ Thống</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
               ← Quay lại
             </Link>
           </div>
@@ -118,7 +119,7 @@ export default function SettingsPage() {
               <tbody>
                 {settings.map((setting) => (
                   <tr key={setting.key} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-mono text-orange-600">{setting.key}</td>
+                    <td className="py-3 px-4 font-mono" style={{ color: "var(--color-primary)" }}>{setting.key}</td>
                     <td className="py-3 px-4 text-gray-700">{setting.description}</td>
                     <td className="py-3 px-4">
                       {editingKey === setting.key ? (
@@ -154,7 +155,10 @@ export default function SettingsPage() {
                             setEditingKey(setting.key);
                             setEditingValue(setting.value);
                           }}
-                          className="px-3 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs font-semibold rounded transition-colors"
+                          className="px-3 py-1 text-white text-xs font-semibold rounded transition-colors"
+                          style={{ background: "var(--color-primary)" }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                         >
                           ✏️ Sửa
                         </button>
@@ -171,9 +175,9 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="mt-8 bg-orange-50 rounded-lg p-6 border-l-4 border-orange-500">
-          <h3 className="font-bold text-blue-900 mb-2">📌 Cài Đặt Hiện Có</h3>
-          <ul className="text-sm text-orange-800 space-y-1">
+        <div className="mt-8 rounded-lg p-6 border-l-4" style={{ background: "var(--color-info-bg, #FEF3C7)", borderColor: "var(--color-primary)" }}>
+          <h3 className="font-bold mb-2" style={{ color: "var(--color-text-primary)" }}>📌 Cài Đặt Hiện Có</h3>
+          <ul className="text-sm space-y-1" style={{ color: "var(--color-text-secondary)" }}>
             <li>• <strong>monthly_fund_fee:</strong> Mức đóng quỹ hàng tháng (VND)</li>
             <li>• <strong>challenge_fine_fee:</strong> Mức phạt không hoàn thành thử thách (VND)</li>
           </ul>

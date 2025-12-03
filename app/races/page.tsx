@@ -70,7 +70,8 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
   return (
     <div
       onClick={onClick}
-      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      className="rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+      style={{ background: "var(--color-bg-secondary)", boxShadow: "var(--shadow-md)" }}
     >
       {race.image_url && (
         <div className="relative w-full h-40 overflow-hidden bg-gray-200">
@@ -83,9 +84,9 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
       )}
 
       <div className="p-4">
-        <h3 className="text-lg font-bold text-gray-900 mb-3">{race.name}</h3>
+        <h3 className="text-lg font-bold mb-3" style={{ color: "var(--color-text-primary)" }}>{race.name}</h3>
 
-        <div className="space-y-2 text-sm text-gray-600">
+        <div className="space-y-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>
           <p className="flex items-center gap-2">
             <Calendar size={20} className="text-gray-600" />
             <span>{formatDate(race.race_date)}</span>
@@ -97,7 +98,7 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <span className="text-sm font-semibold text-blue-600">Chi tiết →</span>
+          <span className="text-sm font-semibold" style={{ color: "var(--color-primary)" }}>Chi tiết →</span>
         </div>
       </div>
     </div>
@@ -203,10 +204,10 @@ export default function RacesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-[var(--color-bg-secondary)]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải dữ liệu...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
         </div>
       </div>
     );
@@ -216,7 +217,7 @@ export default function RacesPage() {
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-8 px-4">
+        <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
           <div className="max-w-7xl mx-auto">
             <button
               onClick={() => {
@@ -224,7 +225,8 @@ export default function RacesPage() {
                 setRaceResults([]);
                 setRewards([]);
               }}
-              className="text-blue-100 hover:text-white mb-4 inline-block"
+              className="hover:opacity-80 mb-4 inline-block"
+              style={{ color: "var(--color-text-inverse)" }}
             >
               ← Quay lại
             </button>
@@ -242,8 +244,8 @@ export default function RacesPage() {
           {resultsLoading ? (
             <div className="flex items-center justify-center py-20">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600">Đang tải kết quả...</p>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
+                <p style={{ color: "var(--color-text-secondary)" }}>Đang tải kết quả...</p>
               </div>
             </div>
           ) : (
@@ -251,16 +253,23 @@ export default function RacesPage() {
               {/* Results by Distance */}
               {raceResults.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Activity size={28} /> Kết Quả Giải Chạy</h2>
+                  <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                    <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                      </svg>
+                      Kết Quả Giải Chạy
+                    </h2>
+                  </div>
 
                   {/* Group by distance */}
                   {Array.from(new Set(raceResults.map((r) => r.distance))).map((distance) => (
                     <div key={distance} className="mb-8">
-                      <h3 className="text-xl font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-300">
+                      <h3 className="text-xl font-bold mb-4 pb-2" style={{ color: "var(--color-text-primary)", borderBottom: "2px solid var(--color-border)" }}>
                         {distance} Cự Ly
                       </h3>
 
-                      <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+                      <div className="rounded-lg shadow-md overflow-x-auto" style={{ background: "var(--color-bg-secondary)", boxShadow: "var(--shadow-md)" }}>
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="border-b-2 border-gray-300 bg-gray-50">
@@ -286,7 +295,7 @@ export default function RacesPage() {
                                       ) : idx === 1 ? (
                                         <Medal size={24} className="text-gray-400" />
                                       ) : idx === 2 ? (
-                                        <Medal size={24} className="text-orange-600" />
+                                        <Medal size={24} style={{ color: "var(--color-primary)" }} />
                                       ) : (
                                         <span className="font-bold text-gray-600">#{idx + 1}</span>
                                       )}
@@ -314,7 +323,7 @@ export default function RacesPage() {
                                     </div>
                                   </td>
                                   <td className="py-3 px-4 text-right">
-                                    <span className="font-bold text-blue-600">
+                                    <span className="font-bold" style={{ color: "var(--color-primary)" }}>
                                       {formatTime(result.chip_time_seconds)}
                                     </span>
                                   </td>
@@ -341,13 +350,20 @@ export default function RacesPage() {
               {/* Reward Table */}
               {rewards.length > 0 && (
                 <div className="mb-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2"><Trophy size={28} className="text-yellow-500" /> Bảng Quy Đổi Giải Thưởng</h2>
+                  <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
+                    <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
+                      <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                      </svg>
+                      Bảng Quy Đổi Giải Thưởng
+                    </h2>
+                  </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     {/* Half Marathon Rewards */}
-                    {rewards.filter((r) => r.category === "HM").length > 0 && (
-                      <div className="bg-white rounded-lg shadow-md p-6">
-                        <h3 className="text-xl font-bold text-blue-600 mb-4">
+                    {rewards.filter((r) => r.category === "PODIUM").length > 0 && (
+                      <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
+                        <h3 className="text-xl font-bold mb-4" style={{ color: "var(--color-primary)" }}>
                           <Activity size={18} /> Half Marathon (21km)
                         </h3>
 
@@ -357,7 +373,10 @@ export default function RacesPage() {
                             .map((reward) => (
                               <div
                                 key={reward.id}
-                                className="flex items-start gap-4 p-3 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                                className="flex items-start gap-4 p-3 rounded-lg transition-colors"
+                                style={{ border: "1px solid var(--color-border)", background: "var(--color-bg-secondary)" }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.95'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                               >
                                 <div className="flex-1">
                                   <div className="font-bold text-gray-900">
@@ -378,8 +397,8 @@ export default function RacesPage() {
 
                     {/* Full Marathon Rewards */}
                     {rewards.filter((r) => r.category === "FM").length > 0 && (
-                      <div className="bg-white rounded-lg shadow-md p-6">
-                        <h3 className="text-xl font-bold text-purple-600 mb-4">
+                      <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
+                        <h3 className="text-xl font-bold mb-4" style={{ color: "var(--color-primary)" }}>
                           <Activity size={18} /> Full Marathon (42km)
                         </h3>
 
@@ -389,7 +408,10 @@ export default function RacesPage() {
                             .map((reward) => (
                               <div
                                 key={reward.id}
-                                className="flex items-start gap-4 p-3 border border-purple-200 rounded-lg hover:bg-purple-50 transition-colors"
+                                className="flex items-start gap-4 p-3 rounded-lg transition-colors"
+                                style={{ border: "1px solid var(--color-border)", background: "var(--color-bg-secondary)" }}
+                                onMouseEnter={(e) => e.currentTarget.style.opacity = '0.95'}
+                                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                               >
                                 <div className="flex-1">
                                   <div className="font-bold text-gray-900">
@@ -409,8 +431,8 @@ export default function RacesPage() {
                     )}
                   </div>
 
-                  <p className="text-sm text-gray-600 mt-6 p-4 bg-blue-50 rounded-lg flex items-start gap-2">
-                    <Lightbulb size={20} className="text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm mt-6 p-4 rounded-lg flex items-start gap-2" style={{ background: "var(--color-info-bg, #DBEAFE)", color: "var(--color-text-secondary)" }}>
+                    <Lightbulb size={20} className="flex-shrink-0 mt-0.5" style={{ color: "var(--color-info, #2563EB)" }} />
                     <span>
                       <strong>Hướng dẫn:</strong> Tra cứu thành tích của bạn để xem mình đạt mốc nào và sẽ nhận được giải thưởng gì.
                       Những thành tích có dấu <Star size={14} className="inline text-yellow-400 fill-yellow-400" /> là những kỷ lục cá nhân (PR).
@@ -420,8 +442,8 @@ export default function RacesPage() {
               )}
 
               {raceResults.length === 0 && rewards.length === 0 && (
-                <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-                  <p className="text-gray-500 text-lg">Chưa có dữ liệu cho race này</p>
+                <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: "var(--color-bg-secondary)" }}>
+                  <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Chưa có dữ liệu cho race này</p>
                 </div>
               )}
             </>
@@ -433,7 +455,7 @@ export default function RacesPage() {
 
   return (
     <div>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-[var(--color-bg-secondary)]">
         {/* Main Content */}
         <div className="max-w-7xl mx-auto px-4 py-8">
           {races.length > 0 ? (
@@ -447,8 +469,8 @@ export default function RacesPage() {
               ))}
             </div>
           ) : (
-            <div className="bg-white rounded-lg p-12 text-center shadow-sm">
-              <p className="text-gray-500 text-lg">Chưa có race nào</p>
+            <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: "var(--color-bg-secondary)" }}>
+              <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Chưa có race nào</p>
             </div>
           )}
         </div>
