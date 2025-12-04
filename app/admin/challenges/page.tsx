@@ -94,26 +94,53 @@ export default function ChallengesAdminPage() {
     }
 
     try {
-      const { error } = await supabase.from("challenges").insert({
-        title: formData.title,
-        start_date: formData.start_date,
-        end_date: formData.end_date,
-        password: Math.random().toString(36).substring(7),
+      const res = await fetch('/api/admin/challenges', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: formData.title,
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+        }),
+        credentials: 'same-origin',
       });
 
-      if (error) {
-        console.error("Error:", error);
-        alert("Lỗi khi tạo thử thách");
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Create challenge error:', json);
+        alert(json.error || 'Lỗi khi tạo thử thách');
         return;
       }
 
-      alert("Tạo thử thách thành công!");
-      setFormData({ title: "", start_date: "", end_date: "" });
+      alert('Tạo thử thách thành công!');
+      setFormData({ title: '', start_date: '', end_date: '' });
       setShowForm(false);
       fetchChallenges();
     } catch (err) {
-      console.error("Error:", err);
-      alert("Có lỗi xảy ra");
+      console.error('Error:', err);
+      alert('Có lỗi xảy ra');
+    }
+  }
+
+  async function handleLockToggle(challengeId: string, lock: boolean) {
+    try {
+      const res = await fetch(`/api/admin/challenges/${challengeId}/lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lock }),
+        credentials: 'same-origin',
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Lock toggle error:', json);
+        alert(json.error || 'Lỗi khi cập nhật');
+        return;
+      }
+      fetchChallenges();
+    } catch (err) {
+      console.error('Error:', err);
+      alert('Có lỗi xảy ra');
     }
   }
 
@@ -253,15 +280,21 @@ export default function ChallengesAdminPage() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-center">
-                      <Link
-                        href={`/challenges/${challenge.id}`}
-                        className="font-semibold"
-                        style={{ color: "var(--color-primary)" }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                      >
-                        Xem
-                      </Link>
+                      <div className="flex items-center justify-center gap-2">
+                        <Link
+                          href={`/challenges/${challenge.id}`}
+                          className="font-semibold"
+                          style={{ color: "var(--color-primary)" }}
+                        >
+                          Xem
+                        </Link>
+                        <button
+                          onClick={() => handleLockToggle(challenge.id, !challenge.is_locked)}
+                          className="py-1 px-2 rounded-md bg-gray-100 text-sm"
+                        >
+                          {challenge.is_locked ? 'Mở Khóa' : 'Khóa'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
