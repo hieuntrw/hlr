@@ -55,33 +55,24 @@ export async function GET(request: NextRequest) {
       }
 
       const ids = (parts || []).map((p: any) => p.challenge_id).filter(Boolean);
-      if (ids.length === 0) return NextResponse.json({ challenges: [], page, pageSize, hasMore: false });
-
-        // Paginate client-side over the list of participation ids to avoid
-        // sending very large `IN (...)` clauses to Postgres. This also keeps
-        // the ordering consistent with `challenge_participants.created_at`.
         const total = ids.length;
-        const totalPages = Math.ceil(total / pageSize);
-        const hasMore = ids.length > (page + 1) * pageSize;
-
-        const pageIds = ids.slice(start, end + 1);
-        if (pageIds.length === 0) return NextResponse.json({ challenges: [], page, pageSize, hasMore, total, totalPages });
+        if (total === 0) return NextResponse.json({ challenges: [], page: 0, pageSize: 0, hasMore: false, total: 0, totalPages: 0 });
 
         const { data, error } = await supabase
           .from('challenges')
           .select('id, title, start_date, end_date, status, is_locked, created_at')
-          .in('id', pageIds);
+          .in('id', ids);
 
         if (error) {
           console.error('GET /api/challenges error (my)', error);
           return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        // Order results to match pageIds
+        // Order results to match participation order
         const dataMap: Record<string, any> = {};
         (data || []).forEach((d: any) => { dataMap[d.id] = d; });
-        const ordered = pageIds.map((id: string) => dataMap[id]).filter(Boolean);
-        return NextResponse.json({ challenges: ordered, page, pageSize, hasMore, total, totalPages });
+        const ordered = ids.map((id: string) => dataMap[id]).filter(Boolean);
+        return NextResponse.json({ challenges: ordered, page: 0, pageSize: total, hasMore: false, total, totalPages: 1 });
     }
 
     // Public listing
