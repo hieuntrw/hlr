@@ -68,15 +68,10 @@ function ChallengeListItem({ challenge }: { challenge: ChallengeWithParticipatio
 export default function ChallengesPage() {
   // Temporarily disable pagination by requesting a large page size.
   // This returns the full list for both 'my' and 'all' tabs in most cases.
-  const PAGE_SIZE = 10000;
   const { user, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
-  const [page, setPage] = useState(0);
   const [items, setItems] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [total, setTotal] = useState<number | null>(null);
-  const [totalPages, setTotalPages] = useState<number | null>(null);
   // no auth prompt needed: page requires auth to access
 
   const currentUser = user?.id || null;
@@ -84,30 +79,20 @@ export default function ChallengesPage() {
   useEffect(() => {
     if (authLoading) return;
     // reset when tab or user changes
-    setPage(0);
     setItems([]);
-    setHasMore(false);
-    setTotal(null);
-    setTotalPages(null);
-    
     if (activeTab === 'my' && !currentUser) {
       setLoading(false);
       return;
     }
-    fetchPage(0, false);
+    fetchPage();
   }, [activeTab, currentUser, authLoading]);
 
   async function fetchPage(requestPage = 0, append = false) {
     setLoading(true);
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
-      const params = new URLSearchParams();
-      params.set('page', String(requestPage));
-      params.set('pageSize', String(PAGE_SIZE));
-      // Do not send an explicit `my=true` parameter. If the user is signed-in
-      // we keep `credentials: 'same-origin'` so the server can detect the
-      // session and return the personal list without an explicit param.
-      const resp = await fetch(`${base}/api/challenges?${params.toString()}`, { credentials: activeTab === 'my' ? 'same-origin' : 'omit' });
+      // Request the full list; server no longer uses page/pageSize.
+      const resp = await fetch(`${base}/api/challenges`, { credentials: activeTab === 'my' ? 'same-origin' : 'omit' });
       if (!resp.ok) {
         console.error('Failed to fetch challenges', resp.status);
         if (!append) setItems([]);
@@ -118,21 +103,15 @@ export default function ChallengesPage() {
 
       const json = await resp.json();
       const loaded: ChallengeWithParticipation[] = (json.challenges || []).map((c: any) => ({ ...c, user_participates: activeTab === 'my' }));
-      setHasMore(!!json.hasMore);
-      setTotal(typeof json.total === 'number' ? json.total : null);
-      setTotalPages(typeof json.totalPages === 'number' ? json.totalPages : null);
       setItems(prev => append ? prev.concat(loaded) : loaded);
-      setPage(requestPage);
     } catch (e) {
       console.error('Error fetching page', e);
       if (!append) setItems([]);
-      setHasMore(false);
+      
     } finally {
       setLoading(false);
     }
   }
-
-  const loadMore = () => fetchPage(page + 1, true);
 
   const shown = items.length;
 
@@ -150,7 +129,7 @@ export default function ChallengesPage() {
             </button>
           </div>
           <div className="text-sm text-[var(--color-text-secondary)]">
-            {total !== null ? `Hiển thị ${shown} / ${total}` : `Hiển thị ${shown}`}{totalPages ? ` • Trang ${page + 1} / ${totalPages}` : ''}
+            {`Hiển thị ${shown}`}
           </div>
         </div>
 

@@ -4,12 +4,11 @@ import { createServerClient } from '@supabase/ssr';
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
-    const page = Number(url.searchParams.get('page') || '0');
-    const pageSize = Number(url.searchParams.get('pageSize') || '12');
+    // Pagination removed: always return full lists. The server will detect
+    // an authenticated session for the personal view; the client should not
+    // send `page`/`pageSize` anymore.
     const myParam = url.searchParams.get('my');
     let my = myParam === 'true';
-    const start = page * pageSize;
-    const end = start + pageSize - 1;
 
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -56,7 +55,7 @@ export async function GET(request: NextRequest) {
 
       const ids = (parts || []).map((p: any) => p.challenge_id).filter(Boolean);
         const total = ids.length;
-        if (total === 0) return NextResponse.json({ challenges: [], page: 0, pageSize: 0, hasMore: false, total: 0, totalPages: 0 });
+        if (total === 0) return NextResponse.json({ challenges: [] });
 
         const { data, error } = await supabase
           .from('challenges')
@@ -72,35 +71,20 @@ export async function GET(request: NextRequest) {
         const dataMap: Record<string, any> = {};
         (data || []).forEach((d: any) => { dataMap[d.id] = d; });
         const ordered = ids.map((id: string) => dataMap[id]).filter(Boolean);
-        return NextResponse.json({ challenges: ordered, page: 0, pageSize: total, hasMore: false, total, totalPages: 1 });
+        return NextResponse.json({ challenges: ordered });
     }
+      // Public listing: return the full list (no pagination)
+      const { data, error } = await supabase
+        .from('challenges')
+        .select('id, title, start_date, end_date, status, is_locked, created_at')
+        .order('start_date', { ascending: false });
 
-    // Public listing
-    const { data, error } = await supabase
-      .from('challenges')
-      .select('id, title, start_date, end_date, status, is_locked, created_at')
-      .order('start_date', { ascending: false })
-      .range(start, end);
+      if (error) {
+        console.error('GET /api/challenges error', error);
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
 
-    if (error) {
-      console.error('GET /api/challenges error', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    // Get total count (exact) for clients that need it
-    let total = 0;
-    try {
-      const countRes = await supabase.from('challenges').select('id', { count: 'exact', head: true });
-      // supabase-js returns `count` on the response object when head=true
-      // @ts-ignore
-      total = countRes?.count ?? 0;
-    } catch (e) {
-      console.warn('Could not fetch total count for challenges', e);
-    }
-
-    const hasMore = (data || []).length === pageSize;
-    const totalPages = Math.ceil((total || 0) / pageSize);
-    return NextResponse.json({ challenges: data || [], page, pageSize, hasMore, total, totalPages });
+      return NextResponse.json({ challenges: data || [] });
   } catch (err: any) {
     console.error('GET /api/challenges exception', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
