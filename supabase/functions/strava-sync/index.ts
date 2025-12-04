@@ -242,15 +242,28 @@ export default async function handler(req: Request) {
         }
 
         // 7) Update participant
+        // Build update payload: keep existing fields for compatibility
+        // and write new cached aggregate columns added by migration.
+        const completionRate = participant.target_km
+          ? Math.round((totalKm / Number(participant.target_km)) * 10000) / 100
+          : 0;
+
+        const isCompleted = participant.target_km ? totalKm >= Number(participant.target_km) : false;
+
         const updatePayload: any = {
+          // legacy fields
           actual_km: totalKm,
           avg_pace_seconds: avgPaceSeconds,
           total_activities: totalActivities,
+          status: isCompleted ? 'completed' : undefined,
           last_synced_at: new Date().toISOString(),
+
+          // new cached aggregate columns (migration `add_challenge_participant_aggregates`)
+          total_km: totalKm,
+          valid_activities_count: totalActivities,
+          completion_rate: completionRate,
+          completed: isCompleted,
         };
-        if (participant.target_km && totalKm >= Number(participant.target_km)) {
-          updatePayload.status = 'completed';
-        }
 
         const updPartUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/challenge_participants?id=eq.${participant.id}`;
         const updRes = await fetch(updPartUrl, {
@@ -263,13 +276,28 @@ export default async function handler(req: Request) {
           console.error('[supabase/function] participant update failed:', updRes.status, txt);
         }
 
-        // 8) Call recalc helper RPC if available
-        const rpcUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rpc/recalc_challenge_participant_status`;
-        await fetch(rpcUrl, {
-          method: 'POST',
-          headers: adminHeaders,
-          body: JSON.stringify({ p_participant_id: participant.id }),
-        });
+        // 8) Call DB-side RPC to recalc cached aggregates if available
+        // Prefer the new RPC `recalc_challenge_participant_aggregates(p_challenge_id, p_participant_id)`
+        try {
+          const rpcUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rpc/recalc_challenge_participant_aggregates`;
+          await fetch(rpcUrl, {
+            method: 'POST',
+            headers: adminHeaders,
+            body: JSON.stringify({ p_challenge_id: challenge.id, p_participant_id: participant.id }),
+          });
+        } catch (rpcErr) {
+          // Fallback: try the older RPC name if present (keeps backward compatibility)
+          try {
+            const rpcUrlOld = `${SUPABASE_URL.replace(/\/$/, '')}/rpc/recalc_challenge_participant_status`;
+            await fetch(rpcUrlOld, {
+              method: 'POST',
+              headers: adminHeaders,
+              body: JSON.stringify({ p_participant_id: participant.id }),
+            });
+          } catch (e) {
+            console.debug('[supabase/function] No recalc RPC available', e);
+          }
+        }
 
         return { user_id: userId, success: true, totalKm, totalActivities };
       } catch (err: any) {
