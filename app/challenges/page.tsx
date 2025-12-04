@@ -66,7 +66,9 @@ function ChallengeListItem({ challenge }: { challenge: ChallengeWithParticipatio
 }
 
 export default function ChallengesPage() {
-  const PAGE_SIZE = 12;
+  // Temporarily disable pagination by requesting a large page size.
+  // This returns the full list for both 'my' and 'all' tabs in most cases.
+  const PAGE_SIZE = 10000;
   const { user, isLoading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
   const [page, setPage] = useState(0);
@@ -159,11 +161,7 @@ export default function ChallengesPage() {
             <ul className="space-y-4">
               {items.map(i => <ChallengeListItem key={i.id} challenge={i} />)}
             </ul>
-            {hasMore && (
-              <div className="mt-6 text-center">
-                <button onClick={loadMore} className="px-4 py-2 rounded text-white" style={{ background: 'var(--color-primary)' }}>Tải thêm</button>
-              </div>
-            )}
+            {/* Pagination temporarily disabled — full list requested via large PAGE_SIZE */}
           </div>
         ) : (
           <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: 'var(--color-bg-secondary)' }}>
