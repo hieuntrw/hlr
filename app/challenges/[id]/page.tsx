@@ -218,40 +218,23 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
     setRegistering(true);
 
     try {
-      if (userParticipation) {
-        // Update existing participation
-        const { error } = await supabase
-          .from("challenge_participants")
-          .update({ target_km: selectedTarget })
-          .eq("id", userParticipation.id);
+      // Use server-side API to join/update participation (server validates session)
+      const res = await fetch(`/api/challenges/${params.id}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target_km: selectedTarget }),
+        credentials: "same-origin",
+      });
 
-        if (error) {
-          console.error("Error updating participation:", error);
-          alert("Lỗi khi cập nhật mục tiêu");
-        } else {
-          alert("Cập nhật mục tiêu thành công!");
-          setUserParticipation({ ...userParticipation, target_km: selectedTarget });
-          setShowRegisterModal(false);
-        }
+      const json = await res.json();
+      if (!res.ok) {
+        console.error("Join API error:", json);
+        alert(json.error || "Lỗi khi đăng ký thử thách");
       } else {
-        // Create new participation
-        const { error } = await supabase.from("challenge_participants").insert({
-          challenge_id: params.id,
-          user_id: currentUser,
-          target_km: selectedTarget,
-          actual_km: 0,
-          avg_pace_seconds: 0,
-          total_activities: 0,
-        });
-
-        if (error) {
-          console.error("Error registering:", error);
-          alert("Lỗi khi đăng ký thử thách");
-        } else {
-          alert("Đăng ký thử thách thành công!");
-          setShowRegisterModal(false);
-          fetchData();
-        }
+        alert(userParticipation ? "Cập nhật mục tiêu thành công!" : "Đăng ký thử thách thành công!");
+        setShowRegisterModal(false);
+        // Refresh data to reflect new participation
+        await fetchData();
       }
     } catch (err) {
       console.error("Error:", err);

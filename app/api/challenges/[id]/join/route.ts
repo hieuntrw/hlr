@@ -51,21 +51,36 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     if (existing) {
-      return NextResponse.json({ message: 'Already joined' });
+      // Update existing participation's target_km
+      const { data: updated, error: updateErr } = await supabaseAuth
+        .from('challenge_participants')
+        .update({ target_km })
+        .eq('id', existing.id)
+        .select()
+        .maybeSingle();
+
+      if (updateErr) {
+        console.error('POST /api/challenges/[id]/join update error', updateErr);
+        return NextResponse.json({ error: updateErr.message }, { status: 500 });
+      }
+
+      return NextResponse.json({ participant: updated });
     }
 
     const { data, error } = await supabaseAuth
       .from('challenge_participants')
       .insert([
         { challenge_id: id, user_id, target_km }
-      ]);
+      ])
+      .select()
+      .maybeSingle();
 
     if (error) {
       console.error('POST /api/challenges/[id]/join error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ participant: data?.[0] });
+    return NextResponse.json({ participant: data });
   } catch (err: any) {
     console.error('POST /api/challenges/[id]/join exception', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
