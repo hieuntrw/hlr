@@ -53,25 +53,65 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: partError.message }, { status: 500 });
       }
 
-      const ids = (parts || []).map((p: any) => p.challenge_id).filter(Boolean);
-        const total = ids.length;
-        if (total === 0) return NextResponse.json({ challenges: [] });
-
-        const { data, error } = await supabase
-          .from('challenges')
-          .select('id, title, start_date, end_date, status, is_locked, created_at')
-          .in('id', ids);
-
-        if (error) {
-          console.error('GET /api/challenges error (my)', error);
-          return NextResponse.json({ error: error.message }, { status: 500 });
+      // Deduplicate ids and preserve order (first occurrence kept)
+      const rawIds = (parts || []).map((p: any) => p.challenge_id).filter(Boolean);
+      const seen = new Set<string>();
+      const ids: string[] = [];
+      for (const id of rawIds) {
+        if (!seen.has(id)) {
+          seen.add(id);
+          ids.push(id);
         }
+      }
 
-        // Order results to match participation order
-        const dataMap: Record<string, any> = {};
-        (data || []).forEach((d: any) => { dataMap[d.id] = d; });
-        const ordered = ids.map((id: string) => dataMap[id]).filter(Boolean);
-        return NextResponse.json({ challenges: ordered });
+      if (ids.length === 0) return NextResponse.json({ challenges: [] });
+
+      const { data: challengesData, error: chError } = await supabase
+        .from('challenges')
+        .select('id, title, start_date, end_date, status, is_locked, created_at')
+        .in('id', ids);
+
+      if (chError) {
+        console.error('GET /api/challenges error (my)', chError);
+        return NextResponse.json({ error: chError.message }, { status: 500 });
+      }
+
+      // Fetch participant rows for this user for the returned challenge ids
+      const { data: partsData, error: partsError } = await supabase
+        .from('challenge_participants')
+        .select('challenge_id, total_km, avg_pace_seconds, valid_activities_count, completion_rate, completed')
+        .eq('user_id', user.id)
+        .in('challenge_id', ids);
+
+      if (partsError) {
+        console.error('GET /api/challenges participant rows error', partsError);
+        return NextResponse.json({ error: partsError.message }, { status: 500 });
+      }
+
+      const challengeMap: Record<string, any> = {};
+      (challengesData || []).forEach((c: any) => { challengeMap[c.id] = c; });
+
+      const participantMap: Record<string, any> = {};
+      (partsData || []).forEach((r: any) => { participantMap[r.challenge_id] = r; });
+
+      // Merge participant fields into the top-level challenge object and preserve participation order
+      const ordered = ids.map((id: string) => {
+        const base = challengeMap[id];
+        if (!base) return null;
+        const part = participantMap[id] || {};
+        return {
+          ...base,
+          // Flatten participant fields onto the challenge root
+          total_km: part.total_km ?? null,
+          avg_pace_seconds: part.avg_pace_seconds ?? null,
+          valid_activities_count: part.valid_activities_count ?? null,
+          completion_rate: part.completion_rate ?? null,
+          completed: part.completed ?? false,
+          user_participates: true,
+        };
+      }).filter(Boolean);
+
+      return NextResponse.json({ challenges: ordered });
     }
       // Public listing: return the full list (no pagination)
       const { data, error } = await supabase
