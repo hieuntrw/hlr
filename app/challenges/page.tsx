@@ -11,7 +11,6 @@ interface Challenge {
   title: string;
   start_date: string;
   end_date: string;
-  password?: string;
   status: "Open" | "Closed";
   is_locked: boolean;
   created_at?: string;
@@ -126,7 +125,7 @@ export default function ChallengesPage() {
     try {
       let query = supabase
         .from("challenges")
-        .select("id, title, start_date, end_date, password, status, is_locked, created_at")
+        .select("id, title, start_date, end_date, status, is_locked, created_at")
         .order("start_date", { ascending: false });
 
       const { data: allChallenges, error } = await query;

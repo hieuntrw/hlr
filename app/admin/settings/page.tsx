@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 interface SystemSetting {
@@ -17,13 +16,13 @@ export default function SettingsPage() {
   const router = useRouter();
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
 
   useEffect(() => {
     if (authLoading) return;
     checkRole();
-    fetchSettings();
   }, [user, authLoading]);
 
   async function checkRole() {
@@ -35,25 +34,31 @@ export default function SettingsPage() {
     const role = user.user_metadata?.role;
     if (role !== "admin") {
       router.push("/");
+      return;
     }
+
+    // user is admin — safe to fetch settings (send cookies)
+    fetchSettings();
   }
 
   async function fetchSettings() {
     setLoading(true);
+    setLoadError(null);
 
     try {
-      const { data, error } = await supabase
-        .from("system_settings")
-        .select("key, value, description");
-
-      if (error) {
-        console.error("Error:", error);
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`${base}/api/admin/settings`, { credentials: 'same-origin' });
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('Failed to load settings', txt);
+        setLoadError(`Failed to load settings: ${res.status} ${res.statusText} - ${txt}`);
         return;
       }
-
-      setSettings(data || []);
+      const json = await res.json();
+      setSettings(json.settings || []);
     } catch (err) {
-      console.error("Error:", err);
+      console.error('Error:', err);
+      setLoadError(String(err));
     } finally {
       setLoading(false);
     }
@@ -61,23 +66,27 @@ export default function SettingsPage() {
 
   async function handleSave(key: string) {
     try {
-      const { error } = await supabase
-        .from("system_settings")
-        .update({ value: editingValue })
-        .eq("key", key);
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`${base}/api/admin/settings`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: editingValue }),
+      });
 
-      if (error) {
-        console.error("Error:", error);
-        alert("Lỗi khi lưu cài đặt");
+      if (!res.ok) {
+        const txt = await res.text();
+        console.error('Save failed', txt);
+        alert(`Lỗi khi lưu cài đặt: ${res.status} ${res.statusText} - ${txt}`);
         return;
       }
 
-      alert("Đã lưu cài đặt!");
+      alert('Đã lưu cài đặt!');
       setEditingKey(null);
       fetchSettings();
     } catch (err) {
-      console.error("Error:", err);
-      alert("Có lỗi xảy ra");
+      console.error('Error:', err);
+      alert('Có lỗi xảy ra');
     }
   }
 
@@ -102,6 +111,9 @@ export default function SettingsPage() {
         </p>
 
         <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+          {loadError && (
+            <div className="p-4 bg-red-50 text-red-800 border border-red-100">{loadError}</div>
+          )}
           {loading ? (
             <div className="p-8 text-center">
               <p className="text-gray-600">Đang tải...</p>
@@ -180,9 +192,13 @@ export default function SettingsPage() {
           <ul className="text-sm space-y-1" style={{ color: "var(--color-text-secondary)" }}>
             <li>• <strong>monthly_fund_fee:</strong> Mức đóng quỹ hàng tháng (VND)</li>
             <li>• <strong>challenge_fine_fee:</strong> Mức phạt không hoàn thành thử thách (VND)</li>
+            <li>• <strong>challenge_registration_levels:</strong> Danh sách mốc (km) khả dụng khi đăng ký thử tháchphân tách bằng dấu phẩy. Ví dụ: 70,100,150,200. Các mốc này sẽ được hiển thị cho người dùng khi họ đăng ký thử thách và được chuẩn hóa (loại bỏ trùng lặp và sắp xếp tăng dần) khi lưu.</li>
           </ul>
         </div>
+
       </div>
     </div>
   );
 }
+
+// RegistrationLevelsEditor removed — managed via the main settings table and the admin API.

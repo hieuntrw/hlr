@@ -38,7 +38,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Validate challenge existence and password server-side to prevent client bypass
     const { data: challengeRow, error: challengeErr } = await supabaseAuth
       .from('challenges')
-      .select('password, is_locked')
+      .select('is_locked')
       .eq('id', id)
       .maybeSingle();
 
@@ -55,11 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'Thử thách đã bị khoá, không thể đăng ký', }, { status: 403 });
     }
 
-    if (challengeRow.password) {
-      if (!providedPassword || providedPassword !== challengeRow.password) {
-        return NextResponse.json({ error: 'Mật khẩu không đúng' }, { status: 401 });
-      }
-    }
+    // Passwords are deprecated; do not require a password to join
 
     const user_id = user.id;
 

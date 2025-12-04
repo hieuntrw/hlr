@@ -18,7 +18,7 @@ function LoginForm() {
 		setLoading(true);
 		setMessage(null);
 
-		const timeoutMs = 15000; // 15s to avoid false timeouts on slow networks
+		const timeoutMs = 30000; // 30s to avoid false timeouts on slow networks
 		const startTime = Date.now();
 
 		try {
@@ -53,6 +53,42 @@ function LoginForm() {
 			router.push(redirectTo);
 		} catch (err: any) {
 			console.error('Login exception:', err);
+
+			// If we hit the artificial timeout, attempt one retry without the timeout to distinguish
+			// between a temporary slow network and a hard failure.
+			if (err?.message === 'Request timed out') {
+				console.warn('[Login] Initial timed out. Retrying once without client timeout...');
+				try {
+					const retryStart = Date.now();
+					const retryResult: any = await supabase.auth.signInWithPassword({ email, password });
+					const retryEnd = Date.now();
+					console.log(`[Login] Retry Supabase Auth response time: ${retryEnd - retryStart}ms`);
+					console.log('[Login] Retry result:', retryResult);
+					const { data, error } = retryResult;
+					if (error) {
+						console.error('Login retry error:', error);
+						setMessage(error.message || 'Đăng nhập thất bại');
+						setLoading(false);
+						return;
+					}
+					if (!data || !data.session || !data.user) {
+						setMessage('Đăng nhập thất bại. Vui lòng thử lại.');
+						setLoading(false);
+						return;
+					}
+					console.log('✓ Login successful on retry! User:', data.user?.email);
+					await new Promise((r) => setTimeout(r, 100));
+					setLoading(false);
+					router.push(redirectTo);
+					return;
+				} catch (retryErr: any) {
+					console.error('[Login] Retry failed:', retryErr);
+					setMessage('Không thể kết nối tới dịch vụ xác thực. Vui lòng kiểm tra mạng hoặc cấu hình SUPABASE_URL.');
+					setLoading(false);
+					return;
+				}
+			}
+
 			setMessage(err?.message || String(err));
 			setLoading(false);
 		}

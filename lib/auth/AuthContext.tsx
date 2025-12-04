@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
 import { supabase } from "@/lib/supabase-client";
 import type { User } from "@supabase/supabase-js";
 
@@ -17,6 +17,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isMod: boolean;
   refreshAuth: () => Promise<void>;
+  fullLoadAttempted?: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,6 +26,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const fullLoadAttempted = useRef(false);
+  const [fullLoadAttemptedFlag, setFullLoadAttemptedFlag] = useState(false);
 
   // Use localStorage for persistent session (30 days)
   const CACHE_KEY = 'hlr_auth_cache';
@@ -124,50 +127,84 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // OPTIMIZED: Always verify session with Supabase on app load, even if cache is valid
   useEffect(() => {
     const mounted = { current: true };
+    // Fallback: if auth verification stalls, ensure we stop loading and retry earlier
     const timeoutId = setTimeout(() => {
       if (mounted.current) {
+        console.warn('[AuthContext] Fallback timeout reached, forcing isLoading=false and triggering load');
         setIsLoading(false);
+        // attempt a fresh load to recover, but only once to avoid loops
+        try {
+          if (!fullLoadAttempted.current) {
+            fullLoadAttempted.current = true;
+            setFullLoadAttemptedFlag(true);
+            loadUserData(mounted).catch(() => {});
+          } else {
+            console.warn('[AuthContext] Full load already attempted, skipping repeated attempt');
+          }
+        } catch (e) {
+          console.warn('[AuthContext] Error scheduling full load', e);
+        }
       }
-    }, 10000);
+    }, 5000);
 
     const cached = getCachedAuth();
     const isRecent = cached && cached.expiresAt && Date.now() < cached.expiresAt;
 
     if (cached && cached.user && isRecent) {
+      console.log('[AuthContext] Using cached auth from localStorage');
       setUser(cached.user);
       setProfile(cached.profile);
       setIsLoading(false);
-      // Xác thực lại session với Supabase để đảm bảo hợp lệ
-      supabase.auth.getUser().then(({ data: { user: authUser }, error }) => {
-        if (!mounted.current) return;
-        if (error || !authUser) {
-          // Session không hợp lệ, xóa cache và yêu cầu đăng nhập lại
-          setUser(null);
-          setProfile(null);
-          setIsLoading(false);
-          clearCachedAuth();
-        } else {
-          // Nếu user hợp lệ, có thể cập nhật lại profile nếu cần
-          // (Chỉ fetch profile nếu user id khác hoặc cache hết hạn)
-          if (!cached.profile || cached.user.id !== authUser.id) {
-            supabase
-              .from("profiles")
-              .select("id, full_name, role")
-              .eq("id", authUser.id)
-              .single()
-              .then(({ data: profileData }) => {
-                if (!mounted.current) return;
-                const profile = {
-                  id: authUser.id,
-                  full_name: profileData?.full_name || null,
-                  role: authUser.user_metadata?.role || profileData?.role
-                };
-                setProfile(profile);
-                setCachedAuth(authUser, profile);
-              });
+      // Verify session with Supabase in background without blocking the UI.
+      // If the background check fails (network timeout or other), keep using the
+      // cached auth since the cookie/local session is still valid.
+      try {
+        try { clearTimeout(timeoutId); } catch (e) {}
+        (async () => {
+          try {
+            const { data: { user: authUser }, error } = await supabase.auth.getUser();
+            if (!mounted.current) return;
+            if (error || !authUser) {
+              console.warn('[AuthContext] Supabase session invalid during background check, clearing cache');
+              setUser(null);
+              setProfile(null);
+              setIsLoading(false);
+              clearCachedAuth();
+            } else {
+              if (!cached.profile || cached.user.id !== authUser.id) {
+                try {
+                  const { data: profileData } = await supabase
+                    .from("profiles")
+                    .select("id, full_name, role")
+                    .eq("id", authUser.id)
+                    .single();
+                  if (!mounted.current) return;
+                  const profile = {
+                    id: authUser.id,
+                    full_name: profileData?.full_name || null,
+                    role: authUser.user_metadata?.role || profileData?.role
+                  };
+                  setProfile(profile);
+                  setCachedAuth(authUser, profile);
+                } catch (e) {
+                  console.warn('[AuthContext] Failed to refresh profile after cached auth', e);
+                }
+              }
+            }
+          } catch (e) {
+            // Network or other error: keep cached auth and schedule a background refresh
+            console.warn('[AuthContext] Background supabase.getUser failed; keeping cached auth', e);
+            if (!fullLoadAttempted.current) {
+              fullLoadAttempted.current = true;
+              setFullLoadAttemptedFlag(true);
+              // schedule a non-blocking full reload attempt
+              loadUserData(mounted).catch(() => {});
+            }
           }
-        }
-      });
+        })();
+      } catch (e) {
+        console.error('[AuthContext] Unexpected error scheduling background auth check', e);
+      }
     } else {
       // Không có cache hoặc cache hết hạn, xác thực lại như cũ
       loadUserData(mounted).then(() => {
@@ -203,7 +240,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isAdmin = user?.user_metadata?.role === 'admin';
   const isMod = user?.user_metadata?.role === 'mod';
 
-  const value = { user, profile, isLoading, isAdmin, isMod, refreshAuth };
+  const value = { user, profile, isLoading, isAdmin, isMod, refreshAuth, fullLoadAttempted: fullLoadAttemptedFlag };
 
   return (
     <AuthContext.Provider value={value}>

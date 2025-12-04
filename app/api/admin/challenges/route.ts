@@ -5,14 +5,10 @@ async function ensureAdmin(supabaseAuth: any) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
-  const { data: profile } = await supabaseAuth
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const role = profile?.role;
+  const role = (user as any).user_metadata?.role as string | undefined;
   if (!role || !['admin', 'mod_challenge'].includes(role)) throw { status: 403, message: 'Không có quyền' };
+
+  return user;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,19 +27,33 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const user = await ensureAdmin(supabaseAuth);
 
     const body = await request.json();
-    const { title, start_date, end_date, password } = body;
+    const { title, start_date, end_date, registration_deadline, min_pace_seconds, max_pace_seconds, min_km, description, require_map } = body;
     if (!title || !start_date || !end_date) {
       return NextResponse.json({ error: 'Thiếu trường bắt buộc' }, { status: 400 });
     }
 
-    const pw = password || Math.random().toString(36).slice(2, 10);
+    const insertPayload: any = { title, start_date, end_date };
+    // set creator
+    if (user && (user as any).id) insertPayload.created_by = (user as any).id;
+    if (registration_deadline) insertPayload.registration_deadline = registration_deadline;
+    // Persist pace and description when provided. `require_map` is kept for API compatibility but not persisted (no migration).
+    if (min_pace_seconds !== undefined && min_pace_seconds !== null) insertPayload.min_pace_seconds = Number(min_pace_seconds);
+    if (max_pace_seconds !== undefined && max_pace_seconds !== null) insertPayload.max_pace_seconds = Number(max_pace_seconds);
+    // Persist min_km when provided (positive integer)
+    if (min_km !== undefined && min_km !== null) {
+      const n = Number(min_km) || 0;
+      if (n > 0) insertPayload.min_km = Math.floor(n);
+    }
+    if (description) insertPayload.description = description;
+    // persist require_map if provided
+    if (require_map !== undefined && require_map !== null) insertPayload.require_map = !!require_map;
 
     const { data, error } = await supabaseAuth
       .from('challenges')
-      .insert([{ title, start_date, end_date, password: pw }])
+      .insert([insertPayload])
       .select()
       .maybeSingle();
 

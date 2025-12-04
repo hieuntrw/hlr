@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase-client";
+import { useAuth } from "@/lib/auth/AuthContext";
 import {
   LayoutDashboard,
   Wallet,
@@ -22,7 +23,6 @@ import {
   Star,
   Award,
 } from "lucide-react";
-
 interface AdminProfile {
   id: string;
   full_name: string;
@@ -112,53 +112,73 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     },
   ];
 
+  const { user, profile: authProfile } = useAuth();
+
   useEffect(() => {
     fetchProfile();
-  }, []);
+  }, [user, authProfile]);
 
   async function fetchProfile() {
     try {
+      // If AuthContext already has a profile, prefer that and avoid extra DB call
+      if (authProfile) {
+        setProfile(authProfile as AdminProfile);
+        setLoading(false);
+        return;
+      }
+
       const {
-        data: { user },
+        data: { user: supaUser },
       } = await supabase.auth.getUser();
 
-      console.log("[AdminLayout] User:", user?.email);
-      console.log("[AdminLayout] User metadata:", user?.user_metadata);
+      console.log("[AdminLayout] User:", supaUser?.email);
+      console.log("[AdminLayout] User metadata:", supaUser?.user_metadata);
 
-      if (!user) {
+      if (!supaUser) {
         console.log("[AdminLayout] No user, redirecting to login");
         window.location.href = "/login";
         return;
       }
 
       // Get role from Supabase Auth metadata
-      const authRole = user.user_metadata?.role;
+      const authRole = supaUser.user_metadata?.role;
       console.log("[AdminLayout] Auth role:", authRole);
 
+      // If no role present, redirect to dashboard (guard)
       if (!authRole) {
         console.log("[AdminLayout] No role in metadata, redirecting to dashboard");
         window.location.href = "/dashboard";
         return;
       }
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, avatar_url")
-        .eq("id", user.id)
-        .single();
+      // Try to fetch the profiles row but don't block the UI if the DB is slow.
+      // Race the DB fetch with a short timeout and fall back to token metadata.
+      try {
+        const profilePromise = supabase
+          .from("profiles")
+          .select("id, full_name, avatar_url")
+          .eq("id", supaUser.id)
+          .single();
 
-      if (data) {
-        setProfile({
-          ...data,
-          role: authRole, // Use auth role, not profile role
-        });
-      } else {
-        // If no profile exists, create minimal profile object
-        setProfile({
-          id: user.id,
-          full_name: user.email || "Admin",
-          role: authRole,
-        });
+        const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+        const result = await Promise.race([profilePromise, timeout]) as any;
+
+        if (!result) {
+          setProfile({ id: supaUser.id, full_name: supaUser.user_metadata?.fullName || supaUser.email || 'Admin', role: authRole });
+        } else if (result.error) {
+          console.error('[AdminLayout] Profile query returned error:', result.error);
+          setProfile({ id: supaUser.id, full_name: supaUser.user_metadata?.fullName || supaUser.email || 'Admin', role: authRole });
+        } else if (result.data) {
+          setProfile({
+            ...result.data,
+            role: authRole,
+          });
+        } else {
+          setProfile({ id: supaUser.id, full_name: supaUser.user_metadata?.fullName || supaUser.email || 'Admin', role: authRole });
+        }
+      } catch (e) {
+        console.warn('[AdminLayout] Profile fetch failed or timed out, using token metadata fallback', e);
+        setProfile({ id: user?.id || '', full_name: user?.user_metadata?.fullName || user?.email || 'Admin', role: authRole });
       }
     } catch (error) {
       console.error("[AdminLayout] Error fetching profile:", error);

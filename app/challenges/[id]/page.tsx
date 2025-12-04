@@ -72,7 +72,6 @@ function formatPace(seconds: number): string {
 export default function ChallengePage({ params }: { params: { id: string } }) {
   const { user, isLoading: authLoading } = useAuth();
   const [challenge, setChallenge] = useState<Challenge | null>(null);
-  const [requiresPassword, setRequiresPassword] = useState(false);
   const [participants, setParticipants] = useState<ParticipantWithActivity[]>([]);
   const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,10 +81,9 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const [registering, setRegistering] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [password, setPassword] = useState("");
   const [failedParticipants, setFailedParticipants] = useState<ParticipantWithActivity[]>([]);
 
-  const TARGET_OPTIONS = [70, 100, 150, 200, 250, 300];
+  const [targetOptions, setTargetOptions] = useState<number[]>([70, 100, 150, 200, 250, 300]);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -105,7 +103,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       const { data: challengeData, error: challengeError } = await supabase
         .from("challenges")
         .select(
-          "id, title, description, start_date, end_date, password, status, is_locked, min_pace_seconds, max_pace_seconds"
+          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds"
         )
         .eq("id", params.id)
         .single();
@@ -115,49 +113,55 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         return;
       }
 
-      // Avoid keeping the actual password in client state: store only a boolean
-      setRequiresPassword(Boolean(challengeData?.password));
+      // Load registration level options from system_settings
+      try {
+        const { data: regSetting } = await supabase
+          .from('system_settings')
+          .select('value')
+          .eq('key', 'challenge_registration_levels')
+          .maybeSingle();
+
+        if (regSetting && regSetting.value) {
+          const parts = String(regSetting.value).split(',').map((s: string) => s.trim()).filter((s: string) => s !== '');
+          const nums = parts.map((s: string) => Number(s)).filter((n: number) => !isNaN(n) && n > 0);
+          const uniqueSorted = Array.from(new Set(nums)).sort((a: number, b: number) => a - b);
+          if (uniqueSorted.length > 0) setTargetOptions(uniqueSorted);
+        }
+      } catch (e) {
+        console.warn('Could not load registration levels, using defaults', e);
+      }
+
       if (challengeData) {
-        const { password: _pw, ...publicChallenge } = challengeData as any;
-        setChallenge(publicChallenge as Challenge);
+        setChallenge(challengeData as Challenge);
       } else {
         setChallenge(null);
       }
 
-      // Fetch participants with activities
-      const { data: participantsData, error: participantsError } = await supabase
-        .from("challenge_participants")
-        .select(
-          `
-          user_id,
-          target_km,
-          actual_km,
-          avg_pace_seconds,
-          total_activities,
-          profiles(full_name, avatar_url, gender)
-        `
-        )
-        .eq("challenge_id", params.id)
-        .order("actual_km", { ascending: false });
+      // Fetch participants with activities via server API (handles RLS)
+      try {
+        const resp = await fetch(`/api/challenges/${params.id}/participants`, { credentials: 'same-origin' });
+        if (!resp.ok) {
+          console.error('Failed to load participants:', await resp.text());
+        } else {
+          const json = await resp.json();
+          const participantsData = json.participants || [];
+          const mapped = participantsData.map((p: any) => ({
+            user_id: p.user_id,
+            target_km: p.target_km,
+            actual_km: p.actual_km,
+            avg_pace_seconds: p.avg_pace_seconds,
+            total_activities: p.total_activities,
+            profile: p.profiles,
+          }));
+          setParticipants(mapped);
 
-      if (participantsError) {
-        console.error("Error fetching participants:", participantsError);
-      } else if (participantsData) {
-        const mapped = participantsData.map((p: any) => ({
-          user_id: p.user_id,
-          target_km: p.target_km,
-          actual_km: p.actual_km,
-          avg_pace_seconds: p.avg_pace_seconds,
-          total_activities: p.total_activities,
-          profile: p.profiles,
-        }));
-        setParticipants(mapped);
-
-        // Separate failed participants (didn't meet target)
-        if (challengeData.status === "Closed") {
-          const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
-          setFailedParticipants(failed);
+          if (challengeData.status === "Closed") {
+            const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
+            setFailedParticipants(failed);
+          }
         }
+      } catch (e) {
+        console.error('Participants fetch error', e);
       }
 
       // Fetch lucky draw winners if challenge is closed
@@ -227,7 +231,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       const res = await fetch(`/api/challenges/${params.id}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_km: selectedTarget, password }),
+        body: JSON.stringify({ target_km: selectedTarget }),
         credentials: "same-origin",
       });
 
@@ -570,7 +574,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                   Chọn mục tiêu (km)
                 </label>
                 <div className="grid grid-cols-3 gap-2">
-                  {TARGET_OPTIONS.map((km) => (
+                  {targetOptions.map((km) => (
                     <button
                       key={km}
                       onClick={() => setSelectedTarget(km)}
@@ -586,20 +590,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              {requiresPassword && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Mật khẩu thử thách
-                  </label>
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Nhập mật khẩu"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                  />
-                </div>
-              )}
+              {/* Password protection removed; no password input shown */}
             </div>
 
             <div className="flex gap-3">
