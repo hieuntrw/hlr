@@ -64,6 +64,10 @@ export default async function handler(req: Request) {
     const profiles = await profilesRes.json();
     const results: any[] = [];
 
+    // Configuration for batching and rate limiting
+    const BATCH_SIZE = Number(Deno.env.get('SYNC_BATCH_SIZE') || '5');
+    const BATCH_DELAY_MS = Number(Deno.env.get('SYNC_BATCH_DELAY_MS') || '2000');
+
     // Helper: refresh strava token using client credentials
     async function refreshStravaToken(refreshToken: string) {
       const clientId = Deno.env.get('STRAVA_CLIENT_ID');
@@ -88,8 +92,10 @@ export default async function handler(req: Request) {
       return resp.json();
     }
 
-    // Iterate profiles sequentially
-    for (const p of profiles || []) {
+    // Helper to sleep between batches
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+    async function processProfile(p: any) {
       try {
         const userId = p.id;
 
@@ -114,8 +120,7 @@ export default async function handler(req: Request) {
             });
           } catch (re) {
             console.error(`[supabase/function] token refresh failed for ${userId}:`, re);
-            results.push({ user_id: userId, success: false, error: 'token_refresh_failed' });
-            continue; // skip this user
+            return { user_id: userId, success: false, error: 'token_refresh_failed' };
           }
         }
 
@@ -131,27 +136,23 @@ export default async function handler(req: Request) {
         if (!chRes.ok) {
           const txt = await chRes.text();
           console.error('[supabase/function] challenge fetch failed:', chRes.status, txt);
-          results.push({ user_id: userId, success: false, error: 'challenge_fetch_failed' });
-          continue;
+          return { user_id: userId, success: false, error: 'challenge_fetch_failed' };
         }
         const chs = await chRes.json();
         const challenge = chs && chs[0];
         if (!challenge) {
-          results.push({ user_id: userId, success: false, error: 'no_challenge' });
-          continue;
+          return { user_id: userId, success: false, error: 'no_challenge' };
         }
 
         if (challenge.is_locked) {
-          results.push({ user_id: userId, success: false, error: 'challenge_locked' });
-          continue;
+          return { user_id: userId, success: false, error: 'challenge_locked' };
         }
 
         // cutoff 10 days after end_date
         const endDt = new Date(challenge.end_date);
         const cutoff = new Date(endDt.getTime() + 10 * 24 * 60 * 60 * 1000);
         if (new Date() > cutoff) {
-          results.push({ user_id: userId, success: false, error: 'sync_window_expired' });
-          continue;
+          return { user_id: userId, success: false, error: 'sync_window_expired' };
         }
 
         // 3) Ensure user is registered as participant
@@ -160,14 +161,12 @@ export default async function handler(req: Request) {
         if (!partRes.ok) {
           const txt = await partRes.text();
           console.error('[supabase/function] participant fetch failed:', partRes.status, txt);
-          results.push({ user_id: userId, success: false, error: 'participant_fetch_failed' });
-          continue;
+          return { user_id: userId, success: false, error: 'participant_fetch_failed' };
         }
         const parts = await partRes.json();
         const participant = parts && parts[0];
         if (!participant) {
-          results.push({ user_id: userId, success: false, error: 'not_registered' });
-          continue;
+          return { user_id: userId, success: false, error: 'not_registered' };
         }
 
         // 4) Fetch activities from Strava for the month
@@ -175,7 +174,7 @@ export default async function handler(req: Request) {
         const endTs = Math.floor(new Date(challenge.end_date).getTime() / 1000) + 24 * 60 * 60;
         let page = 1;
         const perPage = 200;
-        let allRuns = [];
+        let allRuns: any[] = [];
         const minPace = challenge.min_pace_seconds || 240;
         const maxPace = challenge.max_pace_seconds || 720;
 
@@ -272,10 +271,24 @@ export default async function handler(req: Request) {
           body: JSON.stringify({ p_participant_id: participant.id }),
         });
 
-        results.push({ user_id: userId, success: true, totalKm, totalActivities });
+        return { user_id: userId, success: true, totalKm, totalActivities };
       } catch (err: any) {
         console.error('[supabase/function] Error for user', p.id, err);
-        results.push({ user_id: p.id, success: false, error: err?.message || String(err) });
+        return { user_id: p.id, success: false, error: err?.message || String(err) };
+      }
+    }
+
+    // Helper to sleep between batches
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+    // Process profiles in batches to control concurrency and avoid rate limits
+    for (let i = 0; i < (profiles || []).length; i += BATCH_SIZE) {
+      const batch = (profiles || []).slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map((p: any) => processProfile(p)));
+      results.push(...batchResults);
+      // Delay between batches to avoid hitting Strava/Supabase rate limits
+      if (i + BATCH_SIZE < (profiles || []).length) {
+        await sleep(BATCH_DELAY_MS);
       }
     }
 
