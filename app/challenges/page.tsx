@@ -68,13 +68,14 @@ function ChallengeListItem({ challenge }: { challenge: ChallengeWithParticipatio
 export default function ChallengesPage() {
   const PAGE_SIZE = 12;
   const { user, isLoading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<'all' | 'my'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
   const [page, setPage] = useState(0);
   const [items, setItems] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [total, setTotal] = useState<number | null>(null);
   const [totalPages, setTotalPages] = useState<number | null>(null);
+  // no auth prompt needed: page requires auth to access
 
   const currentUser = user?.id || null;
 
@@ -86,6 +87,7 @@ export default function ChallengesPage() {
     setHasMore(false);
     setTotal(null);
     setTotalPages(null);
+    
     if (activeTab === 'my' && !currentUser) {
       setLoading(false);
       return;
@@ -100,13 +102,15 @@ export default function ChallengesPage() {
       const params = new URLSearchParams();
       params.set('page', String(requestPage));
       params.set('pageSize', String(PAGE_SIZE));
-      if (activeTab === 'my') params.set('my', 'true');
-
+      // Do not send an explicit `my=true` parameter. If the user is signed-in
+      // we keep `credentials: 'same-origin'` so the server can detect the
+      // session and return the personal list without an explicit param.
       const resp = await fetch(`${base}/api/challenges?${params.toString()}`, { credentials: activeTab === 'my' ? 'same-origin' : 'omit' });
       if (!resp.ok) {
         console.error('Failed to fetch challenges', resp.status);
         if (!append) setItems([]);
         setHasMore(false);
+        setLoading(false);
         return;
       }
 
@@ -135,11 +139,12 @@ export default function ChallengesPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-6">
           <div className="flex gap-2">
-            <button onClick={() => setActiveTab('all')} className={`px-4 py-2 font-semibold rounded ${activeTab === 'all' ? 'text-white' : 'text-[var(--color-text-secondary)]'}`} style={activeTab === 'all' ? { background: 'var(--color-primary)' } : { background: 'transparent' }}>
-              <List size={16} className="inline-block mr-2" /> Tất Cả
-            </button>
+            {/* Swapped order: show "Thử Thách Của Tôi" first */}
             <button onClick={() => setActiveTab('my')} className={`px-4 py-2 font-semibold rounded ${activeTab === 'my' ? 'text-white' : 'text-[var(--color-text-secondary)]'}`} style={activeTab === 'my' ? { background: 'var(--color-primary)' } : { background: 'transparent' }}>
               <User size={16} className="inline-block mr-2" /> Thử Thách Của Tôi
+            </button>
+            <button onClick={() => setActiveTab('all')} className={`px-4 py-2 font-semibold rounded ${activeTab === 'all' ? 'text-white' : 'text-[var(--color-text-secondary)]'}`} style={activeTab === 'all' ? { background: 'var(--color-primary)' } : { background: 'transparent' }}>
+              <List size={16} className="inline-block mr-2" /> Tất Cả
             </button>
           </div>
           <div className="text-sm text-[var(--color-text-secondary)]">
