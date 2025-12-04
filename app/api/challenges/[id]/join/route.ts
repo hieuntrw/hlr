@@ -30,9 +30,35 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const body = await request.json();
-    const { target_km } = body;
+    const { target_km, password: providedPassword } = body;
     if (!target_km) {
       return NextResponse.json({ error: 'target_km required' }, { status: 400 });
+    }
+
+    // Validate challenge existence and password server-side to prevent client bypass
+    const { data: challengeRow, error: challengeErr } = await supabaseAuth
+      .from('challenges')
+      .select('password, is_locked')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (challengeErr) {
+      console.error('POST /api/challenges/[id]/join fetch challenge error', challengeErr);
+      return NextResponse.json({ error: 'Không thể lấy thông tin thử thách' }, { status: 500 });
+    }
+
+    if (!challengeRow) {
+      return NextResponse.json({ error: 'Không tìm thấy thử thách' }, { status: 404 });
+    }
+
+    if (challengeRow.is_locked) {
+      return NextResponse.json({ error: 'Thử thách đã bị khoá, không thể đăng ký', }, { status: 403 });
+    }
+
+    if (challengeRow.password) {
+      if (!providedPassword || providedPassword !== challengeRow.password) {
+        return NextResponse.json({ error: 'Mật khẩu không đúng' }, { status: 401 });
+      }
     }
 
     const user_id = user.id;

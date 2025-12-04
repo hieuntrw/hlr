@@ -12,7 +12,6 @@ interface Challenge {
   description: string;
   start_date: string;
   end_date: string;
-  password?: string;
   status: "Open" | "Closed";
   is_locked: boolean;
   min_pace_seconds: number;
@@ -73,6 +72,7 @@ function formatPace(seconds: number): string {
 export default function ChallengePage({ params }: { params: { id: string } }) {
   const { user, isLoading: authLoading } = useAuth();
   const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [requiresPassword, setRequiresPassword] = useState(false);
   const [participants, setParticipants] = useState<ParticipantWithActivity[]>([]);
   const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,7 +114,14 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         return;
       }
 
-      setChallenge(challengeData);
+      // Avoid keeping the actual password in client state: store only a boolean
+      setRequiresPassword(Boolean(challengeData?.password));
+      if (challengeData) {
+        const { password: _pw, ...publicChallenge } = challengeData as any;
+        setChallenge(publicChallenge as Challenge);
+      } else {
+        setChallenge(null);
+      }
 
       // Fetch participants with activities
       const { data: participantsData, error: participantsError } = await supabase
@@ -210,10 +217,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
     if (!selectedTarget || !currentUser) return;
 
     // Check password if required
-    if (challenge?.password && password !== challenge.password) {
-      alert("Mật khẩu không đúng!");
-      return;
-    }
+    // Do not compare password on the client. Server will validate the password.
 
     setRegistering(true);
 
@@ -222,14 +226,20 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       const res = await fetch(`/api/challenges/${params.id}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_km: selectedTarget }),
+        body: JSON.stringify({ target_km: selectedTarget, password }),
         credentials: "same-origin",
       });
 
       const json = await res.json();
       if (!res.ok) {
         console.error("Join API error:", json);
-        alert(json.error || "Lỗi khi đăng ký thử thách");
+        if (res.status === 401) {
+          alert(json.error || "Mật khẩu không đúng");
+        } else if (res.status === 403) {
+          alert(json.error || "Thử thách đã bị khoá");
+        } else {
+          alert(json.error || "Lỗi khi đăng ký thử thách");
+        }
       } else {
         alert(userParticipation ? "Cập nhật mục tiêu thành công!" : "Đăng ký thử thách thành công!");
         setShowRegisterModal(false);
@@ -532,7 +542,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                 </div>
               </div>
 
-              {challenge?.password && (
+              {requiresPassword && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     Mật khẩu thử thách
