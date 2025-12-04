@@ -80,6 +80,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [registering, setRegistering] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [password, setPassword] = useState("");
   const [failedParticipants, setFailedParticipants] = useState<ParticipantWithActivity[]>([]);
@@ -254,6 +255,34 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
     }
   }
 
+  async function handleLeave() {
+    if (!currentUser) return;
+    if (!confirm('Bạn có chắc muốn rời thử thách này?')) return;
+
+    setLeaving(true);
+    try {
+      const res = await fetch(`/api/challenges/${params.id}/leave`, {
+        method: 'POST',
+        credentials: 'same-origin',
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Leave API error:', json);
+        alert(json.error || 'Lỗi khi rời thử thách');
+      } else {
+        alert('Bạn đã rời thử thách');
+        setUserParticipation(null);
+        await fetchData();
+      }
+    } catch (err) {
+      console.error('Leave error:', err);
+      alert('Có lỗi xảy ra');
+    } finally {
+      setLeaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -340,6 +369,21 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                 <p className="text-sm text-gray-700">
                   Đã chạy: <span className="font-bold">{userParticipation.actual_km} km</span>
                 </p>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => setShowRegisterModal(true)}
+                    className="flex-1 py-2 bg-white border border-green-600 text-green-700 font-semibold rounded-lg hover:bg-green-50"
+                  >
+                    Cập nhật mục tiêu
+                  </button>
+                  <button
+                    onClick={handleLeave}
+                    disabled={leaving}
+                    className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:opacity-90 disabled:bg-gray-400"
+                  >
+                    {leaving ? 'Đang xử lý...' : 'Rời thử thách'}
+                  </button>
+                </div>
               </div>
             )}
           </div>
