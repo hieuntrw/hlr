@@ -41,72 +41,36 @@ export async function GET(request: NextRequest) {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
-      const { data: parts, error: partError } = await supabase
+      // Fetch participant rows (joined with challenges) directly from
+      // `challenge_participants` for this user. This returns one row per
+      // participation and preserves ordering by `created_at`.
+      const { data: rows, error: rowsError } = await supabase
         .from('challenge_participants')
-        .select('challenge_id')
+        .select(
+          `challenge_id, total_km, avg_pace_seconds, valid_activities_count, completion_rate, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
+        )
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(1000);
 
-      if (partError) {
-        console.error('GET /api/challenges participations error', partError);
-        return NextResponse.json({ error: partError.message }, { status: 500 });
+      if (rowsError) {
+        console.error('GET /api/challenges participations joined error', rowsError);
+        return NextResponse.json({ error: rowsError.message }, { status: 500 });
       }
 
-      // Deduplicate ids and preserve order (first occurrence kept)
-      const rawIds = (parts || []).map((p: any) => p.challenge_id).filter(Boolean);
-      const seen = new Set<string>();
-      const ids: string[] = [];
-      for (const id of rawIds) {
-        if (!seen.has(id)) {
-          seen.add(id);
-          ids.push(id);
-        }
-      }
+      if (!rows || rows.length === 0) return NextResponse.json({ challenges: [] });
 
-      if (ids.length === 0) return NextResponse.json({ challenges: [] });
-
-      const { data: challengesData, error: chError } = await supabase
-        .from('challenges')
-        .select('id, title, start_date, end_date, status, is_locked, created_at')
-        .in('id', ids);
-
-      if (chError) {
-        console.error('GET /api/challenges error (my)', chError);
-        return NextResponse.json({ error: chError.message }, { status: 500 });
-      }
-
-      // Fetch participant rows for this user for the returned challenge ids
-      const { data: partsData, error: partsError } = await supabase
-        .from('challenge_participants')
-        .select('challenge_id, total_km, avg_pace_seconds, valid_activities_count, completion_rate, completed')
-        .eq('user_id', user.id)
-        .in('challenge_id', ids);
-
-      if (partsError) {
-        console.error('GET /api/challenges participant rows error', partsError);
-        return NextResponse.json({ error: partsError.message }, { status: 500 });
-      }
-
-      const challengeMap: Record<string, any> = {};
-      (challengesData || []).forEach((c: any) => { challengeMap[c.id] = c; });
-
-      const participantMap: Record<string, any> = {};
-      (partsData || []).forEach((r: any) => { participantMap[r.challenge_id] = r; });
-
-      // Merge participant fields into the top-level challenge object and preserve participation order
-      const ordered = ids.map((id: string) => {
-        const base = challengeMap[id];
-        if (!base) return null;
-        const part = participantMap[id] || {};
+      // Map rows to flattened challenge objects with participant fields
+      const ordered = (rows || []).map((r: any) => {
+        const ch = r.challenges;
+        if (!ch) return null;
         return {
-          ...base,
-          // Flatten participant fields onto the challenge root
-          total_km: part.total_km ?? null,
-          avg_pace_seconds: part.avg_pace_seconds ?? null,
-          valid_activities_count: part.valid_activities_count ?? null,
-          completion_rate: part.completion_rate ?? null,
-          completed: part.completed ?? false,
+          ...ch,
+          total_km: r.total_km ?? null,
+          avg_pace_seconds: r.avg_pace_seconds ?? null,
+          valid_activities_count: r.valid_activities_count ?? null,
+          completion_rate: r.completion_rate ?? null,
+          completed: r.completed ?? false,
           user_participates: true,
         };
       }).filter(Boolean);
