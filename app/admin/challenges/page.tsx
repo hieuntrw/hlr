@@ -15,6 +15,7 @@ interface Challenge {
   profiles?: { full_name?: string | null } | null;
   status: string;
   is_locked: boolean;
+  is_hide?: boolean;
   registration_deadline?: string | null;
 }
 
@@ -484,8 +485,15 @@ export default function ChallengesAdminPage() {
               </thead>
               <tbody>
                 {challenges.map((challenge) => (
-                  <tr key={challenge.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{challenge.title}</td>
+                  <tr key={challenge.id} className={`border-b border-gray-200 hover:bg-gray-50 ${challenge.is_hide ? 'opacity-60 bg-gray-50' : ''}`}>
+                    <td className="py-3 px-4 font-semibold">
+                      <div className="flex items-center gap-2">
+                        <span>{challenge.title}</span>
+                        {challenge.is_hide && (
+                          <span className="inline-block text-xs bg-gray-200 text-gray-700 px-2 py-0.5 rounded">Ẩn</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{challenge.profiles?.full_name || challenge.created_by || '-'}</td>
                     <td className="py-3 px-4">{formatDate(challenge.start_date)}</td>
                     <td className="py-3 px-4">{formatDate(challenge.end_date)}</td>
