@@ -559,14 +559,23 @@ export default function ChallengesAdminPage() {
                         >
                           Tổng kết
                         </button>
-                        {new Date().getTime() >= new Date(challenge.end_date).getTime() && (
+                        {isAdmin ? (
                           <button
                             onClick={() => handleLockToggle(challenge.id, !challenge.is_locked)}
-                            disabled={challenge.status !== 'Closed' && !challenge.is_locked}
-                            className={`py-1 px-2 rounded-md text-sm ${challenge.status === 'Closed' ? 'bg-gray-100' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                            className={`py-1 px-2 rounded-md text-sm ${challenge.is_locked ? 'bg-gray-100' : 'bg-indigo-600 text-white'}`}
                           >
                             {challenge.is_locked ? 'Mở Khóa' : 'Khóa'}
                           </button>
+                        ) : (
+                          new Date().getTime() >= new Date(challenge.end_date).getTime() && (
+                            <button
+                              onClick={() => handleLockToggle(challenge.id, !challenge.is_locked)}
+                              disabled={challenge.status !== 'Closed' && !challenge.is_locked}
+                              className={`py-1 px-2 rounded-md text-sm ${challenge.status === 'Closed' ? 'bg-gray-100' : 'bg-gray-200 text-gray-500 cursor-not-allowed'}`}
+                            >
+                              {challenge.is_locked ? 'Mở Khóa' : 'Khóa'}
+                            </button>
+                          )
                         )}
                       </div>
                     </td>

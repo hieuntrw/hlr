@@ -47,6 +47,23 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const body = await request.json().catch(() => ({}));
     const participantId = body?.participant_id as string | undefined;
 
+    // Ensure challenge exists and is not locked. If locked, skip recalculation.
+    const { data: challengeInfo, error: chInfoErr } = await service
+      .from('challenges')
+      .select('id,is_locked,start_date')
+      .eq('id', challengeId)
+      .maybeSingle();
+    if (chInfoErr) {
+      console.error('Failed to fetch challenge info', chInfoErr);
+      return NextResponse.json({ error: chInfoErr.message }, { status: 500 });
+    }
+    if (!challengeInfo) {
+      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    }
+    if (challengeInfo.is_locked) {
+      return NextResponse.json({ ok: true, message: 'Challenge is locked; skipping recalc', updated: [] });
+    }
+
     // Fetch participants for the challenge (or single participant if provided)
     let partsQuery = service.from('challenge_participants').select('id,user_id,target_km').eq('challenge_id', challengeId);
     if (participantId) partsQuery = service.from('challenge_participants').select('id,user_id,target_km').eq('id', participantId).eq('challenge_id', challengeId);
