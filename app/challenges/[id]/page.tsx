@@ -137,15 +137,18 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         setChallenge(null);
       }
 
-      // Fetch participants with activities via server API (handles RLS)
+      // Fetch participants with activities directly via Supabase (RLS applies)
       try {
-        const resp = await fetch(`/api/challenges/${params.id}/participants`, { credentials: 'same-origin' });
-        if (!resp.ok) {
-          console.error('Failed to load participants:', await resp.text());
+        const { data: participantsData, error: participantsError } = await supabase
+          .from('challenge_participants')
+          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name, avatar_url)')
+          .eq('challenge_id', params.id)
+          .order('actual_km', { ascending: false });
+
+        if (participantsError) {
+          console.error('Failed to load participants via Supabase:', participantsError);
         } else {
-          const json = await resp.json();
-          const participantsData = json.participants || [];
-          const mapped = participantsData.map((p: any) => ({
+          const mapped = (participantsData || []).map((p: any) => ({
             user_id: p.user_id,
             target_km: p.target_km,
             actual_km: p.actual_km,
