@@ -32,7 +32,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const user = await ensureAdmin(supabaseAuth);
+    // Only allow full admins to delete challenges
+    const role = (user as any)?.user_metadata?.role as string | undefined;
+    if (role !== 'admin') {
+      return NextResponse.json({ error: 'Only admin can delete challenges' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { title, start_date, end_date, password } = body;

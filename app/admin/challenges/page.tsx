@@ -525,7 +525,7 @@ export default function ChallengesAdminPage() {
                           Sửa
                         </Link>
                         {/* Delete button: allow UI hint when challenge not started or open (server enforces no participants) */}
-                        {(new Date().getTime() < new Date(challenge.start_date).getTime() || challenge.status === 'Open') && (
+                        {isAdmin && (new Date().getTime() < new Date(challenge.start_date).getTime() || challenge.status === 'Open') && (
                           <button
                             onClick={async () => {
                               if (!confirm('Bạn có chắc muốn xóa thử thách này? Hành động không thể hoàn tác.')) return;
