@@ -48,7 +48,9 @@ export async function GET(request: NextRequest) {
         .from('challenge_participants')
         .select(
           // use actual DB column names; map to flattened response names below
-          `challenge_id, actual_km, avg_pace_seconds, total_activities, completion_rate, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
+          // Note: do not select `completion_rate` directly because older DBs may lack this column.
+          // Compute it on-the-fly below using `target_km` when available.
+          `challenge_id, target_km, actual_km, avg_pace_seconds, total_activities, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
         )
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
@@ -64,13 +66,25 @@ export async function GET(request: NextRequest) {
       const ordered = (rows || []).map((r: any) => {
         const ch = r.challenges;
         if (!ch) return null;
+        // Compute completion_rate if possible (fallback to null if unavailable)
+        let completionRate: number | null = null;
+        try {
+          const ak = r.actual_km != null ? Number(r.actual_km) : null;
+          const tk = r.target_km != null ? Number(r.target_km) : null;
+          if (ak != null && tk != null && tk > 0) {
+            completionRate = Math.round((ak / tk) * 10000) / 100;
+          }
+        } catch (e) {
+          completionRate = null;
+        }
+
         return {
           ...ch,
           // Expose canonical cached aggregate column names in API responses
           actual_km: r.actual_km ?? null,
           avg_pace_seconds: r.avg_pace_seconds ?? null,
           total_activities: r.total_activities ?? null,
-          completion_rate: r.completion_rate ?? null,
+          completion_rate: completionRate,
           completed: r.completed ?? false,
           user_participates: true,
         };
