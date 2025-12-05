@@ -391,51 +391,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           <div className="lg:col-span-1">
             {/* Two-column layout for info on wide screens; stacked on small screens */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><ClipboardList size={28} /> Thông Tin</h2>
-                <p className="text-gray-700 whitespace-pre-wrap mb-4">{challenge.description}</p>
-
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="font-semibold text-gray-700">Người tạo:</span>
-                    <span className="text-gray-600"> {creatorProfile?.full_name ?? '—'}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">Trạng thái:</span>
-                    <span className="text-gray-600"> {challenge.is_locked ? 'Đã kết thúc' : 'Đang diễn ra'}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">Pace Range:</span>
-                    <span className="text-gray-600"> {formatPace(challenge.min_pace_seconds)} - {formatPace(challenge.max_pace_seconds)}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-xl font-bold mb-4">Thông Tin Đăng Ký</h3>
-                <div className="space-y-2 text-sm">
-                  <div>
-                    <span className="font-semibold text-gray-700">Mục tiêu:</span>
-                    <span className="text-gray-600"> {userParticipation ? `${userParticipation.target_km} km` : '—'}</span>
-                  </div>
-                                    <div>
-                    <span className="font-semibold text-gray-700">Đã thực hiện:</span>
-                    <span className="text-gray-600"> {userParticipation ? `${userParticipation.actual_km ?? 0} km` : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">Hoạt động hợp lệ:</span>
-                    <span className="text-gray-600"> {userParticipation ? `${userParticipation.total_activities ?? 0}` : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">Pace trung bìn:</span>
-                    <span className="text-gray-600"> {userParticipation && userParticipation.avg_pace_seconds ? formatPace(userParticipation.avg_pace_seconds) : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">% Hoàn thành:</span>
-                    <span className="text-gray-600"> {userParticipation && userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
-                  </div>
-                </div>
-              </div>
+              {/* Description and stats now shown in the compact row under the title; removing duplicate cards here */}
             </div>
 
             {/* Registration Card */}
