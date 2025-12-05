@@ -17,6 +17,7 @@ interface Challenge {
   is_locked: boolean;
   is_hide?: boolean;
   registration_deadline?: string | null;
+  challenge_participants?: { id: string }[];
 }
 
 function formatDate(dateStr: string): string {
@@ -145,58 +146,36 @@ export default function ChallengesAdminPage() {
   }
 
   async function checkRole() {
-    // user from AuthContext
-
-    console.log('[Challenges Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
-
     if (!user) {
-      router.push("/debug-login");
+      router.push('/debug-login');
       return;
     }
 
-    // Get role from Auth metadata
     const userRole = user.user_metadata?.role;
-
-    if (!userRole || !["admin", "mod_challenge"].includes(userRole)) {
-      console.log('[Challenges Page] Unauthorized role:', userRole);
-      router.push("/");
-    } else {
-      console.log('[Challenges Page] Role authorized:', userRole);
+    if (!userRole || !['admin', 'mod_challenge'].includes(userRole)) {
+      router.push('/');
     }
   }
 
   async function fetchChallenges() {
     setLoading(true);
-
     try {
-      // Try to select created_by (newer schema). If column missing, retry without it.
-      // include creator's profile full_name when available
-      let result = await supabase
-        .from("challenges")
-        .select("id, title, start_date, end_date, registration_deadline, status, is_locked, is_hide, created_by, profiles(full_name)")
-        .order("start_date", { ascending: false });
-
-      // If DB doesn't have created_by column, retry without it to be defensive.
-      if (result.error) {
-        const msg = String(result.error.message || result.error);
-        if (/created_by/i.test(msg) && /does not exist/i.test(msg)) {
-          console.warn('[Challenges] created_by not present in DB, retrying without created_by');
-          result = await supabase
-            .from("challenges")
-            .select("id, title, start_date, end_date, registration_deadline, status, is_locked")
-            .order("start_date", { ascending: false });
-        }
-      }
-
-      if (result.error) {
-        console.error("Error fetching challenges:", result.error);
+      const res = await fetch('/api/admin/challenges/list', { credentials: 'same-origin' });
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Error fetching admin challenges list:', json);
         setChallenges([]);
         return;
       }
-
-      setChallenges(result.data || []);
+      const enriched = (json.challenges || []).map((c: any) => ({
+        ...c,
+        // keep backward-compatible shape for the table rendering
+        challenge_participants: Array.from({ length: c.participant_count || 0 }, (_, i) => ({ id: String(i) })),
+      }));
+      setChallenges(enriched);
     } catch (err) {
-      console.error("Error:", err);
+      console.error('Error:', err);
+      setChallenges([]);
     } finally {
       setLoading(false);
     }
@@ -475,6 +454,7 @@ export default function ChallengesAdminPage() {
                 <tr className="border-b-2 border-gray-300 bg-gray-50">
                         <th className="text-left py-3 px-4 font-bold text-gray-700">Tên Thử Thách</th>
                         <th className="text-left py-3 px-4 font-bold text-gray-700">Người Tạo</th>
+                      <th className="text-center py-3 px-4 font-bold text-gray-700">Số Thành Viên</th>
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày Bắt Đầu</th>
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày Kết Thúc</th>
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Hạn Đăng Ký</th>
@@ -495,6 +475,7 @@ export default function ChallengesAdminPage() {
                       </div>
                     </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{challenge.profiles?.full_name || challenge.created_by || '-'}</td>
+                    <td className="py-3 px-4 text-center">{(challenge.challenge_participants?.length ?? 0)}</td>
                     <td className="py-3 px-4">{formatDate(challenge.start_date)}</td>
                     <td className="py-3 px-4">{formatDate(challenge.end_date)}</td>
                     <td className="py-3 px-4">{renderRegistrationBadge(challenge.registration_deadline)}</td>

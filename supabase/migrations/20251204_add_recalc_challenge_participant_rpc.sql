@@ -52,14 +52,15 @@ BEGIN
     is_completed := (r.target_km IS NOT NULL AND t_km >= r.target_km);
 
     -- Update participant cached columns (canonical names)
+    -- Note: do NOT persist `completion_rate` column here. Compute it and return it
+    -- from the RPC result but avoid writing it to the DB to keep schema flexible.
     UPDATE public.challenge_participants
     SET actual_km = t_km,
       avg_pace_seconds = avg_pace,
       total_activities = act_count,
       last_synced_at = now(),
 
-      -- cached aggregates
-      completion_rate = comp_rate,
+      -- cached aggregates (do NOT persist completion_rate here)
       completed = is_completed,
 
       -- don't overwrite status to non-completed values, but set to 'completed' if achieved

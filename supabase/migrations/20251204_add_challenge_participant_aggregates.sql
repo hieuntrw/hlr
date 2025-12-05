@@ -11,7 +11,7 @@ ADD COLUMN IF NOT EXISTS last_synced_at timestamptz DEFAULT now();
 
 -- Indexes to support leaderboard and participant queries
 CREATE INDEX IF NOT EXISTS idx_challenge_participants_challenge_actual_km ON public.challenge_participants (challenge_id, actual_km DESC);
-CREATE INDEX IF NOT EXISTS idx_challenge_participants_member ON public.challenge_participants (member_id);
+CREATE INDEX IF NOT EXISTS idx_challenge_participants_member ON public.challenge_participants (user_id);
 
 -- NOTE:
 -- This migration only adds columns + indexes. You should backfill these values from your

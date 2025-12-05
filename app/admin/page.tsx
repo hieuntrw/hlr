@@ -55,7 +55,7 @@ export default function AdminPage() {
     if (profile) {
       setLocalProfile({
         id: profile.id,
-        full_name: profile.full_name,
+        full_name: profile.full_name ?? '',
         role: profile.role || "member"
       });
     } else {
@@ -94,7 +94,7 @@ export default function AdminPage() {
       }
 
       // Trong fetchProfileAndStats, ưu tiên dùng profile từ AuthContext nếu có, chỉ truy vấn Supabase nếu chưa có hoặc cache hết hạn
-      setLocalProfile({...user.user_metadata, role: authRole}); // Use auth role, not profile role
+      setLocalProfile({ id: user.id, full_name: user.user_metadata?.full_name ?? '', role: authRole }); // Use auth role, not profile role
 
       // Fetch dashboard statistics
       await fetchStats(authRole);

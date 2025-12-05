@@ -13,6 +13,7 @@ async function ensureAdmin(supabaseAuth: any) {
 
   const role = profile?.role;
   if (!role || !['admin', 'mod_challenge'].includes(role)) throw { status: 403, message: 'Không có quyền' };
+  return { user, role };
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
@@ -32,25 +33,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     );
 
-    const user = await ensureAdmin(supabaseAuth);
-    // Only allow full admins to delete challenges
-    const role = (user as any)?.user_metadata?.role as string | undefined;
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Only admin can delete challenges' }, { status: 403 });
-    }
+    const authInfo = await ensureAdmin(supabaseAuth);
+    // Only allow full admins to hide challenges; moderators can still edit other fields
+    const role = (authInfo as any)?.role as string | undefined;
 
     const body = await request.json();
-    const { title, start_date, end_date, password, is_hide } = body;
+    const { title, start_date, end_date, is_hide } = body;
 
     const updatePayload: any = {};
     if (title) updatePayload.title = title;
     if (start_date) updatePayload.start_date = start_date;
     if (end_date) updatePayload.end_date = end_date;
-    if (password !== undefined) updatePayload.password = password;
+   // if (password !== undefined) updatePayload.password = password;
     // is_hide can only be set/unset by full admins
     if (is_hide !== undefined) {
-      const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-      const role = (user as any)?.user_metadata?.role as string | undefined;
       if (role !== 'admin') return NextResponse.json({ error: 'Only admin can change visibility' }, { status: 403 });
       updatePayload.is_hide = !!is_hide;
     }
@@ -92,7 +88,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const authInfo = await ensureAdmin(supabaseAuth);
+    // Only full admins may hide (soft-delete) challenges via DELETE
+    const role = (authInfo as any)?.role as string | undefined;
+    if (role !== 'admin') return NextResponse.json({ error: 'Only admin can hide challenges' }, { status: 403 });
 
     // Fetch challenge and participant count
     const { data: challenge, error: chErr } = await supabaseAuth
@@ -135,13 +134,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .update({ is_hide: true })
       .eq('id', id);
     if (hideErr) {
-      console.error('DELETE (hide) /api/admin/challenges/[id] error', hideErr);
+      console.error('Ẩn (hide) /api/admin/challenges/[id] error', hideErr);
       return NextResponse.json({ error: hideErr.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
   } catch (err: any) {
-    console.error('DELETE /api/admin/challenges/[id] exception', err);
+    console.error('Ẩn /api/admin/challenges/[id] exception', err);
     const status = err?.status || 500;
     return NextResponse.json({ error: err?.message || String(err) }, { status });
   }

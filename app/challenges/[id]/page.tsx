@@ -27,7 +27,6 @@ interface ParticipantWithActivity {
   total_activities: number;
   profile?: {
     full_name: string;
-    avatar_url?: string;
     gender?: string;
   };
 }
@@ -39,7 +38,7 @@ interface LuckyDraw {
   rank: number;
   winner_profile?: {
     full_name: string;
-    avatar_url?: string;
+
   };
 }
 
@@ -76,7 +75,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
   const [loading, setLoading] = useState(true);
   const [userParticipation, setUserParticipation] = useState<any>(null);
-  const [creatorProfile, setCreatorProfile] = useState<{ full_name?: string | null; avatar_url?: string | null } | null>(null);
+  const [creatorProfile, setCreatorProfile] = useState<{ full_name?: string | null} | null>(null);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [registering, setRegistering] = useState(false);
@@ -141,7 +140,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           if (challengeData.created_by) {
             const { data: prof } = await supabase
               .from('profiles')
-              .select('full_name, avatar_url')
+              .select('full_name')
               .eq('id', challengeData.created_by)
               .maybeSingle();
             setCreatorProfile(prof ?? null);
@@ -163,7 +162,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         // directly. Otherwise fall back to a separate profiles fetch.
         const { data: joinedData, error: joinedError } = await supabase
           .from('challenge_participants')
-          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name, avatar_url)')
+          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name)')
           .eq('challenge_id', params.id)
           .order('actual_km', { ascending: false });
 
@@ -201,7 +200,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
               try {
                 const { data: profilesData, error: profilesError } = await supabase
                   .from('profiles')
-                  .select('id, full_name, avatar_url')
+                  .select('id, full_name')
                   .in('id', ids);
                 if (!profilesError && profilesData) {
                   profilesMap = Object.fromEntries((profilesData as any[]).map((pr: any) => [pr.id, pr]));
@@ -242,7 +241,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           winner_user_id,
           prize_name,
           rank,
-          profiles!lucky_draws_winner_user_id_fkey(full_name, avatar_url)
+          profiles!lucky_draws_winner_user_id_fkey(full_name)
         `
           )
           .eq("challenge_id", params.id)
@@ -327,33 +326,6 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
     }
   }
 
-  async function handleLeave() {
-    if (!currentUser) return;
-    if (!confirm('Bạn có chắc muốn rời thử thách này?')) return;
-
-    setLeaving(true);
-    try {
-      const res = await fetch(`/api/challenges/${params.id}/leave`, {
-        method: 'POST',
-        credentials: 'same-origin',
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        console.error('Leave API error:', json);
-        alert(json.error || 'Lỗi khi rời thử thách');
-      } else {
-        alert('Bạn đã rời thử thách');
-        setUserParticipation(null);
-        await fetchData();
-      }
-    } catch (err) {
-      console.error('Leave error:', err);
-      alert('Có lỗi xảy ra');
-    } finally {
-      setLeaving(false);
-    }
-  }
 
   if (loading) {
     return (
@@ -541,10 +513,10 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                     <thead>
                       <tr className="border-b-2 border-gray-300">
                         <th className="text-left py-3 px-2 font-bold text-gray-700">#</th>
-                        <th className="text-left py-3 px-2 font-bold text-gray-700">Tên</th>
+                        <th className="text-left py-3 px-2 font-bold text-gray-700">Thành viên</th>
                         <th className="text-right py-3 px-2 font-bold text-gray-700">KM</th>
                         <th className="text-right py-3 px-2 font-bold text-gray-700">Pace</th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">% Hoàn thành</th>
+                        <th className="text-right py-3 px-2 font-bold text-gray-700">Tỉ lệ %</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -554,7 +526,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                         .map((p, idx) => {
                           const pct = p.target_km && p.target_km > 0 ? Math.round(((p.actual_km ?? 0) / p.target_km) * 100) : 0;
                           const progressPercent = Math.min(Math.max(pct, 0), 999);
-                          // Color bands: <50 red, 50-74 yellow, 75-99 light green, >=100 dark green
+                          // Color bands: <50 red, 50-74 yellow, 75-99 light green, >=100 dark green, tam thoi Xóa Avatar
                           let barColor = 'bg-red-500';
                           if (progressPercent >= 100) barColor = 'bg-green-700';
                           else if (progressPercent >= 75) barColor = 'bg-green-300';
@@ -581,9 +553,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                               <td className="py-4 px-2">
                                 <div className="flex items-center gap-2">
                                   <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                    <span className="text-xs">
-                                      {p.profile?.full_name?.charAt(0) || "?"}
-                                    </span>
+                                   
                                   </div>
                                   <span className="font-semibold text-gray-900">
                                     {p.profile?.full_name ?? '—'}

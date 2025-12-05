@@ -34,7 +34,7 @@ function getStatusBadge(challenge: Challenge) {
   const end = new Date(challenge.end_date);
 
   if (now < start) return <span className="px-2 py-1 rounded-full text-sm" style={{ background: "var(--color-info-bg)", color: "var(--color-info)" }}>Sắp diễn ra</span>;
-  if (now >= start && now <= end && challenge.status === "Open") return <span className="px-2 py-1 rounded-full text-sm bg-green-100 text-green-800">Đang chạy</span>;
+  if (now >= start && now <= end && challenge.status === "Open") return <span className="px-2 py-1 rounded-full text-sm bg-green-100 text-green-800">Đang diễn ra</span>;
   return <span className="px-2 py-1 rounded-full text-sm" style={{ background: "var(--color-bg-primary)", color: "var(--color-text-secondary)" }}>Đã kết thúc</span>;
 }
 
@@ -52,11 +52,6 @@ function ChallengeListItem({ challenge }: { challenge: ChallengeWithParticipatio
           </div>
 
           <div className="ml-4 flex flex-col items-end gap-2">
-            {challenge.user_participates && (
-              <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded flex items-center gap-1">
-                <CheckCircle size={14} /> Đã tham gia
-              </span>
-            )}
             <div>{getStatusBadge(challenge)}</div>
           </div>
         </div>

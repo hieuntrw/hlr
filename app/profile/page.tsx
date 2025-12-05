@@ -47,7 +47,6 @@ interface ActivityData {
 
 interface MemberReward {
   id: string;
-  id: string;
   user_id: string;
   status: string;
   awarded_date: string;
@@ -61,7 +60,8 @@ interface MemberReward {
     prize_description: string;
     cash_amount: number;
   } | null;
-  status: string;
+  reward_name?: string;
+  reward_amount?: number;
 }
 
 function formatDate(dateStr?: string): string {
@@ -392,7 +392,17 @@ export default function ProfilePage() {
 
       if (rewardsData) {
         console.log("[Profile] Rewards loaded:", rewardsData);
-        setRewards(rewardsData);
+        // Map returned shape to MemberReward[] expected by state
+        const mapped = rewardsData.map((r: any) => ({
+          id: r.id,
+          user_id: user.id,
+          status: r.status,
+          awarded_date: r.awarded_at || r.awarded_at || '',
+          created_at: r.awarded_at || new Date().toISOString(),
+          reward_definition_id: '',
+          reward_definitions: null,
+        }));
+        setRewards(mapped);
       }
 
       // Fetch recent activities (30 days)
@@ -512,7 +522,30 @@ export default function ProfilePage() {
 
       if (rewardsError) throw rewardsError;
       if (rewardsData) {
-        setRewards(rewardsData as MemberReward[]);
+        const mapped = (rewardsData as any[]).map((r) => {
+          const rd = Array.isArray(r.reward_definitions) ? r.reward_definitions[0] : r.reward_definitions;
+          return {
+            id: r.id,
+            user_id: r.user_id,
+            status: r.status,
+            awarded_date: r.awarded_at || r.awarded_at || '',
+            created_at: r.created_at || '',
+            reward_definition_id: r.reward_definition_id || '',
+            reward_definitions: rd
+              ? {
+                  id: rd.id || '',
+                  type: rd.type || '',
+                  category: rd.category || '',
+                  condition_label: rd.condition_label || '',
+                  prize_description: rd.prize_description || '',
+                  cash_amount: Number(rd.cash_amount || 0),
+                }
+              : null,
+            reward_name: r.reward_name || (rd ? rd.condition_label : undefined),
+            reward_amount: r.reward_amount || (rd ? Number(rd.cash_amount || 0) : undefined),
+          } as MemberReward;
+        });
+        setRewards(mapped);
       }
     } catch (err) {
       console.error("Error fetching rewards:", err);
@@ -803,11 +836,11 @@ export default function ProfilePage() {
                           <div className="flex items-center justify-between">
                             <span className="font-medium text-gray-900">{reward.reward_name}</span>
                             <span className="font-bold" style={{ color: 'var(--color-success)' }}>
-                              {reward.reward_amount.toLocaleString()} ₫
+                              {Number(reward.reward_amount || 0).toLocaleString()} ₫
                             </span>
                           </div>
                           <div className="text-[10px] text-gray-600 mt-0.5">
-                            {formatDate(reward.awarded_at)}
+                            {formatDate((reward as any).awarded_date ?? (reward as any).awarded_at)}
                           </div>
                         </div>
                       ))}
