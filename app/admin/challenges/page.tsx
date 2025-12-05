@@ -524,6 +524,34 @@ export default function ChallengesAdminPage() {
                         >
                           Sửa
                         </Link>
+                        {/* Delete button: allow UI hint when challenge not started or open (server enforces no participants) */}
+                        {(new Date().getTime() < new Date(challenge.start_date).getTime() || challenge.status === 'Open') && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Bạn có chắc muốn xóa thử thách này? Hành động không thể hoàn tác.')) return;
+                              try {
+                                const res = await fetch(`/api/admin/challenges/${challenge.id}`, {
+                                  method: 'DELETE',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  credentials: 'same-origin',
+                                });
+                                const json = await res.json();
+                                if (!res.ok) {
+                                  alert(json.error || 'Không thể xóa thử thách');
+                                  return;
+                                }
+                                alert('Đã xóa thử thách');
+                                fetchChallenges();
+                              } catch (err) {
+                                console.error('Delete error', err);
+                                alert('Lỗi khi xóa thử thách');
+                              }
+                            }}
+                            className="font-semibold text-red-600"
+                          >
+                            Xóa
+                          </button>
+                        )}
                         <button
                           onClick={() => handleFinalize(challenge.id)}
                           disabled={!(new Date().getTime() >= (new Date(challenge.end_date).getTime() + 24 * 60 * 60 * 1000))}

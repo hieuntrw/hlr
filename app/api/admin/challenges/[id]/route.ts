@@ -62,3 +62,75 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     return NextResponse.json({ error: err?.message || String(err) }, { status });
   }
 }
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  const { id } = params;
+  try {
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return request.cookies.get(name)?.value;
+          },
+          set() {},
+          remove() {},
+        },
+      }
+    );
+
+    await ensureAdmin(supabaseAuth);
+
+    // Fetch challenge and participant count
+    const { data: challenge, error: chErr } = await supabaseAuth
+      .from('challenges')
+      .select('id, start_date, status')
+      .eq('id', id)
+      .maybeSingle();
+    if (chErr) {
+      console.error('DELETE /api/admin/challenges/[id] fetch challenge error', chErr);
+      return NextResponse.json({ error: chErr.message }, { status: 500 });
+    }
+    if (!challenge) {
+      return NextResponse.json({ error: 'Challenge not found' }, { status: 404 });
+    }
+
+    const startDate = challenge.start_date ? new Date(challenge.start_date) : null;
+    const now = new Date();
+
+    const { data: participantsData, error: pErr, count } = await supabaseAuth
+      .from('challenge_participants')
+      .select('id', { count: 'exact' })
+      .eq('challenge_id', id);
+    if (pErr) {
+      console.error('DELETE /api/admin/challenges/[id] fetch participants error', pErr);
+      return NextResponse.json({ error: pErr.message }, { status: 500 });
+    }
+
+    const participantCount = typeof count === 'number' ? count : (participantsData ? participantsData.length : 0);
+
+    const notStarted = startDate ? now.getTime() < startDate.getTime() : false;
+    const openAndNoParticipants = (challenge.status === 'Open') && participantCount === 0;
+
+    if (!notStarted && !openAndNoParticipants) {
+      return NextResponse.json({ error: 'Cannot delete: challenge already started or has participants' }, { status: 403 });
+    }
+
+    // Delete challenge
+    const { error: delErr } = await supabaseAuth
+      .from('challenges')
+      .delete()
+      .eq('id', id);
+    if (delErr) {
+      console.error('DELETE /api/admin/challenges/[id] delete error', delErr);
+      return NextResponse.json({ error: delErr.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('DELETE /api/admin/challenges/[id] exception', err);
+    const status = err?.status || 500;
+    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  }
+}
