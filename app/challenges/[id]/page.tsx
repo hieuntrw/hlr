@@ -346,6 +346,10 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                 </div>
                 <div>
                   <span className="font-semibold text-gray-700">Mục tiêu đã đăng ký:</span>
+                  <span className="text-gray-600"> {userParticipation ? `${userParticipation.target_km} km` : '—'}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-700">Các mức đăng ký:</span>
                   <span className="text-gray-600"> {targetOptions.join(', ')}</span>
                 </div>
                 <div>
