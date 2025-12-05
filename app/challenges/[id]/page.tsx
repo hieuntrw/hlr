@@ -515,7 +515,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                           </div>
                           <div className="flex-1">
                             <p className="font-semibold text-gray-900">
-                              {p.profile?.full_name || "Unknown"}
+                              {p.profile?.full_name || (p.user_id ? p.user_id.slice(0, 8) : "Unknown")}
                             </p>
                             <p className="text-xs text-gray-600">
                               Đạt {p.actual_km}/{p.target_km} km (
@@ -586,7 +586,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                                     </span>
                                   </div>
                                   <span className="font-semibold text-gray-900">
-                                    {p.profile?.full_name || "Unknown"}
+                                    {p.profile?.full_name || (p.user_id ? p.user_id.slice(0, 8) : "Unknown")}
                                   </span>
                                 </div>
                               </td>
