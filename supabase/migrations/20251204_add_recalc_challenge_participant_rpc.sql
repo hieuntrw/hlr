@@ -7,8 +7,8 @@ CREATE OR REPLACE FUNCTION public.recalc_challenge_participant_aggregates(
   p_participant_id uuid DEFAULT NULL
 ) RETURNS TABLE(
   participant_id uuid,
-  total_km numeric(10,2),
-  valid_activities_count integer,
+  actual_km numeric(10,2),
+  total_activities integer,
   avg_pace_seconds integer,
   completion_rate numeric(5,2),
   completed boolean
@@ -34,7 +34,7 @@ BEGIN
       FROM public.activities
       WHERE challenge_participant_id = r.id;
 
-    -- total_km rounded to 2 decimals
+    -- actual_km rounded to 2 decimals
     t_km := ROUND((total_meters / 1000.0)::numeric * 100) / 100;
 
     IF t_km > 0 THEN
@@ -51,26 +51,24 @@ BEGIN
 
     is_completed := (r.target_km IS NOT NULL AND t_km >= r.target_km);
 
-    -- Update participant cached columns and legacy fields
+    -- Update participant cached columns (canonical names)
     UPDATE public.challenge_participants
     SET actual_km = t_km,
-        avg_pace_seconds = avg_pace,
-        total_activities = act_count,
-        last_synced_at = now(),
+      avg_pace_seconds = avg_pace,
+      total_activities = act_count,
+      last_synced_at = now(),
 
-        -- cached aggregates
-        total_km = t_km,
-        valid_activities_count = act_count,
-        completion_rate = comp_rate,
-        completed = is_completed,
+      -- cached aggregates
+      completion_rate = comp_rate,
+      completed = is_completed,
 
-        -- don't overwrite status to non-completed values, but set to 'completed' if achieved
-        status = CASE WHEN is_completed THEN 'completed' ELSE status END
+      -- don't overwrite status to non-completed values, but set to 'completed' if achieved
+      status = CASE WHEN is_completed THEN 'completed' ELSE status END
     WHERE id = r.id;
 
     participant_id := r.id;
-    total_km := t_km;
-    valid_activities_count := act_count;
+    actual_km := t_km;
+    total_activities := act_count;
     avg_pace_seconds := avg_pace;
     completion_rate := comp_rate;
     completed := is_completed;

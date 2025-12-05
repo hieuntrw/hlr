@@ -7,10 +7,10 @@ Goals
 - Provide safe backfill SQL and recommended update patterns (sync-time incremental update, triggers, or scheduled jobs).
 
 Suggested new columns (already added by migration):
-- `total_km` (numeric(10,2)) — total valid km for this participant in the challenge
+- `actual_km` (numeric(10,2)) — total valid km for this participant in the challenge (canonical column)
 - `avg_pace_seconds` (integer) — average pace seconds-per-km across valid activities
-- `valid_activities_count` (integer) — count of valid activities counted toward the challenge
-- `completion_rate` (numeric(5,2)) — percent completion = (total_km / target_km) * 100
+- `total_activities` (integer) — count of valid activities counted toward the challenge (canonical column)
+- `completion_rate` (numeric(5,2)) — percent completion = (actual_km / target_km) * 100
 - `completed` (boolean) — whether participant reached target_km (true/false)
 - `last_synced_at` (timestamptz) — last update timestamp for cached aggregates
 
@@ -29,12 +29,12 @@ How to maintain these values (options)
     - Determine which challenge(s) the activity applies to (date range, require_map flag, min_km, pace rules)
     - For each affected challenge C:
       - Compute activity contribution (distance_km, avg_pace_seconds) and whether activity is valid
-      - Update challenge_participants set
-          total_km = total_km + delta_km,
-          valid_activities_count = valid_activities_count + (is_valid ? 1 : 0),
-          avg_pace_seconds = (existing_total_pace_seconds + activity_pace_seconds) / valid_activities_count,
-          completion_rate = round((total_km / target_km) * 100, 2),
-          completed = (total_km >= target_km),
+        - Update challenge_participants set
+          actual_km = actual_km + delta_km,
+          total_activities = total_activities + (is_valid ? 1 : 0),
+          avg_pace_seconds = (existing_total_pace_seconds + activity_pace_seconds) / total_activities,
+          completion_rate = round((actual_km / target_km) * 100, 2),
+          completed = (actual_km >= target_km),
           last_synced_at = now()
 
   - Do this in a transaction (or upsert) for each participant to avoid races.
@@ -71,9 +71,9 @@ WITH agg AS (
 )
 UPDATE public.challenge_participants cp
 SET
-  total_km = COALESCE(agg.total_km, 0),
+  actual_km = COALESCE(agg.total_km, 0),
   avg_pace_seconds = agg.avg_pace_seconds,
-  valid_activities_count = COALESCE(agg.valid_activities_count, 0),
+  total_activities = COALESCE(agg.valid_activities_count, 0),
   completion_rate = CASE WHEN cp.target_km > 0 THEN ROUND(COALESCE(agg.total_km, 0) / cp.target_km * 100, 2) ELSE 0 END,
   completed = (COALESCE(agg.total_km, 0) >= cp.target_km),
   last_synced_at = now()
@@ -87,7 +87,7 @@ Notes on units and types
 - Store pace as integer seconds-per-km to simplify averaging.
 
 Indexes
-- The migration creates `idx_challenge_participants_challenge_total_km` for fast ORDER BY total_km DESC per challenge.
+- The migration creates `idx_challenge_participants_challenge_actual_km` for fast ORDER BY actual_km DESC per challenge.
 
 API considerations
 - For operations that must update aggregates from client actions (admin override, manual activity entry), expose server APIs that recalc a participant or recalc a whole challenge (e.g., POST /api/admin/challenges/:id/recalc).

@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     const userId = session.user.id;
     const result = await syncUserActivitiesForCurrentMonth(userId);
 
-    const total_km = result.totalKm ?? 0;
+    const actual_km = result.totalKm ?? 0;
     const avgPaceSeconds = result.avgPaceSeconds ?? 0;
 
     const pace = avgPaceSeconds
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Đồng bộ thành công",
       data: {
-        total_km,
+        actual_km,
         pace,
         avg_pace_seconds: avgPaceSeconds,
         total_activities: result.totalActivities ?? 0,

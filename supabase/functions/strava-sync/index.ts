@@ -251,16 +251,14 @@ export default async function handler(req: Request) {
         const isCompleted = participant.target_km ? totalKm >= Number(participant.target_km) : false;
 
         const updatePayload: any = {
-          // legacy fields
+          // canonical fields
           actual_km: totalKm,
           avg_pace_seconds: avgPaceSeconds,
           total_activities: totalActivities,
           status: isCompleted ? 'completed' : undefined,
           last_synced_at: new Date().toISOString(),
 
-          // new cached aggregate columns (migration `add_challenge_participant_aggregates`)
-          total_km: totalKm,
-          valid_activities_count: totalActivities,
+          // cached aggregate columns (use canonical DB column names)
           completion_rate: completionRate,
           completed: isCompleted,
         };

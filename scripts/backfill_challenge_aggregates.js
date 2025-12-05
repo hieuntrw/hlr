@@ -64,8 +64,7 @@ async function main() {
       avg_pace_seconds: avgPaceSeconds,
       total_activities: validActivitiesCount,
       last_synced_at: new Date().toISOString(),
-      total_km: totalKm,
-      valid_activities_count: validActivitiesCount,
+      // write canonical cached aggregate fields
       completion_rate: completionRate,
       completed,
       status: completed ? 'completed' : undefined,

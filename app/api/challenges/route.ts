@@ -67,10 +67,10 @@ export async function GET(request: NextRequest) {
         if (!ch) return null;
         return {
           ...ch,
-          // Flatten and normalize names for the frontend: map DB column names to expected response keys
-          total_km: r.actual_km ?? null,
+          // Expose canonical cached aggregate column names in API responses
+          actual_km: r.actual_km ?? null,
           avg_pace_seconds: r.avg_pace_seconds ?? null,
-          valid_activities_count: r.total_activities ?? null,
+          total_activities: r.total_activities ?? null,
           completion_rate: r.completion_rate ?? null,
           completed: r.completed ?? false,
           user_participates: true,

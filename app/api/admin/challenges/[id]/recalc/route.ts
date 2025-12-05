@@ -100,9 +100,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         total_activities: validActivitiesCount,
         last_synced_at: new Date().toISOString(),
 
-        // cached aggregates
-        total_km: totalKm,
-        valid_activities_count: validActivitiesCount,
+        // cached aggregates (canonical column names)
         completion_rate: completionRate,
         completed,
         status: completed ? 'completed' : undefined,
