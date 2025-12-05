@@ -345,7 +345,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                   <span className="text-gray-600"> {challenge?.profiles?.full_name ?? '—'}</span>
                 </div>
                 <div>
-                  <span className="font-semibold text-gray-700">Mốc đăng ký:</span>
+                  <span className="font-semibold text-gray-700">Mục tiêu đã đăng ký:</span>
                   <span className="text-gray-600"> {targetOptions.join(', ')}</span>
                 </div>
                 <div>
