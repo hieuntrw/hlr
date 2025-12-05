@@ -345,6 +345,42 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
           <p style={{ color: "var(--color-text-inverse)", opacity: 0.9 }}>
             {formatDate(challenge.start_date)} - {formatDate(challenge.end_date)}
           </p>
+
+          {/* Compact info row under title: small black text */}
+          <div className="mt-3 text-sm text-black flex flex-wrap gap-4">
+            <div>
+              <span className="font-semibold">Người tạo:</span>{' '}
+              <span>{creatorProfile?.full_name ?? '—'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Trạng thái:</span>{' '}
+              <span>{challenge.is_locked ? 'Đã kết thúc' : 'Đang diễn ra'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Pace yêu cầu:</span>{' '}
+              <span>{formatPace(challenge.min_pace_seconds)} - {formatPace(challenge.max_pace_seconds)}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Mục tiêu:</span>{' '}
+              <span>{userParticipation ? `${userParticipation.target_km} km` : '—'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Đã thực hiện:</span>{' '}
+              <span>{userParticipation ? `${userParticipation.actual_km ?? 0} km` : '—'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Hoạt động hợp lệ:</span>{' '}
+              <span>{userParticipation ? `${userParticipation.total_activities ?? 0}` : '—'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">Pace trung bình:</span>{' '}
+              <span>{userParticipation && userParticipation.avg_pace_seconds ? formatPace(userParticipation.avg_pace_seconds) : '—'}</span>
+            </div>
+            <div>
+              <span className="font-semibold">% Hoàn thành:</span>{' '}
+              <span>{userParticipation && userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -376,26 +412,22 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
               </div>
 
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-xl font-bold mb-4">Thông Tin Đăng Ký & Thống Kê</h3>
+                <h3 className="text-xl font-bold mb-4">Thông Tin Đăng Ký</h3>
                 <div className="space-y-2 text-sm">
                   <div>
-                    <span className="font-semibold text-gray-700">Mục tiêu đã đăng ký:</span>
+                    <span className="font-semibold text-gray-700">Mục tiêu:</span>
                     <span className="text-gray-600"> {userParticipation ? `${userParticipation.target_km} km` : '—'}</span>
                   </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">Các mức đăng ký:</span>
-                    <span className="text-gray-600"> {targetOptions.join(', ')}</span>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-700">KM đã thực hiện:</span>
+                                    <div>
+                    <span className="font-semibold text-gray-700">Đã thực hiện:</span>
                     <span className="text-gray-600"> {userParticipation ? `${userParticipation.actual_km ?? 0} km` : '—'}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-700">Số hoạt động hợp lệ:</span>
+                    <span className="font-semibold text-gray-700">Hoạt động hợp lệ:</span>
                     <span className="text-gray-600"> {userParticipation ? `${userParticipation.total_activities ?? 0}` : '—'}</span>
                   </div>
                   <div>
-                    <span className="font-semibold text-gray-700">Pace trung bình (bản thân):</span>
+                    <span className="font-semibold text-gray-700">Pace trung bìn:</span>
                     <span className="text-gray-600"> {userParticipation && userParticipation.avg_pace_seconds ? formatPace(userParticipation.avg_pace_seconds) : '—'}</span>
                   </div>
                   <div>
@@ -502,7 +534,8 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
               {participants.length > 0 ? (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <div className="max-h-[520px] overflow-y-auto">
+                    <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b-2 border-gray-300">
                         <th className="text-left py-3 px-2 font-bold text-gray-700">#</th>
@@ -513,75 +546,76 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                       </tr>
                     </thead>
                     <tbody>
-                      {participants.map((p, idx) => {
-                        const progressPercent = Math.min(
-                          Math.round((p.actual_km / p.target_km) * 100),
-                          100
-                        );
-                        const isSuccess = progressPercent >= 100;
-                        return (
-                          <tr
-                            key={p.user_id}
-                            className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                          >
-                            <td className="py-4 px-2">
-                              <div className="flex items-center justify-center">
-                                {idx === 0 ? (
-                                  <span className="text-2xl">🥇</span>
-                                ) : idx === 1 ? (
-                                  <span className="text-2xl">🥈</span>
-                                ) : idx === 2 ? (
-                                  <span className="text-2xl">🥉</span>
-                                ) : (
-                                  <span className="font-bold text-gray-600">{idx + 1}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="py-4 px-2">
-                              <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                  <span className="text-xs">
-                                    {p.profile?.full_name?.charAt(0) || "?"}
+                      {participants
+                        .slice()
+                        .sort((a, b) => (b.actual_km || 0) - (a.actual_km || 0))
+                        .map((p, idx) => {
+                          const pct = p.target_km && p.target_km > 0 ? Math.round(((p.actual_km ?? 0) / p.target_km) * 100) : 0;
+                          const progressPercent = Math.min(Math.max(pct, 0), 999);
+                          // Color bands: <50 red, 50-74 yellow, 75-99 light green, >=100 dark green
+                          let barColor = 'bg-red-500';
+                          if (progressPercent >= 100) barColor = 'bg-green-700';
+                          else if (progressPercent >= 75) barColor = 'bg-green-300';
+                          else if (progressPercent >= 50) barColor = 'bg-yellow-400';
+
+                          return (
+                            <tr
+                              key={p.user_id}
+                              className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
+                            >
+                              <td className="py-4 px-2">
+                                <div className="flex items-center justify-center">
+                                  {idx === 0 ? (
+                                    <span className="text-2xl">🥇</span>
+                                  ) : idx === 1 ? (
+                                    <span className="text-2xl">🥈</span>
+                                  ) : idx === 2 ? (
+                                    <span className="text-2xl">🥉</span>
+                                  ) : (
+                                    <span className="font-bold text-gray-600">{idx + 1}</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="py-4 px-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
+                                    <span className="text-xs">
+                                      {p.profile?.full_name?.charAt(0) || "?"}
+                                    </span>
+                                  </div>
+                                  <span className="font-semibold text-gray-900">
+                                    {p.profile?.full_name || "Unknown"}
                                   </span>
                                 </div>
-                                <span className="font-semibold text-gray-900">
-                                  {p.profile?.full_name || "Unknown"}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-4 px-2 text-right">
-                              <div className="font-bold" style={{ color: "var(--color-primary)" }}>{p.actual_km} km</div>
-                              <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                                Mục tiêu: {p.target_km} km
-                              </div>
-                            </td>
-                            <td className="py-4 px-2 text-right">
-                              {formatPace(p.avg_pace_seconds)}
-                            </td>
-                            <td className="py-4 px-2 text-right">
-                              <div className="flex flex-col items-end gap-1">
-                                <span
-                                  className={`font-bold ${
-                                    isSuccess ? "text-green-600" : "text-red-600"
-                                  }`}
-                                >
-                                  {progressPercent}%
-                                </span>
-                                <div className="w-20 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full ${
-                                      isSuccess ? "bg-green-500" : "bg-red-500"
-                                    }`}
-                                    style={{ width: `${progressPercent}%` }}
-                                  />
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                <div className="font-bold" style={{ color: "var(--color-primary)" }}>{p.actual_km} km</div>
+                                <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                                  Mục tiêu: {p.target_km} km
                                 </div>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                {formatPace(p.avg_pace_seconds)}
+                              </td>
+                              <td className="py-4 px-2 text-right">
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className={`font-bold ${progressPercent >= 100 ? 'text-green-700' : progressPercent >= 75 ? 'text-green-600' : progressPercent >=50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                    {progressPercent}%
+                                  </span>
+                                  <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full ${barColor}`}
+                                      style={{ width: `${Math.min(progressPercent, 100)}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center py-12">
