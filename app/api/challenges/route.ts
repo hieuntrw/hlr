@@ -102,11 +102,34 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json({ challenges: ordered });
     }
-      // Public listing: return the full list (no pagination)
-      const { data, error } = await supabase
+      // Public listing: return the full list (no pagination).
+      // Exclude hidden challenges (is_hide = true) when the column exists.
+      let publicResult = await supabase
         .from('challenges')
-        .select('id, title, start_date, end_date, status, is_locked, created_at')
+        .select('id, title, start_date, end_date, status, is_locked, created_at, is_hide')
         .order('start_date', { ascending: false });
+
+      if (publicResult.error) {
+        const msg = String(publicResult.error.message || publicResult.error);
+        // If column `is_hide` doesn't exist on older DBs, retry without it
+        if (/is_hide/i.test(msg) && /does not exist/i.test(msg)) {
+          console.warn('[Challenges] is_hide not present in DB, retrying without is_hide');
+          publicResult = await supabase
+            .from('challenges')
+            .select('id, title, start_date, end_date, status, is_locked, created_at')
+            .order('start_date', { ascending: false });
+        }
+      }
+
+      if (publicResult.error) {
+        console.error('GET /api/challenges error', publicResult.error);
+        return NextResponse.json({ error: publicResult.error.message }, { status: 500 });
+      }
+
+      // Filter out hidden challenges (when column present)
+      const publicData = (publicResult.data || []).filter((c: any) => c.is_hide !== true);
+
+      return NextResponse.json({ challenges: publicData });
 
       if (error) {
         console.error('GET /api/challenges error', error);

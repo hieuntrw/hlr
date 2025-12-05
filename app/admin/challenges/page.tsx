@@ -172,7 +172,7 @@ export default function ChallengesAdminPage() {
       // include creator's profile full_name when available
       let result = await supabase
         .from("challenges")
-        .select("id, title, start_date, end_date, registration_deadline, status, is_locked, created_by, profiles(full_name)")
+        .select("id, title, start_date, end_date, registration_deadline, status, is_locked, is_hide, created_by, profiles(full_name)")
         .order("start_date", { ascending: false });
 
       // If DB doesn't have created_by column, retry without it to be defensive.
@@ -524,32 +524,36 @@ export default function ChallengesAdminPage() {
                         >
                           Sửa
                         </Link>
-                        {/* Delete button: allow UI hint when challenge not started or open (server enforces no participants) */}
-                        {isAdmin && (new Date().getTime() < new Date(challenge.start_date).getTime() || challenge.status === 'Open') && (
+                        {/* Hide/Unhide button: admin-only. Hiding removes from public lists. */}
+                        {isAdmin && (
                           <button
                             onClick={async () => {
-                              if (!confirm('Bạn có chắc muốn xóa thử thách này? Hành động không thể hoàn tác.')) return;
+                              const willHide = !Boolean((challenge as any).is_hide);
+                              const confirmMsg = willHide ? 'Ẩn thử thách này khỏi danh sách công khai?' : 'Bỏ ẩn thử thách này?';
+                              if (!confirm(confirmMsg)) return;
                               try {
+                                // Use PATCH to set is_hide (admin-only in API)
                                 const res = await fetch(`/api/admin/challenges/${challenge.id}`, {
-                                  method: 'DELETE',
+                                  method: 'PATCH',
                                   headers: { 'Content-Type': 'application/json' },
                                   credentials: 'same-origin',
+                                  body: JSON.stringify({ is_hide: willHide }),
                                 });
                                 const json = await res.json();
                                 if (!res.ok) {
-                                  alert(json.error || 'Không thể xóa thử thách');
+                                  alert(json.error || 'Không thể cập nhật trạng thái ẩn');
                                   return;
                                 }
-                                alert('Đã xóa thử thách');
+                                alert(willHide ? 'Thử thách đã bị ẩn' : 'Thử thách đã được bỏ ẩn');
                                 fetchChallenges();
                               } catch (err) {
-                                console.error('Delete error', err);
-                                alert('Lỗi khi xóa thử thách');
+                                console.error('Hide/unhide error', err);
+                                alert('Lỗi khi cập nhật trạng thái ẩn');
                               }
                             }}
                             className="font-semibold text-red-600"
                           >
-                            Xóa
+                            {(challenge as any).is_hide ? 'Bỏ ẩn' : 'Ẩn'}
                           </button>
                         )}
                         <button

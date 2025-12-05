@@ -40,13 +40,20 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     }
 
     const body = await request.json();
-    const { title, start_date, end_date, password } = body;
+    const { title, start_date, end_date, password, is_hide } = body;
 
     const updatePayload: any = {};
     if (title) updatePayload.title = title;
     if (start_date) updatePayload.start_date = start_date;
     if (end_date) updatePayload.end_date = end_date;
     if (password !== undefined) updatePayload.password = password;
+    // is_hide can only be set/unset by full admins
+    if (is_hide !== undefined) {
+      const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
+      const role = (user as any)?.user_metadata?.role as string | undefined;
+      if (role !== 'admin') return NextResponse.json({ error: 'Only admin can change visibility' }, { status: 403 });
+      updatePayload.is_hide = !!is_hide;
+    }
 
     const { data, error } = await supabaseAuth
       .from('challenges')
@@ -122,14 +129,14 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: 'Cannot delete: challenge already started or has participants' }, { status: 403 });
     }
 
-    // Delete challenge
-    const { error: delErr } = await supabaseAuth
+    // Instead of hard-deleting, mark as hidden (is_hide = true)
+    const { error: hideErr } = await supabaseAuth
       .from('challenges')
-      .delete()
+      .update({ is_hide: true })
       .eq('id', id);
-    if (delErr) {
-      console.error('DELETE /api/admin/challenges/[id] delete error', delErr);
-      return NextResponse.json({ error: delErr.message }, { status: 500 });
+    if (hideErr) {
+      console.error('DELETE (hide) /api/admin/challenges/[id] error', hideErr);
+      return NextResponse.json({ error: hideErr.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
