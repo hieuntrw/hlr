@@ -52,8 +52,7 @@ export async function GET(request: NextRequest) {
           // Compute it on-the-fly below using `target_km` when available.
           `challenge_id, target_km, actual_km, avg_pace_seconds, total_activities, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
         )
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        .eq('user_id', user.id);
 
       if (rowsError) {
         console.error('GET /api/challenges participations joined error', rowsError);
@@ -62,8 +61,19 @@ export async function GET(request: NextRequest) {
 
       if (!rows || rows.length === 0) return NextResponse.json({ challenges: [] });
 
+      // Some DB instances do not have `challenge_participants.created_at`. The previous
+      // implementation relied on ordering by that column which can cause "column does not exist"
+      // errors. Instead, sort the fetched rows in JS by the joined challenge's `created_at`
+      // (which is present on `challenges`) so the "Thử Thách Của Tôi" tab preserves the
+      // intended ordering without requiring a schema change to `challenge_participants`.
+      const sortedRows = (rows || []).slice().sort((a: any, b: any) => {
+        const aTime = a.challenges?.created_at ? new Date(a.challenges.created_at).getTime() : 0;
+        const bTime = b.challenges?.created_at ? new Date(b.challenges.created_at).getTime() : 0;
+        return bTime - aTime;
+      });
+
       // Map rows to flattened challenge objects with participant fields
-      const ordered = (rows || []).map((r: any) => {
+      const ordered = (sortedRows || []).map((r: any) => {
         const ch = r.challenges;
         if (!ch) return null;
         // Compute completion_rate if possible (fallback to null if unavailable)
