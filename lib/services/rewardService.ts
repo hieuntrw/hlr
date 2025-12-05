@@ -151,6 +151,7 @@ export async function checkRaceReward(userId: string, raceResult: RaceResult) {
     .from("member_rewards")
     .insert({
       user_id: userId,
+      member_id: userId,
       race_result_id: raceResult.id,
       reward_definition_id: awardedReward.id,
       awarded_date: new Date().toISOString().slice(0, 10),
@@ -259,6 +260,7 @@ export async function checkPodiumReward(
     .from("member_rewards")
     .insert({
     user_id: userId,
+    member_id: userId,
     race_result_id: raceResult.id,
     reward_definition_id: podiumReward.id,
     awarded_date: new Date().toISOString().slice(0, 10),
