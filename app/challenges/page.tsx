@@ -72,6 +72,7 @@ export default function ChallengesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
   const [items, setItems] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
   // no auth prompt needed: page requires auth to access
 
   const currentUser = user?.id || null;
