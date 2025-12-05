@@ -158,46 +158,74 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
       // Fetch participants with activities directly via Supabase (RLS applies)
       try {
-        // Fetch participant rows without joining profiles (RLS or join alias may not be available).
-        const { data: participantsData, error: participantsError } = await supabase
+        // First, try to fetch participants with the joined profiles field. This works when
+        // the PostgREST join alias and RLS permit it. If that returns profile data, use it
+        // directly. Otherwise fall back to a separate profiles fetch.
+        const { data: joinedData, error: joinedError } = await supabase
           .from('challenge_participants')
-          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status')
+          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name, avatar_url)')
           .eq('challenge_id', params.id)
           .order('actual_km', { ascending: false });
 
-        if (participantsError) {
-          console.error('Failed to load participants via Supabase:', participantsError);
-        } else {
-          const ids = Array.from(new Set((participantsData || []).map((p: any) => p.user_id).filter(Boolean)));
-          let profilesMap: Record<string, any> = {};
-          if (ids.length > 0) {
-            try {
-              const { data: profilesData, error: profilesError } = await supabase
-                .from('profiles')
-                .select('id, full_name, avatar_url')
-                .in('id', ids);
-              if (!profilesError && profilesData) {
-                profilesMap = Object.fromEntries((profilesData as any[]).map((pr: any) => [pr.id, pr]));
-              }
-            } catch (pe) {
-              console.warn('Could not fetch participant profiles', pe);
-            }
-          }
+        if (joinedError) console.warn('Joined participants fetch error (will fallback):', joinedError.message);
 
-          const mapped = (participantsData || []).map((p: any) => ({
+        if (joinedData && joinedData.length > 0 && joinedData[0].profiles) {
+          // Join worked and profiles are included
+          const mapped = (joinedData || []).map((p: any) => ({
             user_id: p.user_id,
             target_km: p.target_km,
             actual_km: p.actual_km,
             avg_pace_seconds: p.avg_pace_seconds,
             total_activities: p.total_activities,
-            profile: profilesMap[p.user_id] ?? null,
+            profile: p.profiles ?? null,
           }));
-
           setParticipants(mapped);
-
           if (challengeData.status === "Closed") {
             const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
             setFailedParticipants(failed);
+          }
+        } else {
+          // Fallback: fetch participants without join, then fetch profiles separately.
+          const { data: participantsData, error: participantsError } = await supabase
+            .from('challenge_participants')
+            .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status')
+            .eq('challenge_id', params.id)
+            .order('actual_km', { ascending: false });
+
+          if (participantsError) {
+            console.error('Failed to load participants via Supabase:', participantsError);
+          } else {
+            const ids = Array.from(new Set((participantsData || []).map((p: any) => p.user_id).filter(Boolean)));
+            let profilesMap: Record<string, any> = {};
+            if (ids.length > 0) {
+              try {
+                const { data: profilesData, error: profilesError } = await supabase
+                  .from('profiles')
+                  .select('id, full_name, avatar_url')
+                  .in('id', ids);
+                if (!profilesError && profilesData) {
+                  profilesMap = Object.fromEntries((profilesData as any[]).map((pr: any) => [pr.id, pr]));
+                }
+              } catch (pe) {
+                console.warn('Could not fetch participant profiles', pe);
+              }
+            }
+
+            const mapped = (participantsData || []).map((p: any) => ({
+              user_id: p.user_id,
+              target_km: p.target_km,
+              actual_km: p.actual_km,
+              avg_pace_seconds: p.avg_pace_seconds,
+              total_activities: p.total_activities,
+              profile: profilesMap[p.user_id] ?? null,
+            }));
+
+            setParticipants(mapped);
+
+            if (challengeData.status === "Closed") {
+              const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
+              setFailedParticipants(failed);
+            }
           }
         }
       } catch (e) {
