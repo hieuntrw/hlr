@@ -76,6 +76,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
   const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
   const [loading, setLoading] = useState(true);
   const [userParticipation, setUserParticipation] = useState<any>(null);
+  const [creatorProfile, setCreatorProfile] = useState<{ full_name?: string | null; avatar_url?: string | null } | null>(null);
   const [currentUser, setCurrentUser] = useState<string | null>(null);
   const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
   const [registering, setRegistering] = useState(false);
@@ -103,7 +104,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       const { data: challengeData, error: challengeError } = await supabase
         .from("challenges")
         .select(
-          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds, created_by, profiles(full_name, avatar_url)"
+          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds, created_by"
         )
         .eq("id", params.id)
         .single();
@@ -133,6 +134,24 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
       if (challengeData) {
         setChallenge(challengeData as Challenge);
+        // Fetch creator profile separately to avoid relying on a DB join name that
+        // may not exist in some environments. This is more robust across schema
+        // versions: if `created_by` is present, query `profiles` directly.
+        try {
+          if (challengeData.created_by) {
+            const { data: prof } = await supabase
+              .from('profiles')
+              .select('full_name, avatar_url')
+              .eq('id', challengeData.created_by)
+              .maybeSingle();
+            setCreatorProfile(prof ?? null);
+          } else {
+            setCreatorProfile(null);
+          }
+        } catch (e) {
+          console.warn('Could not fetch creator profile', e);
+          setCreatorProfile(null);
+        }
       } else {
         setChallenge(null);
       }
@@ -342,7 +361,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
               <div className="space-y-2 text-sm">
                 <div>
                   <span className="font-semibold text-gray-700">Người tạo:</span>
-                  <span className="text-gray-600"> {challenge?.profiles?.full_name ?? '—'}</span>
+                  <span className="text-gray-600"> {creatorProfile?.full_name ?? '—'}</span>
                 </div>
                 <div>
                   <span className="font-semibold text-gray-700">Mục tiêu đã đăng ký:</span>
