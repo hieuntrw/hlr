@@ -158,23 +158,41 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
       // Fetch participants with activities directly via Supabase (RLS applies)
       try {
+        // Fetch participant rows without joining profiles (RLS or join alias may not be available).
         const { data: participantsData, error: participantsError } = await supabase
           .from('challenge_participants')
-          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name, avatar_url)')
+          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status')
           .eq('challenge_id', params.id)
           .order('actual_km', { ascending: false });
 
         if (participantsError) {
           console.error('Failed to load participants via Supabase:', participantsError);
         } else {
+          const ids = Array.from(new Set((participantsData || []).map((p: any) => p.user_id).filter(Boolean)));
+          let profilesMap: Record<string, any> = {};
+          if (ids.length > 0) {
+            try {
+              const { data: profilesData, error: profilesError } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url')
+                .in('id', ids);
+              if (!profilesError && profilesData) {
+                profilesMap = Object.fromEntries((profilesData as any[]).map((pr: any) => [pr.id, pr]));
+              }
+            } catch (pe) {
+              console.warn('Could not fetch participant profiles', pe);
+            }
+          }
+
           const mapped = (participantsData || []).map((p: any) => ({
             user_id: p.user_id,
             target_km: p.target_km,
             actual_km: p.actual_km,
             avg_pace_seconds: p.avg_pace_seconds,
             total_activities: p.total_activities,
-            profile: p.profiles,
+            profile: profilesMap[p.user_id] ?? null,
           }));
+
           setParticipants(mapped);
 
           if (challengeData.status === "Closed") {
@@ -485,7 +503,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
             )}
 
             {/* Leaderboard */}
-            <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="bg-white rounded-lg shadow-md p-6 mx-auto max-w-4xl">
               <h3 className="text-2xl font-bold mb-6">📊 Bảng Xếp Hạng</h3>
 
               {participants.length > 0 ? (
