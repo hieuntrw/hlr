@@ -72,7 +72,6 @@ export default function ChallengesPage() {
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
   const [items, setItems] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
   // no auth prompt needed: page requires auth to access
 
   const currentUser = user?.id || null;
@@ -88,27 +87,25 @@ export default function ChallengesPage() {
     fetchPage();
   }, [activeTab, currentUser, authLoading]);
 
-  async function fetchPage(requestPage = 0, append = false) {
+  async function fetchPage() {
     setLoading(true);
     try {
       const base = typeof window !== 'undefined' ? window.location.origin : '';
-      // Request the full list; server no longer uses page/pageSize.
+      // Request the full list; server returns all challenges for the selected tab.
       const resp = await fetch(`${base}/api/challenges`, { credentials: activeTab === 'my' ? 'same-origin' : 'omit' });
       if (!resp.ok) {
         console.error('Failed to fetch challenges', resp.status);
-        if (!append) setItems([]);
-        setHasMore(false);
+        setItems([]);
         setLoading(false);
         return;
       }
 
       const json = await resp.json();
       const loaded: ChallengeWithParticipation[] = (json.challenges || []).map((c: any) => ({ ...c, user_participates: activeTab === 'my' }));
-      setItems(prev => append ? prev.concat(loaded) : loaded);
+      setItems(loaded);
     } catch (e) {
-      console.error('Error fetching page', e);
-      if (!append) setItems([]);
-      
+      console.error('Error fetching challenges', e);
+      setItems([]);
     } finally {
       setLoading(false);
     }

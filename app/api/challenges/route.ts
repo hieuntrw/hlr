@@ -51,8 +51,7 @@ export async function GET(request: NextRequest) {
           `challenge_id, actual_km, avg_pace_seconds, total_activities, completion_rate, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
         )
         .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1000);
+        .order('created_at', { ascending: false });
 
       if (rowsError) {
         console.error('GET /api/challenges participations joined error', rowsError);
