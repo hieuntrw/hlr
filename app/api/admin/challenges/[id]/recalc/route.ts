@@ -94,6 +94,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       const completionRate = p.target_km ? Math.round((totalKm / Number(p.target_km)) * 10000) / 100 : 0;
       const completed = p.target_km ? totalKm >= Number(p.target_km) : false;
 
+      // Persist `completion_rate` to the DB (canonical column) and also include it
+      // in the response as `computed_completion_rate` for callers.
       updates.push({ id: pid, update: {
         actual_km: totalKm,
         avg_pace_seconds: avgPaceSeconds,
@@ -104,7 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         completion_rate: completionRate,
         completed,
         status: completed ? 'completed' : undefined,
-      } });
+      }, computed_completion_rate: completionRate });
     }
 
     const results: any[] = [];
@@ -115,7 +117,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         console.error('Failed to update participant', u.id, e);
         results.push({ id: u.id, success: false, error: e.message });
       } else {
-        results.push({ id: u.id, success: true, updated: d });
+        // Include computed completion rate in the response for convenience.
+        results.push({ id: u.id, success: true, updated: d, computed_completion_rate: u.computed_completion_rate ?? null });
       }
     }
 
