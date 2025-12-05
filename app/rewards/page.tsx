@@ -120,7 +120,7 @@ export default function RewardsPage() {
           race:races(name, date),
           milestone:reward_milestones(*)
         `)
-        .eq("member_id", user.id)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (achievedData) {
@@ -134,7 +134,7 @@ export default function RewardsPage() {
           *,
           race:races(name, date)
         `)
-        .eq("member_id", user.id)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (podiumData) {
@@ -148,7 +148,7 @@ export default function RewardsPage() {
           *,
           challenge:challenges(name, month, year)
         `)
-        .eq("member_id", user.id)
+        .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
       if (luckyData) {

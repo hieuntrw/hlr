@@ -25,7 +25,7 @@ interface PodiumConfig {
 interface PodiumReward {
   id: string;
   race_id: string;
-  member_id: string;
+  user_id: string;
   podium_config_id: string;
   podium_type: string;
   rank: number;
@@ -51,7 +51,7 @@ export default function PodiumRewardsPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     race_id: "",
-    member_id: "",
+    user_id: "",
     podium_config_id: "",
     notes: "",
   });
@@ -110,7 +110,7 @@ export default function PodiumRewardsPage() {
   };
 
   const handleAdd = async () => {
-    if (!formData.race_id || !formData.member_id || !formData.podium_config_id) {
+    if (!formData.race_id || !formData.user_id || !formData.podium_config_id) {
       alert("Vui lòng điền đầy đủ thông tin");
       return;
     }
@@ -122,13 +122,18 @@ export default function PodiumRewardsPage() {
         return;
       }
 
+      // Insert mapping: UI uses `user_id`, DB currently expects `member_id`.
       const { error } = await supabase.from("member_podium_rewards").insert([
         {
-          ...formData,
+          race_id: formData.race_id,
+          member_id: formData.user_id,
+          podium_config_id: formData.podium_config_id,
+          notes: formData.notes,
           podium_type: config.podium_type,
           rank: config.rank,
           reward_description: config.reward_description,
           cash_amount: config.cash_amount,
+          status: 'pending',
         },
       ]);
 
@@ -138,7 +143,7 @@ export default function PodiumRewardsPage() {
       setShowAddForm(false);
       setFormData({
         race_id: "",
-        member_id: "",
+        user_id: "",
         podium_config_id: "",
         notes: "",
       });
@@ -262,8 +267,8 @@ if (!user) return;
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Thành viên</label>
                 <select
-                  value={formData.member_id}
-                  onChange={(e) => setFormData({ ...formData, member_id: e.target.value })}
+                  value={formData.user_id}
+                  onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="">-- Chọn thành viên --</option>

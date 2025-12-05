@@ -16,7 +16,7 @@ interface Challenge {
 interface LuckyDrawWinner {
   id: string;
   challenge_id: string;
-  member_id: string;
+  user_id: string;
   reward_description: string;
   status: string;
   delivered_at: string | null;
@@ -39,7 +39,7 @@ export default function LuckyDrawPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
     challenge_id: "",
-    member_id: "",
+    user_id: "",
     reward_description: "",
   });
 
@@ -88,20 +88,26 @@ export default function LuckyDrawPage() {
   };
 
   const handleAdd = async () => {
-    if (!formData.challenge_id || !formData.member_id || !formData.reward_description) {
+    if (!formData.challenge_id || !formData.user_id || !formData.reward_description) {
       alert("Vui lòng điền đầy đủ thông tin");
       return;
     }
 
     try {
-      const { error } = await supabase.from("lucky_draw_winners").insert([formData]);
+      // Insert using existing DB column `member_id` for compatibility while
+      // migration is applied. We keep form state using `user_id`.
+      const { error } = await supabase.from("lucky_draw_winners").insert([{
+        challenge_id: formData.challenge_id,
+        member_id: formData.user_id,
+        reward_description: formData.reward_description,
+      }]);
       if (error) throw error;
 
       alert("Thêm người trúng thưởng thành công!");
       setShowAddForm(false);
       setFormData({
         challenge_id: "",
-        member_id: "",
+        user_id: "",
         reward_description: "",
       });
       loadData();
@@ -189,8 +195,8 @@ if (!user) return;
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Thành viên</label>
                 <select
-                  value={formData.member_id}
-                  onChange={(e) => setFormData({ ...formData, member_id: e.target.value })}
+                  value={formData.user_id}
+                  onChange={(e) => setFormData({ ...formData, user_id: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg"
                 >
                   <option value="">-- Chọn thành viên --</option>
