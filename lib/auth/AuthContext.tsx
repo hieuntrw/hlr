@@ -256,3 +256,8 @@ export function useAuth() {
   }
   return context;
 }
+
+// Optional hook: returns context or undefined when not inside provider
+export function useAuthOptional() {
+  return useContext(AuthContext);
+}

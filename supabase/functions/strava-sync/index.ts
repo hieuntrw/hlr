@@ -53,7 +53,7 @@ export default async function handler(req: Request) {
     };
 
     // Get all active profiles with a Strava connection
-    const profilesUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/profiles?select=id,strava_access_token,strava_refresh_token,strava_token_expires_at,strava_id&strava_id=not.is.null&is_active=eq.true`;
+    const profilesUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/profiles?select=id,strava_access_token,strava_refresh_token,strava_token_expires_at,strava_id&strava_id=not.is.null&is_active=eq.true`;
     const profilesRes = await fetch(profilesUrl, { headers: adminHeaders });
     if (!profilesRes.ok) {
       const text = await profilesRes.text();
@@ -92,8 +92,7 @@ export default async function handler(req: Request) {
       return resp.json();
     }
 
-    // Helper to sleep between batches
-    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
+    // Helper to sleep between batches (defined later to avoid accidental redeclare)
 
     async function processProfile(p: any) {
       try {
@@ -108,7 +107,7 @@ export default async function handler(req: Request) {
             const tokenData = await refreshStravaToken(p.strava_refresh_token);
             accessToken = tokenData.access_token;
             // Persist new tokens to profile
-            const updUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/profiles?id=eq.${userId}`;
+            const updUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/profiles?id=eq.${userId}`;
             await fetch(updUrl, {
               method: 'PATCH',
               headers: adminHeaders,
@@ -131,7 +130,7 @@ export default async function handler(req: Request) {
         const startDate = new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
         const endDate = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
 
-        const chUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/challenges?select=id,start_date,end_date,is_locked,min_pace_seconds,max_pace_seconds&start_date=gte.${startDate}&start_date=lte.${endDate}&limit=1`;
+        const chUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/challenges?select=id,start_date,end_date,is_locked,min_pace_seconds,max_pace_seconds&start_date=gte.${startDate}&start_date=lte.${endDate}&limit=1`;
         const chRes = await fetch(chUrl, { headers: adminHeaders });
         if (!chRes.ok) {
           const txt = await chRes.text();
@@ -156,7 +155,7 @@ export default async function handler(req: Request) {
         }
 
         // 3) Ensure user is registered as participant
-        const partUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/challenge_participants?select=id,target_km&challenge_id=eq.${challenge.id}&user_id=eq.${userId}`;
+        const partUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/challenge_participants?select=id,target_km&challenge_id=eq.${challenge.id}&user_id=eq.${userId}`;
         const partRes = await fetch(partUrl, { headers: adminHeaders });
         if (!partRes.ok) {
           const txt = await partRes.text();
@@ -229,7 +228,7 @@ export default async function handler(req: Request) {
             raw_json: activity,
           }));
 
-          const actUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/activities?on_conflict=strava_activity_id`;
+          const actUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/activities?on_conflict=strava_activity_id`;
           const actRes = await fetch(actUrl, {
             method: 'POST',
             headers: { ...adminHeaders, Prefer: 'resolution=merge-duplicates' },
@@ -263,7 +262,7 @@ export default async function handler(req: Request) {
           completed: isCompleted,
         };
 
-        const updPartUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rest/v1/challenge_participants?id=eq.${participant.id}`;
+        const updPartUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/challenge_participants?id=eq.${participant.id}`;
         const updRes = await fetch(updPartUrl, {
           method: 'PATCH',
           headers: adminHeaders,
@@ -277,7 +276,7 @@ export default async function handler(req: Request) {
         // 8) Call DB-side RPC to recalc cached aggregates if available
         // Prefer the new RPC `recalc_challenge_participant_aggregates(p_challenge_id, p_participant_id)`
         try {
-          const rpcUrl = `${SUPABASE_URL.replace(/\/$/, '')}/rpc/recalc_challenge_participant_aggregates`;
+          const rpcUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rpc/recalc_challenge_participant_aggregates`;
           await fetch(rpcUrl, {
             method: 'POST',
             headers: adminHeaders,
@@ -286,7 +285,7 @@ export default async function handler(req: Request) {
         } catch (rpcErr) {
           // Fallback: try the older RPC name if present (keeps backward compatibility)
           try {
-            const rpcUrlOld = `${SUPABASE_URL.replace(/\/$/, '')}/rpc/recalc_challenge_participant_status`;
+            const rpcUrlOld = `${String(SUPABASE_URL).replace(/\/$/, '')}/rpc/recalc_challenge_participant_status`;
             await fetch(rpcUrlOld, {
               method: 'POST',
               headers: adminHeaders,
