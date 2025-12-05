@@ -353,8 +353,8 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Left Column: Description & Registration */}
           <div className="lg:col-span-1">
-            {/* Description Card */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+            {/* Description / General Info Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-4">
               <h2 className="text-2xl font-bold mb-4 flex items-center gap-2"><ClipboardList size={28} /> Thông Tin</h2>
               <p className="text-gray-700 whitespace-pre-wrap mb-4">{challenge.description}</p>
 
@@ -364,20 +364,23 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                   <span className="text-gray-600"> {creatorProfile?.full_name ?? '—'}</span>
                 </div>
                 <div>
+                  <span className="font-semibold text-gray-700">Pace Range:</span>
+                  <span className="text-gray-600"> {formatPace(challenge.min_pace_seconds)} - {formatPace(challenge.max_pace_seconds)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Registration / Participant Stats Card */}
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <h3 className="text-xl font-bold mb-4">Thông Tin Đăng Ký & Thống Kê</h3>
+              <div className="space-y-2 text-sm">
+                <div>
                   <span className="font-semibold text-gray-700">Mục tiêu đã đăng ký:</span>
                   <span className="text-gray-600"> {userParticipation ? `${userParticipation.target_km} km` : '—'}</span>
                 </div>
                 <div>
                   <span className="font-semibold text-gray-700">Các mức đăng ký:</span>
                   <span className="text-gray-600"> {targetOptions.join(', ')}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-700">Pace Range:</span>
-                  <span className="text-gray-600">
-                    {" "}
-                    {formatPace(challenge.min_pace_seconds)} -{" "}
-                    {formatPace(challenge.max_pace_seconds)}
-                  </span>
                 </div>
                 <div>
                   <span className="font-semibold text-gray-700">KM đã thực hiện (bản thân):</span>
@@ -410,23 +413,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
               </div>
             )}
 
-            {userParticipation && (
-              <div className="bg-green-50 rounded-lg shadow-md p-6 border-2 border-green-300">
-                <h3 className="text-xl font-bold text-green-900 mb-2">✓ Đã Đăng Ký</h3>
-                <p className="text-sm text-gray-700">
-                  Mục tiêu: <span className="font-bold">{userParticipation.target_km} km</span>
-                </p>
-                <p className="text-sm text-gray-700">
-                  Đã chạy: <span className="font-bold">{userParticipation.actual_km} km</span>
-                </p>
-                <p className="text-sm text-gray-700">
-                  Số hoạt động hợp lệ: <span className="font-bold">{userParticipation.total_activities ?? 0}</span>
-                </p>
-                <p className="text-sm text-gray-700">
-                  % Hoàn thành: <span className="font-bold">{userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
-                </p>
-              </div>
-            )}
+            
           </div>
 
           {/* Right Column: Leaderboard & Lucky Draw */}
