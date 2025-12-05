@@ -366,7 +366,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                   </div>
                   <div>
                     <span className="font-semibold text-gray-700">Trạng thái:</span>
-                    <span className="text-gray-600"> {challenge.status}{challenge.is_locked ? ' • Đã khoá' : ''}</span>
+                    <span className="text-gray-600"> {challenge.is_locked ? 'Đã kết thúc' : 'Đang diễn ra'}</span>
                   </div>
                   <div>
                     <span className="font-semibold text-gray-700">Pace Range:</span>
