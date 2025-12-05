@@ -103,7 +103,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       const { data: challengeData, error: challengeError } = await supabase
         .from("challenges")
         .select(
-          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds"
+          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds, created_by, profiles(full_name, avatar_url)"
         )
         .eq("id", params.id)
         .single();
@@ -341,12 +341,32 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
               <div className="space-y-2 text-sm">
                 <div>
+                  <span className="font-semibold text-gray-700">Người tạo:</span>
+                  <span className="text-gray-600"> {challenge?.profiles?.full_name ?? '—'}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-700">Mốc đăng ký:</span>
+                  <span className="text-gray-600"> {targetOptions.join(', ')}</span>
+                </div>
+                <div>
                   <span className="font-semibold text-gray-700">Pace Range:</span>
                   <span className="text-gray-600">
                     {" "}
                     {formatPace(challenge.min_pace_seconds)} -{" "}
                     {formatPace(challenge.max_pace_seconds)}
                   </span>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-700">KM đã thực hiện (bản thân):</span>
+                  <span className="text-gray-600"> {userParticipation ? `${userParticipation.actual_km ?? 0} km` : '—'}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-700">Số hoạt động hợp lệ (bản thân):</span>
+                  <span className="text-gray-600"> {userParticipation ? `${userParticipation.total_activities ?? 0}` : '—'}</span>
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-700">% Hoàn thành (bản thân):</span>
+                  <span className="text-gray-600"> {userParticipation && userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
                 </div>
               </div>
             </div>
@@ -376,21 +396,12 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
                 <p className="text-sm text-gray-700">
                   Đã chạy: <span className="font-bold">{userParticipation.actual_km} km</span>
                 </p>
-                <div className="mt-4 flex gap-2">
-                  <button
-                    onClick={() => setShowRegisterModal(true)}
-                    className="flex-1 py-2 bg-white border border-green-600 text-green-700 font-semibold rounded-lg hover:bg-green-50"
-                  >
-                    Cập nhật mục tiêu
-                  </button>
-                  <button
-                    onClick={handleLeave}
-                    disabled={leaving}
-                    className="flex-1 py-2 bg-red-600 text-white font-semibold rounded-lg hover:opacity-90 disabled:bg-gray-400"
-                  >
-                    {leaving ? 'Đang xử lý...' : 'Rời thử thách'}
-                  </button>
-                </div>
+                <p className="text-sm text-gray-700">
+                  Số hoạt động hợp lệ: <span className="font-bold">{userParticipation.total_activities ?? 0}</span>
+                </p>
+                <p className="text-sm text-gray-700">
+                  % Hoàn thành: <span className="font-bold">{userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
+                </p>
               </div>
             )}
           </div>
