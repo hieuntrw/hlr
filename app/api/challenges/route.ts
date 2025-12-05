@@ -47,7 +47,8 @@ export async function GET(request: NextRequest) {
       const { data: rows, error: rowsError } = await supabase
         .from('challenge_participants')
         .select(
-          `challenge_id, total_km, avg_pace_seconds, valid_activities_count, completion_rate, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
+          // use actual DB column names; map to flattened response names below
+          `challenge_id, actual_km, avg_pace_seconds, total_activities, completion_rate, completed, challenges(id, title, start_date, end_date, status, is_locked, created_at)`
         )
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
@@ -66,9 +67,10 @@ export async function GET(request: NextRequest) {
         if (!ch) return null;
         return {
           ...ch,
-          total_km: r.total_km ?? null,
+          // Flatten and normalize names for the frontend: map DB column names to expected response keys
+          total_km: r.actual_km ?? null,
           avg_pace_seconds: r.avg_pace_seconds ?? null,
-          valid_activities_count: r.valid_activities_count ?? null,
+          valid_activities_count: r.total_activities ?? null,
           completion_rate: r.completion_rate ?? null,
           completed: r.completed ?? false,
           user_participates: true,
