@@ -6,10 +6,16 @@ BEGIN;
 -- member_milestone_rewards
 ALTER TABLE IF EXISTS public.member_milestone_rewards
   ADD COLUMN IF NOT EXISTS user_id UUID;
-
-UPDATE public.member_milestone_rewards
-SET user_id = member_id
-WHERE user_id IS NULL AND member_id IS NOT NULL;
+DO $$
+BEGIN
+  -- Only run the backfill if the legacy column `member_id` exists
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'member_milestone_rewards' AND column_name = 'member_id'
+  ) THEN
+    EXECUTE 'UPDATE public.member_milestone_rewards SET user_id = member_id WHERE user_id IS NULL AND member_id IS NOT NULL';
+  END IF;
+END$$;
 
 DO $$
 BEGIN
@@ -21,7 +27,6 @@ BEGIN
       ADD CONSTRAINT fk_member_milestone_user FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
   END IF;
 EXCEPTION WHEN duplicate_object THEN
-  -- ignore if constraint exists concurrently
   NULL;
 END$$;
 
@@ -30,10 +35,15 @@ CREATE INDEX IF NOT EXISTS idx_member_milestone_user ON public.member_milestone_
 -- member_podium_rewards
 ALTER TABLE IF EXISTS public.member_podium_rewards
   ADD COLUMN IF NOT EXISTS user_id UUID;
-
-UPDATE public.member_podium_rewards
-SET user_id = member_id
-WHERE user_id IS NULL AND member_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'member_podium_rewards' AND column_name = 'member_id'
+  ) THEN
+    EXECUTE 'UPDATE public.member_podium_rewards SET user_id = member_id WHERE user_id IS NULL AND member_id IS NOT NULL';
+  END IF;
+END$$;
 
 DO $$
 BEGIN
@@ -53,10 +63,15 @@ CREATE INDEX IF NOT EXISTS idx_member_podium_user ON public.member_podium_reward
 -- lucky_draw_winners
 ALTER TABLE IF EXISTS public.lucky_draw_winners
   ADD COLUMN IF NOT EXISTS user_id UUID;
-
-UPDATE public.lucky_draw_winners
-SET user_id = member_id
-WHERE user_id IS NULL AND member_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'lucky_draw_winners' AND column_name = 'member_id'
+  ) THEN
+    EXECUTE 'UPDATE public.lucky_draw_winners SET user_id = member_id WHERE user_id IS NULL AND member_id IS NOT NULL';
+  END IF;
+END$$;
 
 DO $$
 BEGIN
@@ -76,10 +91,15 @@ CREATE INDEX IF NOT EXISTS idx_lucky_draw_user ON public.lucky_draw_winners(user
 -- member_rewards
 ALTER TABLE IF EXISTS public.member_rewards
   ADD COLUMN IF NOT EXISTS user_id UUID;
-
-UPDATE public.member_rewards
-SET user_id = member_id
-WHERE user_id IS NULL AND member_id IS NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'member_rewards' AND column_name = 'member_id'
+  ) THEN
+    EXECUTE 'UPDATE public.member_rewards SET user_id = member_id WHERE user_id IS NULL AND member_id IS NOT NULL';
+  END IF;
+END$$;
 
 DO $$
 BEGIN
