@@ -23,7 +23,7 @@ interface RaceResult {
   is_pr: boolean;
   profile?: {
     full_name: string;
-    avatar_url?: string;
+    avatar_url?: string | null;
   };
 }
 

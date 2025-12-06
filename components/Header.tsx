@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 export default function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [logoAvailable, setLogoAvailable] = useState(true);
   const { darkMode, toggleDarkMode } = useTheme();
   const { user, profile, isLoading } = useAuth(); // Use AuthContext instead of local state
 
@@ -70,7 +71,15 @@ export default function Header() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <a href="/dashboard" className="flex items-center gap-2 shrink-0">
-            <Activity size={32} style={{ color: "var(--color-primary)" }} />
+            <img
+              src="/media/logo/logo.svg"
+              alt="Hải Lăng Runners"
+              className="w-10 h-10 rounded-lg object-cover"
+              style={{ display: logoAvailable ? 'block' : 'none' }}
+              onError={(e) => { try { setLogoAvailable(false); } catch {} }}
+              onLoad={(e) => { try { setLogoAvailable(true); } catch {} }}
+            />
+            {!logoAvailable && <Activity size={32} style={{ color: "var(--color-primary)" }} />}
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block">Hải Lăng Runners</h1>
             <h1 className="text-xl font-bold text-gray-900 sm:hidden">HLR</h1>
           </a>
@@ -169,7 +178,13 @@ export default function Header() {
                 <div className="flex flex-col items-end gap-1 ml-4 pl-4 border-l" style={{ borderColor: "var(--color-border)" }}>
                   {/* Row 1: Email + Role Badge */}
                   <div className="flex items-center gap-1.5">
-                    <User size={16} style={{ color: "var(--color-text-secondary)" }} />
+                    <img
+                      src={profile?.avatar_url || '/media/avatars/avatar-placeholder.svg'}
+                      alt={profile?.full_name ? `${profile.full_name} avatar` : 'User avatar'}
+                      className="w-6 h-6 rounded-full object-cover border"
+                      style={{ borderColor: 'var(--color-border)' }}
+                      onError={(e: any) => { e.currentTarget.src = '/media/avatars/avatar-placeholder.svg'; }}
+                    />
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
                       {user.email}
                     </span>

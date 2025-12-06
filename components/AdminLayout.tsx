@@ -27,7 +27,7 @@ interface AdminProfile {
   id: string;
   full_name: string;
   role: string;
-  avatar_url?: string;
+  avatar_url?: string | null;
 }
 
 interface MenuItem {
@@ -42,6 +42,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [profile, setProfile] = useState<AdminProfile | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [logoAvailable, setLogoAvailable] = useState(true);
 
   const menuItems: MenuItem[] = [
     {
@@ -245,9 +246,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Logo/Brand */}
           <div className="px-6 py-5" style={{ borderBottom: "1px solid var(--color-border)" }}>
             <Link href="/admin" className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center gradient-theme-primary">
-                <LayoutDashboard className="text-white" size={24} />
-              </div>
+              <img
+                src="/media/logo/logo-compact.svg"
+                alt="HLR"
+                className="w-10 h-10 rounded-lg object-cover"
+                style={{ display: logoAvailable ? 'block' : 'none' }}
+                onError={(e) => { try { setLogoAvailable(false); } catch {} }}
+                onLoad={(e) => { try { setLogoAvailable(true); } catch {} }}
+              />
+              {!logoAvailable && (
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center gradient-theme-primary">
+                  <LayoutDashboard className="text-white" size={24} />
+                </div>
+              )}
               <div>
                 <h2 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Admin Panel</h2>
                 <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>Hải Lăng Runners</p>
@@ -258,18 +269,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           {/* Profile Section */}
           <div className="px-6 py-4" style={{ borderBottom: "1px solid var(--color-border)", background: "var(--color-bg-primary)" }}>
             <div className="flex items-center gap-3">
-              {profile.avatar_url ? (
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.full_name}
-                  className="w-12 h-12 rounded-full object-cover border-2"
-                  style={{ borderColor: "var(--color-primary)" }}
-                />
-              ) : (
-                <div className="w-12 h-12 rounded-full flex items-center justify-center gradient-theme-primary">
-                  <User className="text-white" size={24} />
-                </div>
-              )}
+              <img
+                src={profile.avatar_url || '/media/avatars/avatar-placeholder.svg'}
+                alt={profile.full_name}
+                className="w-12 h-12 rounded-full object-cover border-2"
+                style={{ borderColor: "var(--color-primary)" }}
+                onError={(e: any) => { e.currentTarget.src = '/media/avatars/avatar-placeholder.svg'; }}
+              />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>{profile.full_name}</p>
                 <p className="text-xs font-medium" style={{ color: "var(--color-primary)" }}>{getRoleLabel(profile.role)}</p>

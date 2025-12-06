@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/auth/AuthContext";
 interface Profile {
   id: string;
   full_name: string | null;
+  avatar_url?: string | null;
   join_date?: string;
   device_name?: string;
   strava_id?: string;

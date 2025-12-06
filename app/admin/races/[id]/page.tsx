@@ -18,6 +18,7 @@ interface Race {
 interface ProfileOption {
   id: string;
   full_name: string;
+  gender?: string | null;
 }
 
 interface RaceResultRow {
@@ -62,10 +63,12 @@ export default function AdminRaceDetailPage() {
   const [form, setForm] = useState({
     user_id: "",
     distance: "21km" as "5km" | "10km" | "21km" | "42km",
-    chip_time: "01:45:00",
+    chip_time: "",
     official_rank: "",
     age_group_rank: "",
     evidence_link: "",
+    reward_definition_id: "",
+    gender: "",
   });
   const [message, setMessage] = useState<string | null>(null);
 
@@ -89,9 +92,61 @@ export default function AdminRaceDetailPage() {
   async function fetchMembers() {
     const { data } = await supabase
       .from("profiles")
-      .select("id, full_name")
+      .select("id, full_name, gender")
       .order("full_name", { ascending: true });
     if (data) setMembers(data as ProfileOption[]);
+  }
+
+  // Try to get gender from profiles table; fallback to name-based inference
+  function inferGenderFromName(name = "") {
+    const n = name.toLowerCase();
+    // simple heuristic: look for common tokens that often indicate female names in VN
+    const femaleTokens = ["thị", "ngọc", "lan", "hoa", "mai", "thảo", "huệ", "hương", "trang", "anh", "ngân", "thùy", "thi"];
+    for (const t of femaleTokens) {
+      if (n.includes(t)) return "female";
+    }
+    // fallback: common male tokens
+    const maleTokens = ["anh", "hieu", "minh", "quan", "huy", "duc", "son", "tuan"];
+    for (const t of maleTokens) {
+      if (n.includes(t)) return "male";
+    }
+    return "";
+  }
+
+  async function handleMemberChange(selectedId: string) {
+    setForm({ ...form, user_id: selectedId });
+    if (!selectedId) {
+      setForm((f) => ({ ...f, gender: "" }));
+      return;
+    }
+
+    // Prefer stored gender value from profiles table
+    try {
+      const { data } = await supabase.from("profiles").select("gender, full_name").eq("id", selectedId).single();
+      if (data) {
+        const g = (data as any).gender as string | null;
+        if (g) {
+          setForm((f) => ({ ...f, gender: g }));
+          return;
+        }
+        // no stored gender -> infer from name
+        const inferred = inferGenderFromName((data as any).full_name || "");
+        if (inferred) setForm((f) => ({ ...f, gender: inferred }));
+        else setForm((f) => ({ ...f, gender: "" }));
+        return;
+      }
+    } catch (e) {
+      console.warn("Failed to fetch profile gender", e);
+    }
+
+    // If we didn't get profile, try to infer from members list
+    const mem = members.find((m) => m.id === selectedId);
+    if (mem) {
+      const inferred = inferGenderFromName(mem.full_name);
+      setForm((f) => ({ ...f, gender: inferred }));
+    } else {
+      setForm((f) => ({ ...f, gender: "" }));
+    }
   }
 
   async function fetchResults() {
@@ -106,6 +161,27 @@ export default function AdminRaceDetailPage() {
         profile: { full_name: r.profiles?.full_name || "" },
       }));
       setResults(mapped);
+    }
+  }
+
+  // Rewards available for selection (podium overall / age group)
+  const [rewardDefs, setRewardDefs] = useState<any[]>([]);
+  useEffect(() => {
+    fetchRewardDefinitions();
+  }, [race]);
+
+  async function fetchRewardDefinitions() {
+    try {
+      // Load podium configs (overall + age-group) from reward_podium_config
+      const { data } = await supabase
+        .from('reward_podium_config')
+        .select('id, podium_type, rank, reward_description')
+        .eq('is_active', true)
+        .order('podium_type', { ascending: true })
+        .order('rank', { ascending: true });
+      if (data) setRewardDefs(data as any[]);
+    } catch (e) {
+      console.warn('Failed to fetch reward definitions', e);
     }
   }
 
@@ -211,8 +287,24 @@ export default function AdminRaceDetailPage() {
         age_group_rank: insertPayload.age_group_rank || 0,
       }, "age_group");
 
+      // 4) If admin selected a reward manually, create a member_rewards entry (pending)
+      if ((form as any).reward_definition_id) {
+        try {
+          const { error: mrErr } = await supabase.from('member_rewards').insert({
+            user_id: form.user_id,
+            race_result_id: raceResultId,
+            reward_definition_id: (form as any).reward_definition_id,
+            status: 'pending'
+          });
+          if (mrErr) console.warn('Failed to create member_rewards from admin selection', mrErr);
+          else setMessage((prev) => (prev ? prev + ' Giải thưởng đã được ghi nhận (pending).' : 'Giải thưởng đã được ghi nhận (pending).'));
+        } catch (e) {
+          console.warn('Error inserting member_rewards', e);
+        }
+      }
+
       setMessage("Lưu kết quả thành công. Đã kiểm tra PB và phần thưởng.");
-      setForm({ ...form, user_id: "", chip_time: "01:45:00", official_rank: "", age_group_rank: "", evidence_link: "" });
+      setForm({ ...form, user_id: "", chip_time: "", official_rank: "", age_group_rank: "", evidence_link: "", gender: "" });
       await fetchResults();
     } catch (err: any) {
       console.error("Save result error:", err);
@@ -314,14 +406,14 @@ export default function AdminRaceDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Nhập Kết Quả</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Thành viên tham gia</h2>
             <form onSubmit={handleSaveResult} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Thành viên</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
                   value={form.user_id}
-                  onChange={(e) => setForm({ ...form, user_id: e.target.value })}
+                  onChange={(e) => handleMemberChange(e.target.value)}
                 >
                   <option value="">-- Chọn thành viên --</option>
                   {members.map((m) => (
@@ -330,6 +422,12 @@ export default function AdminRaceDetailPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+              <div className="mt-3">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Giới tính</label>
+                <div className="w-full border rounded-lg px-3 py-2 bg-gray-50 text-gray-700">
+                  {form.gender === 'male' ? 'Nam' : form.gender === 'female' ? 'Nữ' : form.gender === 'other' ? 'Khác' : '—'}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Cự ly</label>
@@ -345,34 +443,39 @@ export default function AdminRaceDetailPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Chip Time (HH:MM:SS)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Thành tích (chiptime) (HH:MM:SS)</label>
                 <input
                   type="text"
                   className="w-full border rounded-lg px-3 py-2"
-                  placeholder="01:45:00"
+                  placeholder="HH:MM:SS"
                   value={form.chip_time}
                   onChange={(e) => setForm({ ...form, chip_time: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rank Chung cuộc</label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={form.official_rank}
-                    onChange={(e) => setForm({ ...form, official_rank: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Rank Lứa tuổi</label>
-                  <input
-                    type="number"
-                    className="w-full border rounded-lg px-3 py-2"
-                    value={form.age_group_rank}
-                    onChange={(e) => setForm({ ...form, age_group_rank: e.target.value })}
-                  />
-                </div>
+              {/* Ranks removed: official and age-group ranks are not entered here */}
+              {/* Reward selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Giải thưởng (nếu có)</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2"
+                  value={(form as any).reward_definition_id}
+                  onChange={(e) => setForm({ ...form, reward_definition_id: e.target.value })}
+                >
+                  <option value="">-- Không chọn --</option>
+                  {rewardDefs.map((rd) => (
+                    <option key={rd.id} value={rd.id}>
+                      {rd.podium_type === 'overall' ? 'Chung cuộc' : rd.podium_type === 'age_group' ? 'Lứa tuổi' : rd.podium_type} + ` - Hạng ${rd.rank}`
+                    </option>
+                  ))}
+                </select>
+                {(form as any).reward_definition_id && (
+                  <p className="text-sm text-gray-600 mt-2">
+                    {(() => {
+                      const sel = rewardDefs.find((r) => r.id === (form as any).reward_definition_id);
+                      return sel ? sel.reward_description || 'Không có mô tả' : '';
+                    })()}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Link kết quả</label>
@@ -404,7 +507,7 @@ export default function AdminRaceDetailPage() {
         {/* Results table */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Kết Quả Đã Nhập</h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-4">Danh sách tham gia</h2>
             {results.length === 0 ? (
               <p className="text-gray-600">Chưa có kết quả.</p>
             ) : (
@@ -415,8 +518,6 @@ export default function AdminRaceDetailPage() {
                       <th className="py-2 px-3">Thành viên</th>
                       <th className="py-2 px-3">Cự ly</th>
                       <th className="py-2 px-3">Chip Time</th>
-                      <th className="py-2 px-3">Chung cuộc</th>
-                      <th className="py-2 px-3">Lứa tuổi</th>
                       <th className="py-2 px-3">PR</th>
                       <th className="py-2 px-3">Duyệt PB</th>
                       <th className="py-2 px-3">Mốc thưởng</th>
@@ -430,8 +531,7 @@ export default function AdminRaceDetailPage() {
                         <td className="py-2 px-3">{r.profile?.full_name}</td>
                         <td className="py-2 px-3">{r.distance}</td>
                         <td className="py-2 px-3">{secondsToTime(r.chip_time_seconds)}</td>
-                        <td className="py-2 px-3">{r.official_rank || "-"}</td>
-                        <td className="py-2 px-3">{r.age_group_rank || "-"}</td>
+                          {/* official_rank and age_group_rank intentionally not shown here */}
                         <td className="py-2 px-3">{r.is_pr ? <CheckCircle className="text-green-600" size={18} /> : "-"}</td>
                         <td className="py-2 px-3">{r.approved ? <CheckCircle size={18} style={{ color: "var(--color-primary)" }} /> : "-"}</td>
                         <td className="py-2 px-3">{r.milestone_name || "-"}</td>
