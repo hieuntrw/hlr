@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
+import serverDebug from '@/lib/server-debug';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { userId, role, fullName } = body;
+    const bodyRaw = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const userId = typeof bodyRaw.userId === 'string' ? bodyRaw.userId : undefined;
+    const role = typeof bodyRaw.role === 'string' ? bodyRaw.role : undefined;
+    const fullName = typeof bodyRaw.fullName === 'string' ? bodyRaw.fullName : undefined;
 
-    console.log("[Update User API] Request:", { userId, role, fullName });
+    serverDebug.info("[Update User API] Request:", { userId, role, fullName });
 
     // Create server client to get current user session
-    let response = NextResponse.next();
+    const response = NextResponse.next();
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -19,53 +22,56 @@ export async function POST(req: NextRequest) {
           get(name: string) {
             return req.cookies.get(name)?.value;
           },
-          set(name: string, value: string, options: any) {
-            response.cookies.set({ name, value, ...options });
+          set(name: string, value: string, options?: Record<string, unknown>) {
+            response.cookies.set({ name, value, ...(options || {}) });
           },
-          remove(name: string, options: any) {
-            response.cookies.set({ name, value: "", ...options });
+          remove(name: string, options?: Record<string, unknown>) {
+            response.cookies.set({ name, value: "", ...(options || {}) });
           },
         },
       }
     );
 
-    // Kiểm tra quyền admin
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    
-    if (userError || !user) {
-      console.log("[Update User API] Auth error:", userError);
-      return NextResponse.json({ error: "Không xác thực" }, { status: 401 });
+    // Check current user's role
+    const userRes = await supabaseAuth.auth.getUser();
+    const user = userRes.data.user;
+    if (userRes.error || !user) {
+      serverDebug.warn('[Update User API] Auth error', userRes.error);
+      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
     }
 
-    const currentUserRole = user.user_metadata?.role;
-    if (currentUserRole !== "admin") {
-      console.log("[Update User API] Not admin, role:", currentUserRole);
-      return NextResponse.json({ error: "Chỉ admin được phép" }, { status: 403 });
+    const currentUserRole = (user.app_metadata as Record<string, unknown> | undefined)?.role as string | undefined;
+    if (currentUserRole !== 'admin') {
+      serverDebug.warn('[Update User API] Not admin, role:', currentUserRole);
+      return NextResponse.json({ error: 'Chỉ admin được phép' }, { status: 403 });
     }
 
-    // Tạo service role client để update user
-    const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
 
-    // Update user metadata
-    const { data: updatedUser, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-      userId,
-      {
-        user_metadata: { role, fullName },
-      }
-    );
+    const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+    const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: { role } as Record<string, unknown>,
+      user_metadata: {} as Record<string, unknown>,
+    });
+
+    try {
+      const { error: profileErr } = await supabaseAdmin.from('profiles').upsert({ id: userId, full_name: fullName || null }, { onConflict: 'id' });
+      if (profileErr) serverDebug.warn('[Update User API] Failed to upsert profiles.full_name', profileErr);
+    } catch (e) {
+      serverDebug.warn('[Update User API] Exception upserting profile full_name', String(e));
+    }
 
     if (updateError) {
-      console.log("[Update User API] Update error:", updateError);
-      return NextResponse.json({ error: updateError.message }, { status: 400 });
+      serverDebug.error('[Update User API] Update error:', updateError);
+      const msg = (updateError as { message?: string })?.message ?? String(updateError);
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
 
-    console.log("[Update User API] Success!");
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error("[Update User API] Exception:", err);
-    return NextResponse.json({ error: err.message || "Lỗi server" }, { status: 500 });
+  } catch (err: unknown) {
+    serverDebug.error('[Update User API] Exception:', err);
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message || 'Lỗi server' }, { status: 500 });
   }
 }

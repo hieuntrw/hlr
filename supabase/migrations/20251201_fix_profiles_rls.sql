@@ -18,7 +18,7 @@ CREATE POLICY "Admins and mods can read all profiles"
   ON profiles FOR SELECT
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_finance', 'mod_challenge', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance', 'mod_challenge', 'mod_member')
   );
 
 CREATE POLICY "Users can update own profile"
@@ -31,10 +31,10 @@ CREATE POLICY "Admins and mods can update profiles"
   ON profiles FOR UPDATE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member')
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member')
   );
 
 CREATE POLICY "Users can insert own profile"
@@ -46,5 +46,5 @@ CREATE POLICY "Admins can insert any profile"
   ON profiles FOR INSERT
   TO authenticated
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
   );

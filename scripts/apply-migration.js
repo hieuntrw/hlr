@@ -19,12 +19,19 @@ if (!supabaseUrl || !serviceRoleKey) {
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
+const DEBUG = process.env.DEBUG_SERVER_LOGS === '1';
+const log = {
+  debug: (...args) => { if (DEBUG) console.debug(...args); },
+  info: (...args) => { if (DEBUG) console.info(...args); },
+  warn: (...args) => { if (DEBUG) console.warn(...args); },
+  error: (...args) => { console.error(...args); },
+};
 
 async function applyMigrations() {
   const migrationsDir = path.join(__dirname, '../supabase/migrations');
   
   if (!fs.existsSync(migrationsDir)) {
-    console.error(`❌ Migrations directory not found: ${migrationsDir}`);
+     log.error(`❌ Migrations directory not found: ${migrationsDir}`);
     process.exit(1);
   }
 
@@ -33,7 +40,7 @@ async function applyMigrations() {
     .sort();
 
   if (migrationFiles.length === 0) {
-    console.log('ℹ️  No migrations found');
+     log.info('ℹ️  No migrations found');
     process.exit(0);
   }
 
@@ -54,6 +61,7 @@ async function applyMigrations() {
       // If RPC fails, try direct query execution (alternative approach)
       if (error && error.message.includes('not found')) {
         console.log('   (RPC exec not available, trying direct SQL...)');
+          log.info('   (RPC exec not available, trying direct SQL...)');
         // For direct SQL, we'd need a different approach
         // For now, use raw query via query endpoint
         try {
@@ -73,7 +81,7 @@ async function applyMigrations() {
           }
         } catch (innerErr) {
           // Fallback: use psql if available (not typical in browser env)
-          console.warn(`   ⚠️  Could not execute SQL directly. Manual execution needed.`);
+          log.warn(`   ⚠️  Could not execute SQL directly. Manual execution needed.`);
           console.log(`   SQL:\n${sql}\n`);
         }
       } else if (error) {
@@ -82,8 +90,8 @@ async function applyMigrations() {
 
       console.log(`✅ Applied: ${file}\n`);
     } catch (err) {
-      console.error(`❌ Failed to apply ${file}:`);
-      console.error(`   ${err.message}\n`);
+      log.error(`❌ Failed to apply ${file}:`);
+      log.error(`   ${err.message}\n`);
       process.exit(1);
     }
   }

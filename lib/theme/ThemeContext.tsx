@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Theme, UserThemePreference } from './types';
+import { Theme } from './types';
 import { defaultTheme } from './defaultTheme';
 import { supabase } from '@/lib/supabase-client';
 
@@ -53,48 +53,10 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [useSystemTheme, setUseSystemThemeState] = useState(true);
   const [themePresets, setThemePresets] = useState<Theme[]>([]);
-  const [systemSettings, setSystemSettings] = useState<any>(null);
+  // system settings are loaded for potential side-effects but not stored in React state
 
   // Load theme from database (for sync only, not for initial display)
-  useEffect(() => {
-    loadThemeFromDatabase();
-    loadSystemSettings();
-    loadThemePresetsData();
-  }, []);
-
-  // Apply theme to CSS variables whenever theme changes (skip if preloaded)
-  useEffect(() => {
-    // Check if theme was preloaded by inline script
-    const isPreloaded = document.documentElement.getAttribute('data-theme-preloaded') === 'true';
-    
-    if (!isPreloaded) {
-      // Only apply if not already preloaded
-      applyThemeToDOM(theme);
-    } else {
-      // Clear the flag after first render
-      document.documentElement.removeAttribute('data-theme-preloaded');
-    }
-    
-    // Save to localStorage for instant load on next page
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('currentTheme', JSON.stringify(theme));
-    }
-  }, [theme]);
-
-  // Apply dark mode
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-    // Save dark mode preference
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('darkMode', darkMode.toString());
-    }
-  }, [darkMode]);
-
-  const loadThemeFromDatabase = async () => {
+  const loadThemeFromDatabase = React.useCallback(async () => {
     try {
       // Theme and dark mode are already initialized from localStorage
       // This function only syncs with database for updates
@@ -115,7 +77,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         if (preference && !error) {
           setUseSystemThemeState(preference.use_system_theme ?? true);
           
-          let dbTheme = null;
+          let dbTheme: Theme | null = null;
           
           if (preference.use_system_theme) {
             // Load system default theme
@@ -139,9 +101,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
             // Merge user customizations with base theme
             dbTheme = mergeThemeCustomizations(
               defaultTheme,
-              preference.custom_colors,
-              preference.custom_fonts,
-              preference.custom_spacing
+              preference.custom_colors as Record<string, unknown> | undefined,
+              preference.custom_fonts as Record<string, unknown> | undefined,
+              preference.custom_spacing as Record<string, unknown> | undefined
             );
           }
           
@@ -175,9 +137,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [darkMode]);
 
-  const loadSystemSettings = async () => {
+  const loadSystemSettings = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('system_theme_settings')
@@ -185,14 +147,14 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         .single();
       
       if (data && !error) {
-        setSystemSettings(data);
+        // system settings loaded if needed; currently no-op
       }
     } catch (error) {
       console.error('Error loading system settings:', error);
     }
-  };
+  }, []);
 
-  const loadThemePresetsData = async () => {
+  const loadThemePresetsData = React.useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('theme_presets')
@@ -202,13 +164,53 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         .order('usage_count', { ascending: false });
       
       if (data && !error) {
-        const themes = data.map(convertPresetToTheme);
+        const themes = (data as Array<Record<string, unknown>>).map(convertPresetToTheme);
         setThemePresets(themes);
       }
     } catch (error) {
       console.error('Error loading theme presets:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadThemeFromDatabase();
+    loadSystemSettings();
+    loadThemePresetsData();
+  }, [loadThemeFromDatabase, loadSystemSettings, loadThemePresetsData]);
+
+  // Apply theme to CSS variables whenever theme changes (skip if preloaded)
+  useEffect(() => {
+    // Check if theme was preloaded by inline script
+    const isPreloaded = document.documentElement.getAttribute('data-theme-preloaded') === 'true';
+    
+    if (!isPreloaded) {
+      // Only apply if not already preloaded
+      applyThemeToDOM(theme);
+    } else {
+      // Clear the flag after first render
+      document.documentElement.removeAttribute('data-theme-preloaded');
+    }
+    
+    // Save to localStorage for instant load on next page
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('currentTheme', JSON.stringify(theme));
+    }
+  }, [theme]);
+
+  // Apply dark mode
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+    // Save dark mode preference
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('darkMode', darkMode.toString());
+    }
+  }, [darkMode]);
+
+  
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
@@ -251,7 +253,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const preference: any = {
+      const preference: Record<string, unknown> = {
         user_id: userId,
         theme_id: theme.id,
         custom_colors: useSystemTheme ? null : theme.colors,
@@ -398,37 +400,40 @@ function applyThemeToDOM(theme: Theme) {
 
 function mergeThemeCustomizations(
   baseTheme: Theme,
-  customColors?: any,
-  customFonts?: any,
-  customSpacing?: any
+  customColors?: Partial<Theme['colors']> | Record<string, unknown> | undefined,
+  customFonts?: Partial<Theme['fonts']> | Record<string, unknown> | undefined,
+  customSpacing?: Partial<Theme['spacing']> | Record<string, unknown> | undefined
 ): Theme {
+  const cc = (customColors as Partial<Theme['colors']>) || {};
+  const cf = (customFonts as Partial<Theme['fonts']>) || {};
+  const cs = (customSpacing as Partial<Theme['spacing']>) || {};
   return {
     ...baseTheme,
-    colors: { ...baseTheme.colors, ...customColors },
-    fonts: { 
-      ...baseTheme.fonts, 
-      ...customFonts,
-      fontSize: { ...baseTheme.fonts.fontSize, ...customFonts?.fontSize },
-      fontWeight: { ...baseTheme.fonts.fontWeight, ...customFonts?.fontWeight },
-      lineHeight: { ...baseTheme.fonts.lineHeight, ...customFonts?.lineHeight },
+    colors: { ...baseTheme.colors, ...cc },
+    fonts: {
+      ...baseTheme.fonts,
+      ...cf,
+      fontSize: { ...baseTheme.fonts.fontSize, ...cf.fontSize },
+      fontWeight: { ...baseTheme.fonts.fontWeight, ...cf.fontWeight },
+      lineHeight: { ...baseTheme.fonts.lineHeight, ...cf.lineHeight },
     },
     spacing: {
       ...baseTheme.spacing,
-      ...customSpacing,
-      space: { ...baseTheme.spacing.space, ...customSpacing?.space },
-      radius: { ...baseTheme.spacing.radius, ...customSpacing?.radius },
-      shadow: { ...baseTheme.spacing.shadow, ...customSpacing?.shadow },
+      ...cs,
+      space: { ...baseTheme.spacing.space, ...(cs as Partial<Theme['spacing']>)?.space },
+      radius: { ...baseTheme.spacing.radius, ...(cs as Partial<Theme['spacing']>)?.radius },
+      shadow: { ...baseTheme.spacing.shadow, ...(cs as Partial<Theme['spacing']>)?.shadow },
     },
   };
 }
 
-function convertPresetToTheme(preset: any): Theme {
+function convertPresetToTheme(preset: Record<string, unknown>): Theme {
   return {
-    id: preset.id,
-    name: preset.name,
-    colors: preset.colors,
-    fonts: preset.fonts,
-    spacing: preset.spacing,
-    isDefault: preset.is_system,
+    id: String(preset.id ?? ''),
+    name: String(preset.name ?? ''),
+    colors: (preset.colors as Theme['colors']) || defaultTheme.colors,
+    fonts: (preset.fonts as Theme['fonts']) || defaultTheme.fonts,
+    spacing: (preset.spacing as Theme['spacing']) || defaultTheme.spacing,
+    isDefault: Boolean(preset.is_system),
   };
 }

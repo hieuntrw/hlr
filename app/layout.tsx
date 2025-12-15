@@ -1,11 +1,11 @@
 "use client";
-import type { Metadata } from "next";
+// layout
 import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { ThemeProvider } from "@/lib/theme";
 import { AuthProvider } from "@/lib/auth/AuthContext";
-import Script from "next/script";
+// no next/script used here
 
 export default function RootLayout({
   children,

@@ -1,9 +1,9 @@
 "use client";
 
 import AdminLayout from "@/components/AdminLayout";
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 import { Gift, Plus, CheckCircle, Clock, User } from "lucide-react";
 
 interface Challenge {
@@ -30,11 +30,17 @@ interface LuckyDrawWinner {
   };
 }
 
+interface Member {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
 export default function LuckyDrawPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [winners, setWinners] = useState<LuckyDrawWinner[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -42,42 +48,14 @@ export default function LuckyDrawPage() {
     user_id: "",
     reward_description: "",
   });
-
-  useEffect(() => {
-    if (authLoading) return;
-    loadData();
-  }, [user, authLoading]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
-      // Load challenges
-      const { data: challengesData } = await supabase
-        .from("challenges")
-        .select("id, name, month, year")
-        .order("year", { ascending: false })
-        .order("month", { ascending: false });
-
-      if (challengesData) setChallenges(challengesData);
-
-      // Load winners
-      const { data: winnersData } = await supabase
-        .from("lucky_draw_winners")
-        .select(`
-          *,
-          challenge:challenges(id, name, month, year),
-          member:profiles(full_name, email)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (winnersData) setWinners(winnersData);
-
-      // Load all members
-      const { data: membersData } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .order("full_name", { ascending: true });
-
-      if (membersData) setMembers(membersData);
+      const res = await fetch('/api/admin/lucky-draw-winners', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load');
+      const j = await res.json().catch(() => null);
+      setChallenges(j?.challenges || []);
+      setWinners(j?.winners || []);
+      setMembers(j?.members || []);
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -85,7 +63,26 @@ export default function LuckyDrawPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const checkAdminStatus = useCallback(() => {
+    if (!user) {
+      window.location.href = '/login';
+      return false;
+    }
+    const resolved = getEffectiveRole(user, profile) || 'member';
+    if (!isAdminRole(resolved)) {
+      window.location.href = '/';
+      return false;
+    }
+    return true;
+  }, [user, profile]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    if (!checkAdminStatus()) return;
+    loadData();
+  }, [authLoading, sessionChecked, checkAdminStatus, loadData]);
 
   const handleAdd = async () => {
     if (!formData.challenge_id || !formData.user_id || !formData.reward_description) {
@@ -96,12 +93,9 @@ export default function LuckyDrawPage() {
     try {
       // Insert using existing DB column `member_id` for compatibility while
       // migration is applied. We keep form state using `user_id`.
-      const { error } = await supabase.from("lucky_draw_winners").insert([{
-        challenge_id: formData.challenge_id,
-        member_id: formData.user_id,
-        reward_description: formData.reward_description,
-      }]);
-      if (error) throw error;
+      const payload = { challenge_id: formData.challenge_id, member_id: formData.user_id, reward_description: formData.reward_description };
+      const r = await fetch('/api/admin/lucky-draw-winners', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error('Insert failed');
 
       alert("Thêm người trúng thưởng thành công!");
       setShowAddForm(false);
@@ -122,16 +116,8 @@ export default function LuckyDrawPage() {
       // user from AuthContext
 if (!user) return;
 
-      const { error } = await supabase
-        .from("lucky_draw_winners")
-        .update({
-          status: "delivered",
-          delivered_at: new Date().toISOString(),
-          delivered_by: user.id,
-        })
-        .eq("id", winnerId);
-
-      if (error) throw error;
+      const r = await fetch('/api/admin/lucky-draw-winners', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: winnerId, status: 'delivered', delivered_at: new Date().toISOString(), delivered_by: user.id }) });
+      if (!r.ok) throw new Error('Update failed');
 
       alert("Đã đánh dấu đã trao!");
       loadData();

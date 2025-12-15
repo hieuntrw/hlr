@@ -341,19 +341,19 @@ CREATE POLICY "Public can view active milestones" ON reward_milestones FOR SELEC
 
 DROP POLICY IF EXISTS "Admin can manage milestones" ON reward_milestones;
 CREATE POLICY "Admin can manage milestones" ON reward_milestones FOR ALL TO authenticated
-USING ((auth.jwt()->>'user_metadata')::jsonb->>'role' = 'admin')
-WITH CHECK ((auth.jwt()->>'user_metadata')::jsonb->>'role' = 'admin');
+USING ((auth.jwt()->>'app_metadata')::jsonb->>'role' = 'admin')
+WITH CHECK ((auth.jwt()->>'app_metadata')::jsonb->>'role' = 'admin');
 
 -- RLS policies cho member_milestone_rewards
 ALTER TABLE member_milestone_rewards ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Members view own milestone rewards" ON member_milestone_rewards;
 CREATE POLICY "Members view own milestone rewards" ON member_milestone_rewards FOR SELECT TO authenticated
-USING (member_id = auth.uid() OR (auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
+USING (member_id = auth.uid() OR (auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
 
 DROP POLICY IF EXISTS "Admin manage milestone rewards" ON member_milestone_rewards;
 CREATE POLICY "Admin manage milestone rewards" ON member_milestone_rewards FOR ALL TO authenticated
-USING ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'))
-WITH CHECK ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
+USING ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'))
+WITH CHECK ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
 
 -- RLS policies cho reward_podium_config
 ALTER TABLE reward_podium_config ENABLE ROW LEVEL SECURITY;
@@ -362,30 +362,30 @@ CREATE POLICY "Public can view podium config" ON reward_podium_config FOR SELECT
 
 DROP POLICY IF EXISTS "Admin manage podium config" ON reward_podium_config;
 CREATE POLICY "Admin manage podium config" ON reward_podium_config FOR ALL TO authenticated
-USING ((auth.jwt()->>'user_metadata')::jsonb->>'role' = 'admin')
-WITH CHECK ((auth.jwt()->>'user_metadata')::jsonb->>'role' = 'admin');
+USING ((auth.jwt()->>'app_metadata')::jsonb->>'role' = 'admin')
+WITH CHECK ((auth.jwt()->>'app_metadata')::jsonb->>'role' = 'admin');
 
 -- RLS policies cho member_podium_rewards
 ALTER TABLE member_podium_rewards ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Members view own podium rewards" ON member_podium_rewards;
 CREATE POLICY "Members view own podium rewards" ON member_podium_rewards FOR SELECT TO authenticated
-USING (member_id = auth.uid() OR (auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
+USING (member_id = auth.uid() OR (auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
 
 DROP POLICY IF EXISTS "Admin manage podium rewards" ON member_podium_rewards;
 CREATE POLICY "Admin manage podium rewards" ON member_podium_rewards FOR ALL TO authenticated
-USING ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member', 'mod_challenge'))
-WITH CHECK ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member', 'mod_challenge'));
+USING ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member', 'mod_challenge'))
+WITH CHECK ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member', 'mod_challenge'));
 
 -- RLS policies cho lucky_draw_winners
 ALTER TABLE lucky_draw_winners ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Members view own lucky draw" ON lucky_draw_winners;
 CREATE POLICY "Members view own lucky draw" ON lucky_draw_winners FOR SELECT TO authenticated
-USING (member_id = auth.uid() OR (auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
+USING (member_id = auth.uid() OR (auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
 
 DROP POLICY IF EXISTS "Admin manage lucky draw" ON lucky_draw_winners;
 CREATE POLICY "Admin manage lucky draw" ON lucky_draw_winners FOR ALL TO authenticated
-USING ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'))
-WITH CHECK ((auth.jwt()->>'user_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
+USING ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'))
+WITH CHECK ((auth.jwt()->>'app_metadata')::jsonb->>'role' IN ('admin', 'mod_member'));
 
 -- =====================================================
 -- Migration 20251201: Auto-award milestone on approved PB

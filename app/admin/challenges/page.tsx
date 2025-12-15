@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 interface Challenge {
   id: string;
@@ -41,13 +41,13 @@ function renderRegistrationBadge(dateStr?: string | null) {
     else if (diffDays <= 3) cls += 'bg-yellow-100 text-yellow-800';
     else cls += 'bg-blue-100 text-blue-800';
     return <span className={cls}>{formatDate(dateStr)}</span>;
-  } catch (e) {
+  } catch {
     return '-';
   }
 }
 
 export default function ChallengesAdminPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,10 @@ export default function ChallengesAdminPage() {
     require_map: true,
   });
   const [lastGeneratedPreview, setLastGeneratedPreview] = useState("");
-  const [registrationOptions, setRegistrationOptions] = useState<number[]>([70,100,150,200,250,300]);
+  // registration options were previously loaded from system settings but not used in UI
+
+  const resolvedRole = getEffectiveRole(user, profile) || 'member';
+  const isAdminResolved = isAdminRole(resolvedRole);
 
   // Helpers for pace display and adjustment
   function formatSeconds(sec: number) {
@@ -75,19 +78,17 @@ export default function ChallengesAdminPage() {
   }
 
   // Adjust pace (in seconds) for min or max controls
-  function adjustPace(which: "min" | "max", delta: number, formDataState?: any, setFormDataState?: any) {
-    // If called from event handlers inside the component, we will pass state setters.
-    // This helper also supports being called without state refs (no-op in that case).
+  function adjustPace(
+    which: "min" | "max",
+    delta: number
+  ) {
     try {
-      const currentState = formDataState || formData;
-      const setState = setFormDataState || setFormData;
       const key = which === "min" ? "min_pace_seconds" : "max_pace_seconds";
-      const cur = Number(currentState[key]) || 0;
+      const cur = Number((formData as Record<string, unknown>)[key]) || 0;
       let next = cur + delta;
-      // clamp between 3:00 (180s) and 15:00 (900s)
       next = Math.max(180, Math.min(900, next));
-      setState({ ...currentState, [key]: String(next) });
-    } catch (e) {
+      setFormData((prev) => ({ ...prev, [key]: String(next) }));
+    } catch {
       // ignore
     }
   }
@@ -104,17 +105,51 @@ export default function ChallengesAdminPage() {
       const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
       const mmm = months[d.getMonth()] || mm;
       return `${dd}/${mmm}/${yyyy}`;
-    } catch (e) {
+    } catch {
       return '-';
     }
   }
 
+  const fetchChallenges = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/admin/challenges/list', { credentials: 'same-origin' });
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('Error fetching admin challenges list:', json);
+        setChallenges([]);
+        return;
+      }
+
+      // Trust backend shape; cast from unknown to Challenge[] to avoid `any` usage
+      const list = (json.challenges || []) as unknown as Challenge[];
+      setChallenges(list);
+    } catch (err) {
+      console.error('Error:', err);
+      setChallenges([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // checkRole must be declared before useEffect to avoid block-scoped usage errors
+  const checkRole = useCallback(async () => {
+    if (!user) {
+      router.push('/debug-login');
+      return;
+    }
+
+    const userRole = getEffectiveRole(user, profile);
+    if (!userRole || (!isAdminRole(userRole) && userRole !== 'mod_challenge')) {
+      router.push('/');
+    }
+  }, [user, profile, router]);
+
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
     checkRole();
     fetchChallenges();
-    fetchRegistrationOptions();
-  }, [user, authLoading]);
+  }, [authLoading, sessionChecked, checkRole, fetchChallenges]);
 
   // Auto-fill description from rules/preview unless admin has edited the description manually.
   useEffect(() => {
@@ -128,58 +163,8 @@ export default function ChallengesAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.start_date, formData.end_date, formData.registration_deadline, formData.min_km, formData.min_pace_seconds, formData.max_pace_seconds, formData.require_map]);
 
-  async function fetchRegistrationOptions() {
-    try {
-      const { data } = await supabase
-        .from('system_settings')
-        .select('value')
-        .eq('key', 'challenge_registration_levels')
-        .maybeSingle();
-      if (data && data.value) {
-        const arr = String(data.value).split(',').map((s) => Number(s.trim())).filter(n => !isNaN(n));
-        if (arr.length > 0) setRegistrationOptions(arr);
-      }
-    } catch (e) {
-      // ignore and keep defaults
-      console.warn('[Challenges] could not load registration options:', e);
-    }
-  }
 
-  async function checkRole() {
-    if (!user) {
-      router.push('/debug-login');
-      return;
-    }
-
-    const userRole = user.user_metadata?.role;
-    if (!userRole || !['admin', 'mod_challenge'].includes(userRole)) {
-      router.push('/');
-    }
-  }
-
-  async function fetchChallenges() {
-    setLoading(true);
-    try {
-      const res = await fetch('/api/admin/challenges/list', { credentials: 'same-origin' });
-      const json = await res.json();
-      if (!res.ok) {
-        console.error('Error fetching admin challenges list:', json);
-        setChallenges([]);
-        return;
-      }
-      const enriched = (json.challenges || []).map((c: any) => ({
-        ...c,
-        // keep backward-compatible shape for the table rendering
-        challenge_participants: Array.from({ length: c.participant_count || 0 }, (_, i) => ({ id: String(i) })),
-      }));
-      setChallenges(enriched);
-    } catch (err) {
-      console.error('Error:', err);
-      setChallenges([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // removed: previous fetchChallenges implementation replaced by stable useCallback above
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -514,10 +499,10 @@ export default function ChallengesAdminPage() {
                           Sửa
                         </Link>
                         {/* Hide/Unhide button: admin-only. Hiding removes from public lists. */}
-                        {isAdmin && (
+                        {isAdminResolved && (
                           <button
                             onClick={async () => {
-                              const willHide = !Boolean((challenge as any).is_hide);
+                              const willHide = !Boolean(challenge.is_hide);
                               const confirmMsg = willHide ? 'Ẩn thử thách này khỏi danh sách công khai?' : 'Bỏ ẩn thử thách này?';
                               if (!confirm(confirmMsg)) return;
                               try {
@@ -542,7 +527,7 @@ export default function ChallengesAdminPage() {
                             }}
                             className="font-semibold text-red-600"
                           >
-                            {(challenge as any).is_hide ? 'Bỏ ẩn' : 'Ẩn'}
+                            {challenge.is_hide ? 'Bỏ ẩn' : 'Ẩn'}
                           </button>
                         )}
                         <button
@@ -552,7 +537,7 @@ export default function ChallengesAdminPage() {
                         >
                           Tổng kết
                         </button>
-                        {isAdmin ? (
+                        {isAdminResolved ? (
                           <button
                             onClick={() => handleLockToggle(challenge.id, !challenge.is_locked)}
                             className={`py-1 px-2 rounded-md text-sm ${challenge.is_locked ? 'bg-gray-100' : 'bg-indigo-600 text-white'}`}

@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 interface FormState {
   title: string;
@@ -18,7 +18,7 @@ interface FormState {
 }
 
 export default function EditChallengePage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = (params && params.id) || "";
@@ -37,7 +37,6 @@ export default function EditChallengePage() {
   });
 
   const [lastGeneratedPreview, setLastGeneratedPreview] = useState("");
-  const [registrationOptions, setRegistrationOptions] = useState<number[]>([70, 100, 150, 200, 250, 300]);
 
   function formatSeconds(sec: number) {
     if (!sec || isNaN(sec)) sec = 0;
@@ -48,7 +47,7 @@ export default function EditChallengePage() {
 
   function adjustPace(which: "min" | "max", delta: number) {
     const key = which === "min" ? "min_pace_seconds" : "max_pace_seconds";
-    const cur = Number((formData as any)[key]) || 0;
+    const cur = Number((formData as unknown as Record<string, string>)[key]) || 0;
     let next = cur + delta;
     next = Math.max(180, Math.min(900, next));
     setFormData((prev) => ({ ...prev, [key]: String(next) } as FormState));
@@ -65,7 +64,7 @@ export default function EditChallengePage() {
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const mmm = months[d.getMonth()] || mm;
       return `${dd}/${mmm}/${yyyy}`;
-    } catch (e) {
+    } catch {
       return "-";
     }
   }
@@ -82,48 +81,44 @@ export default function EditChallengePage() {
   }, [formData.start_date, formData.end_date, formData.registration_deadline, formData.min_km, formData.min_pace_seconds, formData.max_pace_seconds, formData.require_map]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
     if (!user) {
       router.push("/debug-login");
       return;
     }
+    const resolved = getEffectiveRole(user, profile) || 'member';
+    if (!isAdminRole(resolved) && resolved !== 'mod_challenge') {
+      router.push('/');
+      return;
+    }
     if (!id) return;
     fetchChallenge();
-    fetchRegistrationOptions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, authLoading, id]);
+  }, [user, authLoading, sessionChecked, id]);
 
-  async function fetchRegistrationOptions() {
-    try {
-      const { data } = await supabase.from("system_settings").select("value").eq("key", "challenge_registration_levels").maybeSingle();
-      if (data && data.value) {
-        const arr = String(data.value).split(",").map((s) => Number(s.trim())).filter((n) => !isNaN(n));
-        if (arr.length > 0) setRegistrationOptions(arr);
-      }
-    } catch (e) {
-      console.warn("[Challenges] could not load registration options:", e);
-    }
-  }
+  // registration options not used in this component UI - removed loader
 
   async function fetchChallenge() {
     setLoading(true);
     try {
-      const { data, error } = await supabase.from("challenges").select("*").eq("id", id).maybeSingle();
-      if (error) {
-        console.error("Fetch challenge error:", error);
+      const res = await fetch(`/api/admin/challenges/${id}`, { credentials: 'same-origin' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        console.error('Fetch challenge error:', j);
         return;
       }
+      const data = (j as { challenge?: Record<string, unknown> }).challenge as Record<string, unknown> | undefined;
       if (data) {
         setFormData({
-          title: data.title || "",
-          start_date: data.start_date ? data.start_date.split("T")[0] : "",
-          end_date: data.end_date ? data.end_date.split("T")[0] : "",
-          registration_deadline: data.registration_deadline ? data.registration_deadline.split("T")[0] : "",
-          min_km: data.min_km != null ? String(data.min_km) : "1",
-          min_pace_seconds: data.min_pace_seconds != null ? String(data.min_pace_seconds) : "240",
-          max_pace_seconds: data.max_pace_seconds != null ? String(data.max_pace_seconds) : "720",
-          description: data.description || "",
-          require_map: data.require_map ?? true,
+          title: (data.title as string) || "",
+          start_date: (data.start_date as string) ? (data.start_date as string).split("T")[0] : "",
+          end_date: (data.end_date as string) ? (data.end_date as string).split("T")[0] : "",
+          registration_deadline: (data.registration_deadline as string) ? (data.registration_deadline as string).split("T")[0] : "",
+          min_km: data.min_km != null ? String(data.min_km as number) : "1",
+          min_pace_seconds: data.min_pace_seconds != null ? String(data.min_pace_seconds as number) : "240",
+          max_pace_seconds: data.max_pace_seconds != null ? String(data.max_pace_seconds as number) : "720",
+          description: (data.description as string) || "",
+          require_map: (data.require_map as boolean) ?? true,
         });
       }
     } catch (err) {

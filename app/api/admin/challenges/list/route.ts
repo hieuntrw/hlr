@@ -1,7 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import serverDebug from '@/lib/server-debug';
 
-async function ensureAdmin(supabaseAuth: any, request: NextRequest) {
+export const dynamic = 'force-dynamic';
+
+async function ensureAdmin(supabaseAuth: SupabaseClient) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
@@ -32,11 +36,11 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth, request);
+    await ensureAdmin(supabaseAuth);
 
     // Prefer selecting the cached `participant_count` column if present in DB.
     // If the column is missing in older DBs, fall back to counting participants.
-    let challengesRes = await supabaseAuth
+    const challengesRes = await supabaseAuth
       .from('challenges')
       .select('id, title, start_date, end_date, registration_deadline, status, is_locked, is_hide, created_by, profiles(full_name), participant_count')
       .order('start_date', { ascending: false });
@@ -51,20 +55,20 @@ export async function GET(request: NextRequest) {
           .order('start_date', { ascending: false });
 
         if (error) {
-          console.error('GET /api/admin/challenges/list fetch challenges error', error);
+          serverDebug.error('GET /api/admin/challenges/list fetch challenges error', error);
           return NextResponse.json({ error: error.message }, { status: 500 });
         }
 
-        const ids = (challenges || []).map((c: any) => c.id).filter(Boolean);
-        let countsMap: Record<string, number> = {};
+        const ids = (challenges || []).map((c: Record<string, unknown>) => c.id).filter(Boolean) as string[];
+        const countsMap: Record<string, number> = {};
         if (ids.length > 0) {
           const { data: parts, error: pErr } = await supabaseAuth
             .from('challenge_participants')
             .select('challenge_id')
-            .in('challenge_id', ids as any[]);
+            .in('challenge_id', ids as string[]);
 
           if (pErr) {
-            console.error('GET /api/admin/challenges/list fetch participants error', pErr);
+            serverDebug.error('GET /api/admin/challenges/list fetch participants error', pErr);
           } else if (parts) {
             for (const p of parts) {
               const cid = p.challenge_id;
@@ -73,20 +77,20 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        const enriched = (challenges || []).map((c: any) => ({ ...c, participant_count: countsMap[c.id] || 0 }));
+        const enriched = (challenges || []).map((c) => ({ ...(c as Record<string, unknown>), participant_count: countsMap[(c as Record<string, unknown>).id as string] || 0 }));
         return NextResponse.json({ challenges: enriched });
       }
 
-      console.error('GET /api/admin/challenges/list fetch challenges error', challengesRes.error);
+      serverDebug.error('GET /api/admin/challenges/list fetch challenges error', challengesRes.error);
       return NextResponse.json({ error: challengesRes.error.message }, { status: 500 });
     }
 
     // Success path: use participant_count from DB (fallback to 0)
-    const enriched = (challengesRes.data || []).map((c: any) => ({ ...c, participant_count: Number(c.participant_count || 0) }));
+    const enriched = (challengesRes.data || []).map((c) => ({ ...(c as Record<string, unknown>), participant_count: Number((c as Record<string, unknown>).participant_count || 0) }));
     return NextResponse.json({ challenges: enriched });
-  } catch (err: any) {
-    console.error('GET /api/admin/challenges/list exception', err);
-    const status = err?.status || 500;
-    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  } catch (err: unknown) {
+    serverDebug.error('GET /api/admin/challenges/list exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }

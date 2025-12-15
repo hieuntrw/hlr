@@ -274,7 +274,7 @@ export default function Profile() {
 
   const handleConnectStrava = async () => {
     setConnecting(true);
-    window.location.href = "/api/auth/strava/login";
+    window.location.href = "/api/strava/connect/login";
   };
 
   // Rest of component remains the same...

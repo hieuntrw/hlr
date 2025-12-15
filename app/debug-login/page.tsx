@@ -14,24 +14,27 @@ export default function DebugLoginPage() {
     setMessage(null);
 
     try {
-      const res = await fetch("/api/debug/login", {
+      // Use actual auth endpoint so HttpOnly cookies are set on response
+      const res = await fetch(`/api/auth/email-login?redirect=${encodeURIComponent(
+        "/profile"
+      )}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         body: JSON.stringify({ email, password }),
       });
 
-      const body = await res.json();
+      const body = await res.json().catch(() => null);
       if (!res.ok) {
-        setMessage(body.error || "Login failed");
+        setMessage(body?.error || "Login failed");
       } else {
         setMessage("Login successful — redirecting...");
-        // Redirect to profile so session cookie is used by app
         setTimeout(() => {
           window.location.href = "/profile";
         }, 800);
       }
-    } catch (err: any) {
-      setMessage(err?.message || String(err));
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }

@@ -3,12 +3,20 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
+const DEBUG = process.env.DEBUG_SERVER_LOGS === '1';
+const log = {
+  debug: (...args) => { if (DEBUG) console.debug(...args); },
+  info: (...args) => { if (DEBUG) console.info(...args); },
+  warn: (...args) => { if (DEBUG) console.warn(...args); },
+  error: (...args) => { console.error(...args); },
+};
+
 async function main() {
   const SUPABASE_URL = process.env.SUPABASE_URL;
   const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    console.error('Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables');
+    log.error('Please set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables');
     process.exit(1);
   }
 
@@ -21,11 +29,11 @@ async function main() {
     const makePublic = (process.env.PUBLIC || 'true').toLowerCase() === 'true';
     console.log(`Creating bucket: ${bucketId} (public=${makePublic})`);
     const { data, error } = await supabase.storage.createBucket(bucketId, { public: makePublic });
-    if (error) {
+      if (error) {
       if (error.message && error.message.includes('already exists')) {
         console.log('Bucket already exists');
       } else {
-        console.error('Error creating bucket:', error.message || error);
+        log.error('Error creating bucket:', error.message || error);
         process.exit(1);
       }
     } else {
@@ -44,7 +52,7 @@ async function main() {
       console.log('   ));');
     }
   } catch (err) {
-    console.error('Unexpected error:', err);
+    log.error('Unexpected error:', err);
     process.exit(1);
   }
 }

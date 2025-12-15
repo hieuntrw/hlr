@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useParams } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
-import { checkRaceReward, checkPodiumReward } from "@/lib/services/rewardService";
-import { Calendar, MapPin, Activity, User, Medal, Save, Loader2, CheckCircle } from "lucide-react";
+import { Calendar, MapPin, Activity, Save, Loader2, CheckCircle } from "lucide-react";
+import { asRecord } from "@/lib/error-utils";
 
 interface Race {
   id: string;
@@ -71,30 +71,33 @@ export default function AdminRaceDetailPage() {
     gender: "",
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [processingResults, setProcessingResults] = useState(false);
 
-  useEffect(() => {
-    if (raceId) {
-      fetchRace();
-      fetchMembers();
-      fetchResults();
+  
+
+  const fetchRace = useCallback(async function fetchRace() {
+    try {
+      const res = await fetch('/api/admin/races', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load races');
+      const j = await res.json().catch(() => ({ data: [] }));
+      const data = j.data || [];
+      const found = (data as Race[]).find((r) => r.id === raceId);
+      if (found) setRace(found);
+    } catch (e) {
+      console.error('Failed to fetch race', e);
     }
   }, [raceId]);
 
-  async function fetchRace() {
-    const { data } = await supabase
-      .from("races")
-      .select("id, name, race_date, location, image_url")
-      .eq("id", raceId)
-      .single();
-    if (data) setRace(data as Race);
-  }
-
   async function fetchMembers() {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, gender")
-      .order("full_name", { ascending: true });
-    if (data) setMembers(data as ProfileOption[]);
+    try {
+      const res = await fetch('/api/admin/profiles', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load members');
+      const j = await res.json().catch(() => ({ data: [] }));
+      const data = j.data || j.profiles || [];
+      setMembers(data as ProfileOption[]);
+    } catch (e) {
+      console.error('Failed to load members', e);
+    }
   }
 
   // Try to get gender from profiles table; fallback to name-based inference
@@ -117,107 +120,68 @@ export default function AdminRaceDetailPage() {
     setForm({ ...form, user_id: selectedId });
     if (!selectedId) {
       setForm((f) => ({ ...f, gender: "" }));
-      return;
-    }
-
-    // Prefer stored gender value from profiles table
-    try {
-      const { data } = await supabase.from("profiles").select("gender, full_name").eq("id", selectedId).single();
-      if (data) {
-        const g = (data as any).gender as string | null;
-        if (g) {
-          setForm((f) => ({ ...f, gender: g }));
+      try {
+        const res = await fetch(`/api/admin/profiles/${selectedId}`);
+        const body: unknown = await res.json().catch(() => ({}));
+        const data = body && typeof body === 'object' && 'data' in body ? (body as Record<string, unknown>)['data'] as Record<string, unknown> : undefined;
+        if (res.ok && data) {
+          const g = data && 'gender' in data ? data['gender'] as string | null : null;
+          if (g) {
+            setForm((f) => ({ ...f, gender: g }));
+            return;
+          }
+          // no stored gender -> infer from name
+          const fullName = data && 'full_name' in data ? String(data['full_name'] ?? '') : '';
+          const inferred = inferGenderFromName(fullName);
+          if (inferred) setForm((f) => ({ ...f, gender: inferred }));
+          else setForm((f) => ({ ...f, gender: "" }));
           return;
         }
-        // no stored gender -> infer from name
-        const inferred = inferGenderFromName((data as any).full_name || "");
-        if (inferred) setForm((f) => ({ ...f, gender: inferred }));
-        else setForm((f) => ({ ...f, gender: "" }));
-        return;
+      } catch (e: unknown) {
+        console.warn("Failed to fetch profile gender", e);
       }
-    } catch (e) {
-      console.warn("Failed to fetch profile gender", e);
-    }
 
-    // If we didn't get profile, try to infer from members list
-    const mem = members.find((m) => m.id === selectedId);
-    if (mem) {
-      const inferred = inferGenderFromName(mem.full_name);
-      setForm((f) => ({ ...f, gender: inferred }));
-    } else {
       setForm((f) => ({ ...f, gender: "" }));
     }
   }
 
-  async function fetchResults() {
-    const { data } = await supabase
-      .from("race_results")
-      .select("id, user_id, distance, chip_time_seconds, official_rank, age_group_rank, evidence_link, is_pr, approved, category, milestone_name, profiles(full_name)")
-      .eq("race_id", raceId)
-      .order("chip_time_seconds", { ascending: true });
-    if (data) {
-      const mapped = (data as any[]).map((r) => ({
-        ...r,
-        profile: { full_name: r.profiles?.full_name || "" },
-      }));
+  const fetchResults = useCallback(async function fetchResults() {
+    try {
+      const res = await fetch(`/api/admin/races/${raceId}/results`, { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load results');
+      const j = await res.json().catch(() => ({ data: [] }));
+      const data = j.data || [];
+      const mapped = (data as Array<Record<string, unknown>>).map((r) => ({ ...r, profile: { full_name: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.full_name || '' } })) as RaceResultRow[];
       setResults(mapped);
+    } catch (e: unknown) {
+      console.error('Failed to load results', e);
     }
-  }
+  }, [raceId]);
+
+  useEffect(() => {
+    if (raceId) {
+      fetchRace();
+      fetchMembers();
+      fetchResults();
+    }
+  }, [raceId, fetchRace, fetchResults]);
 
   // Rewards available for selection (podium overall / age group)
-  const [rewardDefs, setRewardDefs] = useState<any[]>([]);
+  const [rewardDefs, setRewardDefs] = useState<Array<Record<string, unknown>>>([]);
   useEffect(() => {
     fetchRewardDefinitions();
   }, [race]);
 
   async function fetchRewardDefinitions() {
     try {
-      // Load podium configs (overall + age-group) from reward_podium_config
-      const { data } = await supabase
-        .from('reward_podium_config')
-        .select('id, podium_type, rank, reward_description')
-        .eq('is_active', true)
-        .order('podium_type', { ascending: true })
-        .order('rank', { ascending: true });
-      if (data) setRewardDefs(data as any[]);
-    } catch (e) {
+      const res = await fetch('/api/admin/podium-rewards', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load reward definitions');
+      const j: unknown = await res.json().catch(() => ({}));
+      const configs = (j && typeof j === 'object' ? (j as Record<string, unknown>).configs : null) || [];
+      if (configs) setRewardDefs(configs as Array<Record<string, unknown>>);
+    } catch (e: unknown) {
       console.warn('Failed to fetch reward definitions', e);
     }
-  }
-
-  async function updatePBIfNeeded(userId: string, distance: string, chipSeconds: number) {
-    if (distance !== "21km" && distance !== "42km") return false;
-
-    const pbField = distance === "21km" ? "pb_hm_seconds" : "pb_fm_seconds";
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select(`${pbField}`)
-      .eq("id", userId)
-      .single();
-
-    const currentPB = (profile as any)?.[pbField] as number | null;
-
-    if (!currentPB || chipSeconds < currentPB) {
-      // Update PB
-      await supabase
-        .from("profiles")
-        .update({ [pbField]: chipSeconds })
-        .eq("id", userId);
-
-      // Insert PB history
-      await supabase.from("pb_history").insert({
-        user_id: userId,
-        distance,
-        time_seconds: chipSeconds,
-        achieved_at: race?.race_date || new Date().toISOString().slice(0, 10),
-        race_id: raceId,
-      });
-
-      return true;
-    }
-
-    return false;
   }
 
   async function handleSaveResult(e: React.FormEvent) {
@@ -229,7 +193,7 @@ export default function AdminRaceDetailPage() {
       const chipSeconds = timeToSeconds(form.chip_time);
 
       // 1) Insert race result
-      const insertPayload: any = {
+      const insertPayload: Record<string, unknown> = {
         race_id: raceId,
         user_id: form.user_id,
         distance: form.distance,
@@ -239,126 +203,62 @@ export default function AdminRaceDetailPage() {
         evidence_link: form.evidence_link || null,
       };
 
-      const { data: inserted, error } = await supabase
-        .from("race_results")
-        .insert(insertPayload)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      const raceResultId = inserted!.id as string;
-
-      // 2) Update PB and mark PR
-      const isPR = await updatePBIfNeeded(form.user_id, form.distance, chipSeconds);
-      if (isPR) {
-        // Mark PR and set approved to true to trigger auto-award milestone
-        await supabase.from("race_results").update({ is_pr: true, approved: true }).eq("id", raceResultId);
-      }
-
-      // 3) Reward checks: time-based + podium
-      await checkRaceReward(form.user_id, {
-        id: raceResultId,
-        user_id: form.user_id,
-        race_id: raceId,
-        distance: form.distance,
-        chip_time_seconds: chipSeconds,
-        official_rank: insertPayload.official_rank || 0,
-        age_group_rank: insertPayload.age_group_rank || 0,
+      const res = await fetch(`/api/admin/races/${raceId}/results`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: form.user_id,
+          distance: form.distance,
+          chip_time_seconds: chipSeconds,
+          official_rank: insertPayload.official_rank as number | null,
+          age_group_rank: insertPayload.age_group_rank as number | null,
+          evidence_link: insertPayload.evidence_link as string | null,
+          reward_definition_id: (form as Record<string, string>).reward_definition_id,
+        }),
       });
 
-      await checkPodiumReward(form.user_id, {
-        id: raceResultId,
-        user_id: form.user_id,
-        race_id: raceId,
-        distance: form.distance,
-        chip_time_seconds: chipSeconds,
-        official_rank: insertPayload.official_rank || 0,
-        age_group_rank: insertPayload.age_group_rank || 0,
-      }, "overall");
-
-      await checkPodiumReward(form.user_id, {
-        id: raceResultId,
-        user_id: form.user_id,
-        race_id: raceId,
-        distance: form.distance,
-        chip_time_seconds: chipSeconds,
-        official_rank: insertPayload.official_rank || 0,
-        age_group_rank: insertPayload.age_group_rank || 0,
-      }, "age_group");
-
-      // 4) If admin selected a reward manually, create a member_rewards entry (pending)
-      if ((form as any).reward_definition_id) {
-        try {
-          const { error: mrErr } = await supabase.from('member_rewards').insert({
-            user_id: form.user_id,
-            race_result_id: raceResultId,
-            reward_definition_id: (form as any).reward_definition_id,
-            status: 'pending'
-          });
-          if (mrErr) console.warn('Failed to create member_rewards from admin selection', mrErr);
-          else setMessage((prev) => (prev ? prev + ' Giải thưởng đã được ghi nhận (pending).' : 'Giải thưởng đã được ghi nhận (pending).'));
-        } catch (e) {
-          console.warn('Error inserting member_rewards', e);
-        }
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j?.error || 'Failed to save result');
       }
 
       setMessage("Lưu kết quả thành công. Đã kiểm tra PB và phần thưởng.");
       setForm({ ...form, user_id: "", chip_time: "", official_rank: "", age_group_rank: "", evidence_link: "", gender: "" });
       await fetchResults();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Save result error:", err);
-      setMessage(err.message || "Không thể lưu kết quả");
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as {message: string}).message : String(err);
+      setMessage(msg || "Không thể lưu kết quả");
     } finally {
       setSaving(false);
     }
   }
 
   // Pending rewards list
-  const [pendingRewards, setPendingRewards] = useState<any[]>([]);
+  const [pendingRewards, setPendingRewards] = useState<Array<Record<string, unknown>>>([]);
   useEffect(() => {
     if (raceId) fetchPendingRewards();
   }, [raceId]);
 
   async function fetchPendingRewards() {
-    const { data } = await supabase
-      .from("member_rewards")
-      .select("id, status, user_id, race_result_id, reward_definition_id, related_transaction_id, profiles(full_name), reward_definitions(prize_description)")
-      .eq("status", "pending")
-      .order("created_at", { ascending: false });
-    if (data) setPendingRewards(data as any[]);
+    try {
+      const res = await fetch('/api/admin/member-rewards', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load pending rewards');
+      const j = await res.json().catch(() => ({ data: [] }));
+      const data = j.data || [];
+      setPendingRewards(data as Array<Record<string, unknown>>);
+    } catch (e: unknown) {
+      console.error('Failed to load pending rewards', e);
+    }
   }
 
   async function markRewardDelivered(id: string) {
-    // 1) Mark reward delivered
-    const { error: rwErr } = await supabase
-      .from("member_rewards")
-      .update({ status: "delivered" })
-      .eq("id", id);
-
-    if (rwErr) {
-      console.error("Failed to update member_rewards status:", rwErr);
-      await fetchPendingRewards();
-      return;
-    }
-
-    // 2) Also mark related payout transaction as paid, if linked
-    const { data: rw } = await supabase
-      .from("member_rewards")
-      .select("related_transaction_id")
-      .eq("id", id)
-      .single();
-
-    const txnId = (rw as any)?.related_transaction_id as string | null;
-    if (txnId) {
-      const now = new Date().toISOString();
-      const { error: txErr } = await supabase
-        .from("transactions")
-        .update({ payment_status: "paid", paid_at: now })
-        .eq("id", txnId);
-      if (txErr) {
-        console.warn("Could not mark payout as paid (check RLS/admin perms):", txErr);
-      }
+    try {
+      const res = await fetch('/api/admin/member-rewards', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error('Failed to mark delivered');
+    } catch (e: unknown) {
+      console.error('Failed to mark reward delivered', e);
     }
 
     await fetchPendingRewards();
@@ -369,13 +269,9 @@ export default function AdminRaceDetailPage() {
       <div className="bg-white rounded-lg shadow-md overflow-hidden">
         {race ? (
           <>
-            {(race as any).image_url && (
+            {race.image_url && (
               <div className="w-full h-48 overflow-hidden">
-                <img
-                  src={(race as any).image_url}
-                  alt={race.name}
-                  className="w-full h-full object-cover"
-                />
+                <Image src={race.image_url} alt={race.name} width={1200} height={400} className="w-full h-full object-cover" />
               </div>
             )}
             <div className="p-6">
@@ -391,7 +287,37 @@ export default function AdminRaceDetailPage() {
                     </p>
                   </div>
                 </div>
-                <Link href="/admin/races" className="font-medium" style={{ color: "var(--color-primary)" }}>← Quay lại</Link>
+                <div className="flex items-center gap-3">
+                  <Link href="/admin/races" className="font-medium" style={{ color: "var(--color-primary)" }}>← Quay lại</Link>
+                  <button
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded text-sm bg-indigo-600 text-white"
+                    onClick={async () => {
+                      if (!raceId) return;
+                      setProcessingResults(true);
+                      setMessage(null);
+                      try {
+                        const res = await fetch(`/api/admin/races/${raceId}/process-results`, { method: 'POST' });
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          setMessage(body?.error || 'Xử lý thất bại');
+                        } else {
+                          setMessage('Xử lý xong — ' + (body?.processed?.length || 0) + ' mục đã xử lý');
+                          // refresh results and pending rewards
+                          await fetchResults();
+                          await fetchPendingRewards();
+                        }
+                      } catch (e) {
+                        console.error('Process results failed', e);
+                        setMessage('Lỗi khi gọi API xử lý');
+                      } finally {
+                        setProcessingResults(false);
+                      }
+                    }}
+                    disabled={processingResults}
+                  >
+                    {processingResults ? <Loader2 className="animate-spin" size={14} /> : 'Xử lý kết quả'}
+                  </button>
+                </div>
               </div>
             </div>
           </>
@@ -434,7 +360,7 @@ export default function AdminRaceDetailPage() {
                 <select
                   className="w-full border rounded-lg px-3 py-2"
                   value={form.distance}
-                  onChange={(e) => setForm({ ...form, distance: e.target.value as any })}
+                  onChange={(e) => setForm({ ...form, distance: e.target.value as "5km" | "10km" | "21km" | "42km" })}
                 >
                   <option value="5km">5km</option>
                   <option value="10km">10km</option>
@@ -458,21 +384,26 @@ export default function AdminRaceDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Giải thưởng (nếu có)</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  value={(form as any).reward_definition_id}
+                  value={(form as Record<string, string>).reward_definition_id || ""}
                   onChange={(e) => setForm({ ...form, reward_definition_id: e.target.value })}
                 >
                   <option value="">-- Không chọn --</option>
-                  {rewardDefs.map((rd) => (
-                    <option key={rd.id} value={rd.id}>
-                      {rd.podium_type === 'overall' ? 'Chung cuộc' : rd.podium_type === 'age_group' ? 'Lứa tuổi' : rd.podium_type} + ` - Hạng ${rd.rank}`
-                    </option>
-                  ))}
+                  {rewardDefs.map((rd) => {
+                    const rRec = asRecord(rd);
+                    const typeLabel = rRec.podium_type === 'overall' ? 'Chung cuộc' : rRec.podium_type === 'age_group' ? 'Lứa tuổi' : String(rRec.podium_type ?? '');
+                    const rankLabel = String(rRec.rank ?? '');
+                    return (
+                      <option key={String(rRec.id ?? '')} value={String(rRec.id ?? '')}>
+                        {`${typeLabel} - Hạng ${rankLabel}`}
+                      </option>
+                    );
+                  })}
                 </select>
-                {(form as any).reward_definition_id && (
+                {(form as Record<string, string>).reward_definition_id && (
                   <p className="text-sm text-gray-600 mt-2">
                     {(() => {
-                      const sel = rewardDefs.find((r) => r.id === (form as any).reward_definition_id);
-                      return sel ? sel.reward_description || 'Không có mô tả' : '';
+                      const sel = rewardDefs.find((r) => (r as Record<string, unknown>).id === (form as Record<string, string>).reward_definition_id);
+                      return sel ? ((sel as Record<string, unknown>).reward_description as string) || 'Không có mô tả' : '';
                     })()}
                   </p>
                 )}
@@ -528,7 +459,7 @@ export default function AdminRaceDetailPage() {
                   <tbody>
                     {results.map((r) => (
                       <tr key={r.id} className="border-b">
-                        <td className="py-2 px-3">{r.profile?.full_name}</td>
+                        <td className="py-2 px-3">{String(r.profile?.full_name ?? '')}</td>
                         <td className="py-2 px-3">{r.distance}</td>
                         <td className="py-2 px-3">{secondsToTime(r.chip_time_seconds)}</td>
                           {/* official_rank and age_group_rank intentionally not shown here */}
@@ -544,22 +475,16 @@ export default function AdminRaceDetailPage() {
                               onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                               onClick={async () => {
                                 try {
-                                  await supabase.from("race_results").update({ approved: true, is_pr: true }).eq("id", r.id);
-                                  // Fetch back the single result to read milestone annotation
-                                  const { data: updated } = await supabase
-                                    .from("race_results")
-                                    .select("milestone_name")
-                                    .eq("id", r.id)
-                                    .single();
-                                  if (updated?.milestone_name) {
-                                    setMessage(`Đã duyệt PB. Mốc thưởng: ${updated.milestone_name}`);
-                                  } else {
-                                    setMessage('Đã duyệt PB.');
-                                  }
+                                  const res = await fetch('/api/admin/race-results', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, updates: { approved: true, is_pr: true } }) });
+                                  if (!res.ok) throw new Error('Approve failed');
+                                  const j = await res.json().catch(() => ({}));
+                                  const updated = j.updated;
+                                  if (updated?.milestone_name) setMessage(`Đã duyệt PB. Mốc thưởng: ${String(updated.milestone_name)}`);
+                                  else setMessage('Đã duyệt PB.');
                                   await fetchResults();
                                 } catch (e) {
-                                  console.error("Approve PB error:", e);
-                                  alert("Không thể duyệt PB");
+                                  console.error('Approve PB error:', e);
+                                  alert('Không thể duyệt PB');
                                 }
                               }}
                             >
@@ -593,20 +518,25 @@ export default function AdminRaceDetailPage() {
           <p className="text-gray-600">Chưa có phần thưởng nào chờ trao.</p>
         ) : (
           <div className="space-y-3">
-            {pendingRewards.map((rw) => (
-              <div key={rw.id} className="p-4 border rounded-lg flex items-center justify-between">
-                <div>
-                  <p className="font-semibold text-gray-900">{rw.profiles?.full_name}</p>
-                  <p className="text-sm text-gray-600">{rw.reward_definitions?.prize_description}</p>
+            {pendingRewards.map((rw) => {
+              const rec = asRecord(rw);
+              const profile = asRecord(rec.profiles ?? {});
+              const rewardDef = asRecord(rec.reward_definitions ?? {});
+              return (
+                <div key={String(rec.id ?? '')} className="p-4 border rounded-lg flex items-center justify-between">
+                  <div>
+                    <p className="font-semibold text-gray-900">{String(profile.full_name ?? '')}</p>
+                    <p className="text-sm text-gray-600">{String(rewardDef.prize_description ?? '')}</p>
+                  </div>
+                  <button
+                    onClick={() => markRewardDelivered(String(rec.id ?? ''))}
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  >
+                    <CheckCircle size={16} /> Xác nhận đã trao
+                  </button>
                 </div>
-                <button
-                  onClick={() => markRewardDelivered(rw.id)}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                >
-                  <CheckCircle size={16} /> Xác nhận đã trao
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

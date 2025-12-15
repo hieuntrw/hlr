@@ -56,8 +56,8 @@ export default function AdminPage() {
       } = await supabase.auth.getUser();
 
       console.log("[Admin Page] User from auth:", user);
-      console.log("[Admin Page] User metadata:", user?.user_metadata);
-      console.log("[Admin Page] User role from metadata:", user?.user_metadata?.role);
+      console.log("[Admin Page] User app_metadata:", (user as any)?.app_metadata || 'none');
+      console.log("[Admin Page] User role from app_metadata:", (user as any)?.app_metadata?.role || 'none');
 
       if (!user) {
         console.log("[Admin Page] No user, redirecting to login");
@@ -65,9 +65,9 @@ export default function AdminPage() {
         return;
       }
 
-      // Get role from Supabase Auth metadata
-      const authRole = user.user_metadata?.role;
-      console.log("[Admin Page] Auth role:", authRole);
+      // Get role from Supabase Auth app_metadata (JWT). Fallback to profile.role if necessary.
+      const authRole = (user as any)?.app_metadata?.role;
+      console.log("[Admin Page] Auth role (app_metadata):", authRole);
 
       // Check if user has admin/mod permissions
       const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
@@ -88,7 +88,7 @@ export default function AdminPage() {
         return;
       }
 
-      setProfile({...profileData, role: authRole}); // Use auth role, not profile role
+      setProfile({...profileData, role: authRole || profileData?.role}); // Use auth role, fallback to profile role
 
       // Fetch dashboard statistics
       await fetchStats(authRole);

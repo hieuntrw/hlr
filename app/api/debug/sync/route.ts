@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
     const result = await syncUserActivities(userId, month, year);
     return NextResponse.json({ ok: true, result });
-  } catch (err: any) {
-    return NextResponse.json({ ok: false, error: err?.message || String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
   }
 }

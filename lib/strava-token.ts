@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { refreshStravaToken } from "./strava-oauth";
+import serverDebug from "@/lib/server-debug";
 
 // Create server-side Supabase client with service role key
 const getSupabaseAdmin = () => {
@@ -28,39 +29,54 @@ const getSupabaseAdmin = () => {
 export async function getValidStravaToken(userId: string): Promise<string | null> {
   const supabase = getSupabaseAdmin();
   
-  // Get user's Strava credentials
-  const { data: profile, error: profileError } = await supabase
+  // Get user's Strava credentials (use maybeSingle to avoid coercion errors)
+  const getProfileRes = await supabase
     .from("profiles")
-    .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
+    .select("id, strava_access_token, strava_refresh_token, strava_token_expires_at")
     .eq("id", userId)
-    .single();
+    .limit(1)
+    .maybeSingle();
 
-  if (profileError || !profile) {
-    console.error("[Strava Token] No profile found:", profileError);
+  const profile = getProfileRes.data ?? null;
+  const profileError = getProfileRes.error ?? null;
+
+  if (profileError) {
+    serverDebug.error("[Strava Token] Profile query error:", profileError);
+    return null;
+  }
+
+  if (!profile) {
+    serverDebug.error("[Strava Token] No profile found for user:", userId);
     return null;
   }
 
   if (!profile.strava_access_token || !profile.strava_refresh_token) {
-    console.log("[Strava Token] User has no Strava connection");
+    serverDebug.debug("[Strava Token] User has no Strava connection", { userId, hasAccess: !!profile.strava_access_token, hasRefresh: !!profile.strava_refresh_token });
     return null;
   }
 
   // Check if token is still valid
-  const tokenExpiresAt = new Date(profile.strava_token_expires_at * 1000);
+  const expiresVal = Number(profile.strava_token_expires_at) || 0;
+  const tokenExpiresAt = new Date(expiresVal > 0 ? expiresVal * 1000 : 0);
   const now = new Date();
   const bufferMinutes = 5; // Refresh if token expires in less than 5 minutes
   const expiryWithBuffer = new Date(tokenExpiresAt.getTime() - bufferMinutes * 60 * 1000);
 
   if (now < expiryWithBuffer) {
-    console.log("[Strava Token] Token is still valid until:", tokenExpiresAt);
+    serverDebug.debug("[Strava Token] Token is still valid until:", tokenExpiresAt);
     return profile.strava_access_token;
   }
 
   // Token expired or about to expire, refresh it
-  console.log("[Strava Token] Token expired or expiring soon, refreshing...");
+  serverDebug.debug("[Strava Token] Token expired or expiring soon, refreshing...");
   
   try {
     const tokenData = await refreshStravaToken(profile.strava_refresh_token);
+
+    if (!tokenData || !tokenData.access_token) {
+      serverDebug.error('[Strava Token] refresh returned no token data', { userId, tokenData });
+      return null;
+    }
 
     // Update profile with new tokens
     const supabaseForUpdate = getSupabaseAdmin();
@@ -74,14 +90,14 @@ export async function getValidStravaToken(userId: string): Promise<string | null
       .eq("id", userId);
 
     if (updateError) {
-      console.error("[Strava Token] Failed to update tokens:", updateError);
+      serverDebug.error("[Strava Token] Failed to update tokens:", updateError);
       return null;
     }
 
-    console.log("[Strava Token] Token refreshed successfully, new expiry:", new Date(tokenData.expires_at * 1000));
+    serverDebug.debug("[Strava Token] Token refreshed successfully, new expiry:", new Date(tokenData.expires_at * 1000));
     return tokenData.access_token;
   } catch (error) {
-    console.error("[Strava Token] Failed to refresh token:", error);
+    serverDebug.error("[Strava Token] Failed to refresh token:", error);
     return null;
   }
 }
@@ -98,13 +114,14 @@ export async function checkStravaConnection(userId: string): Promise<{
   needsReauth: boolean;
 }> {
   const supabase = getSupabaseAdmin();
-  const { data: profile } = await supabase
+  const { data: profileCheck } = await supabase
     .from("profiles")
     .select("strava_id, strava_access_token, strava_refresh_token, strava_token_expires_at")
     .eq("id", userId)
-    .single();
+    .limit(1)
+    .maybeSingle();
 
-  if (!profile?.strava_id || !profile?.strava_access_token) {
+  if (!profileCheck?.strava_id || !profileCheck?.strava_access_token) {
     return { connected: false, tokenValid: false, needsReauth: false };
   }
 

@@ -1,10 +1,12 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
-import { Trophy, Target, Wallet, Star, TrendingUp, Award, AlertCircle } from "lucide-react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
+// Use server APIs instead of direct client Supabase to avoid PostgREST/Kong issues
+import { Trophy, Target, Star, Award } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole } from "@/lib/auth/role";
+import { supabase } from "@/lib/supabase-client";
 
 interface UserProfile {
   id: string;
@@ -23,6 +25,7 @@ interface PersonalStats {
   avgPace: string | null;
   targetKm: number;
   progressPercent: number;
+  completionRate?: number;
   challengeName: string;
   status: "not_joined" | "in_progress" | "completed" | "failed";
 }
@@ -58,9 +61,7 @@ interface Notification {
 
 function DashboardContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const connected = searchParams.get("strava_connected");
-  const { user, profile, isLoading: authLoading } = useAuth(); // Thêm profile từ AuthContext
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth(); // Thêm profile từ AuthContext
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [personalStats, setPersonalStats] = useState<PersonalStats>({
@@ -68,6 +69,7 @@ function DashboardContent() {
     avgPace: null,
     targetKm: 0,
     progressPercent: 0,
+    completionRate: 0,
     challengeName: "",
     status: "not_joined",
   });
@@ -86,7 +88,7 @@ function DashboardContent() {
   });
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [profileLoading, setProfileLoading] = useState(true);
-  const [personalStatsLoading, setPersonalStatsLoading] = useState(true);
+  const [, setPersonalStatsLoading] = useState(true);
   const [hallOfFameLoading, setHallOfFameLoading] = useState(true);
   const [financeLoading, setFinanceLoading] = useState(true);
   const [yearlyStatsLoading, setYearlyStatsLoading] = useState(true);
@@ -101,36 +103,39 @@ function DashboardContent() {
   };
 
   // Fetch Hall of Fame (top 3 per distance)
-  async function fetchHallOfFame() {
+  const fetchHallOfFame = useCallback(async () => {
     try {
       setHallOfFameLoading(true);
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("full_name, pb_full_marathon_seconds, pb_half_marathon_seconds")
-        .order("pb_full_marathon_seconds", { ascending: true, nullsFirst: false })
-        .limit(3);
-
-      if (profiles) {
-        const fmTop: HallOfFameEntry[] = profiles
-          .filter(p => p.pb_full_marathon_seconds)
-          .map((p, idx) => ({
-            rank: idx + 1,
-            name: p.full_name || "Unknown",
-            time: formatTime(p.pb_full_marathon_seconds),
-            distance: "FM",
-          }));
-        
-        setHallOfFame(fmTop);
+      try {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin' });
+        const j = await resp.json().catch(() => null);
+          if (resp.ok && j?.ok && Array.isArray(j.data)) {
+          const mapped = j.data.map((r: unknown) => {
+            const row = r as Record<string, unknown>;
+            return {
+              rank: Number(row.rank ?? 0),
+              name: String(row.name ?? ''),
+              time: formatTime(Number(row.time_seconds ?? 0)),
+              distance: String(row.distance ?? ''),
+            } as HallOfFameEntry;
+          });
+          setHallOfFame(mapped);
+        } else {
+          console.warn('[Dashboard] hall-of-fame API failed', j);
+        }
+      } catch (e) {
+        console.error('[Dashboard] hall-of-fame fetch error', e);
       }
     } catch (err) {
       console.error("Failed to fetch hall of fame:", err);
     } finally {
       setHallOfFameLoading(false);
     }
-  }
+  }, []);
 
   // Fetch personal challenge stats
-  async function fetchPersonalStats() {
+  const fetchPersonalStats = useCallback(async () => {
     try {
       setPersonalStatsLoading(true);
       const now = new Date();
@@ -142,111 +147,114 @@ function DashboardContent() {
 
       if (!user) return;
 
-      // Get current month challenge
-      const { data: challengeData } = await supabase
-        .from("challenges")
-        .select("id, name")
-        .gte("start_date", startDate)
-        .lte("start_date", endDate)
-        .limit(1)
-        .maybeSingle();
+      // Prefer server endpoints to fetch the current challenge and participation
+      // to avoid client-side direct PostgREST calls which may fail in dev.
+      try {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const listResp = await fetch(`${base}/api/challenges?my=true`, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        if (!listResp.ok) {
+          console.warn('Failed to fetch my challenges for personal stats', listResp.status);
+          setPersonalStats((prev) => ({ ...prev, status: 'not_joined', challengeName: 'Chưa có thử thách tháng này' }));
+          return;
+        }
+        const listJson = await listResp.json().catch(() => null);
+        const myChallenges = (listJson?.challenges || []) as unknown[];
+        // Find this month's challenge among the returned participations
+        const current = (myChallenges.find((c: unknown) => {
+          const row = c as Record<string, unknown>;
+          const s = typeof row.start_date === 'string' ? row.start_date.slice(0,10) : undefined;
+          return typeof s === 'string' && s >= startDate && s <= endDate;
+        }) || null) as Record<string, unknown> | null;
 
-      if (!challengeData) {
-        setPersonalStats((prev) => ({
-          ...prev,
-          status: "not_joined",
-          challengeName: "Chưa có thử thách tháng này",
-        }));
-        return;
-      }
+        if (!current) {
+          // Not joined or no challenge this month
+          // Try to fetch public challenge name for display
+          const pubResp = await fetch(`${base}/api/challenges`, { headers: { Accept: 'application/json' } });
+          let pubName = 'Chưa có thử thách tháng này';
+          if (pubResp.ok) {
+            const pubJson = await pubResp.json().catch(() => null);
+            const foundArr = (pubJson?.challenges || []) as unknown[];
+            const found = foundArr.find((c: unknown) => {
+              const row = c as Record<string, unknown>;
+              const s = typeof row.start_date === 'string' ? row.start_date.slice(0,10) : undefined;
+              return typeof s === 'string' && s >= startDate && s <= endDate;
+            });
+            if (found) {
+              const rf = found as Record<string, unknown>;
+              pubName = String(rf.title ?? rf.name ?? pubName);
+            }
+          }
+          setPersonalStats((prev) => ({ ...prev, status: 'not_joined', challengeName: pubName }));
+          return;
+        }
 
-      // Get user's participation
-      const { data: participation } = await supabase
-        .from("challenge_participants")
-        .select("actual_km, avg_pace_seconds, target_km, status")
-        .eq("challenge_id", challengeData.id)
-        .eq("user_id", user.id)
-        .maybeSingle();
+        // current contains participant-augmented challenge data
+        const totalKm = Number(current.actual_km) || 0;
+        const targetKm = Number(current.target_km) || 0;
+        const avgPaceSeconds = Number(current.avg_pace_seconds) || 0;
+        const avgPace = avgPaceSeconds > 0 ? `${Math.floor(avgPaceSeconds / 60)}:${String(avgPaceSeconds % 60).padStart(2,'0')}` : null;
 
-      if (participation) {
-        const totalKm = Number(participation.actual_km) || 0;
-        const targetKm = Number(participation.target_km) || 0;
-        const avgPaceSeconds = Number(participation.avg_pace_seconds) || 0;
-
-        const avgPace =
-          avgPaceSeconds > 0
-            ? `${Math.floor(avgPaceSeconds / 60)}:${String(avgPaceSeconds % 60).padStart(2, "0")}`
-            : null;
-
-        const progressPercent = targetKm > 0 ? Math.round((totalKm / targetKm) * 100) : 0;
+        let completionRate = 0;
+        if (current.completion_rate !== undefined && current.completion_rate !== null) {
+          completionRate = Number(current.completion_rate) || 0;
+        } else {
+          completionRate = targetKm > 0 ? (totalKm / targetKm) : 0;
+        }
+        const progressPercent = Math.round(completionRate);
 
         setPersonalStats({
           totalKm,
           avgPace,
           targetKm,
           progressPercent,
-          challengeName: challengeData.name,
-          status: participation.status || "in_progress",
+          completionRate,
+          challengeName: String((current as Record<string, unknown>)?.title ?? (current as Record<string, unknown>)?.name ?? 'Thử thách tháng này'),
+          status: Boolean((current as Record<string, unknown>)?.completed) ? 'completed' : (Boolean((current as Record<string, unknown>)?.user_participates) ? 'in_progress' : 'not_joined'),
         });
-      } else {
-        setPersonalStats((prev) => ({
-          ...prev,
-          status: "not_joined",
-          challengeName: challengeData.name,
-        }));
+      } catch (e) {
+        console.error('Failed to compute personal stats via server endpoints', e);
+        setPersonalStats((prev) => ({ ...prev, status: 'not_joined', challengeName: 'Chưa có thử thách tháng này' }));
       }
     } catch (err) {
       console.error("Failed to fetch personal stats:", err);
     } finally {
       setPersonalStatsLoading(false);
     }
-  }
+  }, [user]);
 
   // Fetch finance status
-  async function fetchFinanceStatus() {
+  const fetchFinanceStatus = useCallback(async () => {
     try {
       setFinanceLoading(true);
       // Using user from AuthContext
       if (!user) return;
-
-      // Get all transactions for user
-      const { data: transactions } = await supabase
-        .from("transactions")
-        .select("type, amount, status")
-        .eq("user_id", user.id);
-
-      if (transactions) {
-        let balance = 0;
-        let unpaidFees = 0;
-        let unpaidFines = 0;
-
-        transactions.forEach((t) => {
-          if (t.status === "approved") {
-            if (t.type === "collection") balance += Number(t.amount);
-            else if (t.type === "expense" || t.type === "reward") balance -= Number(t.amount);
-          }
-          if (t.status === "pending") {
-            if (t.type === "collection") unpaidFees += Number(t.amount);
-            else if (t.type === "fine") unpaidFines += Number(t.amount);
-          }
-        });
-
-        setFinanceStatus({
-          balance,
-          unpaidFees,
-          unpaidFines,
-          hasOutstanding: unpaidFees > 0 || unpaidFines > 0,
-        });
+      try {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const resp = await fetch(`${base}/api/profile/transactions`, { credentials: 'same-origin' });
+        const j = await resp.json().catch(() => null);
+        if (resp.ok && j?.ok) {
+          const summary = j.summary || { balance: 0, unpaidFees: 0, unpaidFines: 0 };
+          setFinanceStatus({
+            balance: Number(summary.balance || 0),
+            unpaidFees: Number(summary.unpaidFees || 0),
+            unpaidFines: Number(summary.unpaidFines || 0),
+            hasOutstanding: (Number(summary.unpaidFees || 0) > 0) || (Number(summary.unpaidFines || 0) > 0),
+          });
+        } else {
+          console.warn('[Dashboard] transactions API failed', j);
+        }
+      } catch (e) {
+        console.error('[Dashboard] transactions fetch error', e);
       }
     } catch (err) {
       console.error("Failed to fetch finance status:", err);
     } finally {
       setFinanceLoading(false);
     }
-  }
+  }, [user]);
 
   // Fetch yearly stats
-  async function fetchYearlyStats() {
+  const fetchYearlyStats = useCallback(async () => {
     try {
       setYearlyStatsLoading(true);
       // Using user from AuthContext
@@ -257,15 +265,20 @@ function DashboardContent() {
       const endDate = `${year}-12-31`;
 
       // Get all participations for this year
-      const { data: participations } = await supabase
-        .from("challenge_participants")
-        .select("actual_km, status, challenge_id")
-        .eq("user_id", user.id)
-        .gte("created_at", startDate)
-        .lte("created_at", endDate);
+       const { data: participations } = await supabase
+         .from("challenge_participants")
+         .select("actual_km, status, challenge_id, challenges(start_date)")
+         .eq("user_id", user.id);
 
       if (participations) {
-        const totalKm = participations.reduce((sum, p) => sum + (Number(p.actual_km) || 0), 0);
+         const filtered = (participations || []).filter((p: unknown) => {
+           const pi = p as Record<string, unknown>;
+           const ch = pi.challenges as Record<string, unknown> | undefined;
+           if (!ch || !ch.start_date) return false;
+           const sd = String(ch.start_date).slice(0, 10);
+           return sd >= startDate && sd <= endDate;
+         });
+         const totalKm = filtered.reduce((sum, p) => sum + (Number(p.actual_km) || 0), 0);
         const challengesJoined = participations.length;
         const challengesCompleted = participations.filter((p) => p.status === "completed").length;
 
@@ -291,31 +304,38 @@ function DashboardContent() {
     } finally {
       setYearlyStatsLoading(false);
     }
-  }
+  }, [user]);
 
-  // Fetch user profile
-  async function fetchUserProfile() {
+  const fetchUserProfile = useCallback(async () => {
     try {
-      setProfileLoading(true);
-      // Using user from AuthContext
       if (!user) return;
-
+      // Prefer lookup by email (more reliable across migrations), then by id.
+      if (user.email) {
+                 const { data: byEmail } = await supabase
+                   .from("profiles")
+                   .select(
+                     "id, full_name, email, phone, birth_date, avatar_url, pb_hm_seconds, pb_fm_seconds, strava_id"
+                   )
+                   .eq("email", user.email)
+                   .maybeSingle();
+                 if (byEmail) return byEmail;
+               }
       console.log("[DEBUG] User ID:", user.id, "Email:", user.email);
 
       // Truy vấn bảng profiles theo user.id (trường id của bảng profiles tương ứng với auth user id)
       // Nếu không tìm thấy bằng id thì fallback sang tìm bằng email.
-      let profileResult: any = null;
+      let profileResult: Record<string, unknown> | null = null;
 
       const { data: profileById, error: errById } = await supabase
         .from("profiles")
-        .select("id, full_name, email, role")
+        .select("id, full_name, email")
         .eq("id", user.id)
         .maybeSingle();
 
       if (errById) console.warn('[DEBUG] Error fetching profile by id', errById);
 
       if (profileById) {
-        profileResult = profileById;
+        profileResult = profileById as Record<string, unknown>;
       } else if (user.email) {
         const { data: profileByEmail, error: errByEmail } = await supabase
           .from("profiles")
@@ -326,7 +346,7 @@ function DashboardContent() {
         if (errByEmail) console.warn('[DEBUG] Error fetching profile by email', errByEmail);
 
         if (profileByEmail) {
-          profileResult = profileByEmail;
+          profileResult = profileByEmail as Record<string, unknown>;
         }
       }
 
@@ -334,11 +354,11 @@ function DashboardContent() {
 
       if (profileResult) {
         setUserProfile({
-          id: profileResult.id,
-          full_name: profileResult.full_name,
-          email: profileResult.email,
+          id: String(profileResult['id'] ?? ''),
+          full_name: (profileResult['full_name'] as string) ?? null,
+          email: user.email ?? null,
           strava_id: null,
-          role: profileResult.role,
+          role: getEffectiveRole(user as unknown as Record<string, unknown>, profileResult) || String(profileResult['role'] ?? 'member'),
           pb_5k_seconds: null,
           pb_10k_seconds: null,
           pb_half_marathon_seconds: null,
@@ -353,10 +373,10 @@ function DashboardContent() {
     } finally {
       setProfileLoading(false);
     }
-  }
+  }, [user]);
 
   // Fetch notifications (mock for now)
-  async function fetchNotifications() {
+  const fetchNotifications = useCallback(async () => {
     setNotificationsLoading(true);
     setTimeout(() => {
       setNotifications([
@@ -381,10 +401,10 @@ function DashboardContent() {
       ]);
       setNotificationsLoading(false);
     }, 500);
-  }
+  }, []);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
     if (!user) {
       router.push(`/login?redirect=${encodeURIComponent("/dashboard")}`);
       return;
@@ -396,7 +416,7 @@ function DashboardContent() {
         full_name: profile.full_name,
         email: user.email ?? null,
         strava_id: null,
-        role: profile.role,
+        role: getEffectiveRole(user as unknown as Record<string, unknown>, profile as unknown as Record<string, unknown>) || profile.role || 'member',
         pb_5k_seconds: null,
         pb_10k_seconds: null,
         pb_half_marathon_seconds: null,
@@ -411,7 +431,7 @@ function DashboardContent() {
     fetchFinanceStatus();
     fetchYearlyStats();
     fetchNotifications();
-  }, [user, profile, authLoading]);
+  }, [user, profile, authLoading, sessionChecked, router, fetchPersonalStats, fetchHallOfFame, fetchFinanceStatus, fetchYearlyStats, fetchUserProfile, fetchNotifications]);
 
   const getProgressColor = (percent: number) => {
     if (percent >= 100) return "bg-green-600";
@@ -449,16 +469,6 @@ function DashboardContent() {
             <p className="text-gray-600 mt-1">Chào mừng bạn quay lại với Hải Lăng Runners</p>
           </div>
 
-          {/* Admin shortcut button (single) */}
-          {(userProfile?.role === "admin" || userProfile?.role?.startsWith("mod_")) && (
-            <a
-              href="/admin"
-              className="inline-flex items-center px-4 py-2 rounded-lg font-medium shadow-sm"
-              style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
-            >
-              Quản trị
-            </a>
-          )}
         </div>
 
         {/* Main Dashboard Grid */}

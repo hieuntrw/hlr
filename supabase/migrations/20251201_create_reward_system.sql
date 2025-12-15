@@ -155,7 +155,7 @@ USING (is_active = TRUE);
 
 CREATE POLICY "Admin can manage milestones"
 ON reward_milestones FOR ALL
-USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 -- member_milestone_rewards: Users see own, admin see all
 ALTER TABLE member_milestone_rewards ENABLE ROW LEVEL SECURITY;
@@ -164,12 +164,12 @@ CREATE POLICY "Users can view own milestone rewards"
 ON member_milestone_rewards FOR SELECT
 USING (
   member_id = auth.uid() OR
-  (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
 );
 
 CREATE POLICY "Admin can manage milestone rewards"
 ON member_milestone_rewards FOR ALL
-USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 -- reward_podium_config: Public read, admin write
 ALTER TABLE reward_podium_config ENABLE ROW LEVEL SECURITY;
@@ -180,7 +180,7 @@ USING (is_active = TRUE);
 
 CREATE POLICY "Admin can manage podium config"
 ON reward_podium_config FOR ALL
-USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 -- member_podium_rewards: Users see own, admin see all
 ALTER TABLE member_podium_rewards ENABLE ROW LEVEL SECURITY;
@@ -189,12 +189,12 @@ CREATE POLICY "Users can view own podium rewards"
 ON member_podium_rewards FOR SELECT
 USING (
   member_id = auth.uid() OR
-  (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
 );
 
 CREATE POLICY "Admin can manage podium rewards"
 ON member_podium_rewards FOR ALL
-USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');
 
 -- lucky_draw_winners: Users see own, admin see all
 ALTER TABLE lucky_draw_winners ENABLE ROW LEVEL SECURITY;
@@ -203,9 +203,9 @@ CREATE POLICY "Users can view own lucky draw wins"
 ON lucky_draw_winners FOR SELECT
 USING (
   member_id = auth.uid() OR
-  (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
 );
 
 CREATE POLICY "Admin can manage lucky draw"
 ON lucky_draw_winners FOR ALL
-USING ((auth.jwt() -> 'user_metadata' ->> 'role') = 'admin');
+USING ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin');

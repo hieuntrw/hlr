@@ -11,7 +11,16 @@ const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const NEXT_BASE = Deno.env.get('NEXT_PUBLIC_BASE_URL');
 const CRON_SECRET = Deno.env.get('CRON_SECRET');
 
-function jsonResponse(body: any, status = 200) {
+// Lightweight gated logger for Deno runtime (useful in functions)
+const DEBUG = (Deno.env.get('DEBUG_SERVER_LOGS') || '') === '1';
+const log = {
+  debug: (...args: unknown[]) => { if (DEBUG) console.debug(...args); },
+  info: (...args: unknown[]) => { if (DEBUG) console.info(...args); },
+  warn: (...args: unknown[]) => { if (DEBUG) console.warn(...args); },
+  error: (...args: unknown[]) => { console.error(...args); },
+};
+
+function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
@@ -57,12 +66,12 @@ export default async function handler(req: Request) {
     const profilesRes = await fetch(profilesUrl, { headers: adminHeaders });
     if (!profilesRes.ok) {
       const text = await profilesRes.text();
-      console.error('[supabase/function] profiles fetch failed:', profilesRes.status, text);
+      log.error('[supabase/function] profiles fetch failed:', profilesRes.status, text);
       return jsonResponse({ error: 'Failed to fetch profiles' }, 500);
     }
 
     const profiles = await profilesRes.json();
-    const results: any[] = [];
+    const results: unknown[] = [];
 
     // Configuration for batching and rate limiting
     const BATCH_SIZE = Number(Deno.env.get('SYNC_BATCH_SIZE') || '5');
@@ -94,18 +103,19 @@ export default async function handler(req: Request) {
 
     // Helper to sleep between batches (defined later to avoid accidental redeclare)
 
-    async function processProfile(p: any) {
+    async function processProfile(p: unknown) {
+      const pp = p as Record<string, unknown>;
+      const userId = String(pp.id ?? '');
       try {
-        const userId = p.id;
 
         // 1) Refresh token if needed
-        let accessToken = p.strava_access_token;
-        const expiresAt = Number(p.strava_token_expires_at) || 0;
+        let accessToken = String(pp['strava_access_token'] ?? '');
+        const expiresAt = Number(pp['strava_token_expires_at'] ?? 0) || 0;
         const nowSec = Math.floor(Date.now() / 1000);
         if (!accessToken || expiresAt <= nowSec + 60) {
           try {
-            const tokenData = await refreshStravaToken(p.strava_refresh_token);
-            accessToken = tokenData.access_token;
+            const tokenData = await refreshStravaToken(String(pp.strava_refresh_token ?? ''));
+            accessToken = String(tokenData.access_token);
             // Persist new tokens to profile
             const updUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/profiles?id=eq.${userId}`;
             await fetch(updUrl, {
@@ -118,7 +128,7 @@ export default async function handler(req: Request) {
               }),
             });
           } catch (re) {
-            console.error(`[supabase/function] token refresh failed for ${userId}:`, re);
+            log.error(`[supabase/function] token refresh failed for ${userId}:`, re);
             return { user_id: userId, success: false, error: 'token_refresh_failed' };
           }
         }
@@ -134,11 +144,11 @@ export default async function handler(req: Request) {
         const chRes = await fetch(chUrl, { headers: adminHeaders });
         if (!chRes.ok) {
           const txt = await chRes.text();
-          console.error('[supabase/function] challenge fetch failed:', chRes.status, txt);
+          log.error('[supabase/function] challenge fetch failed:', chRes.status, txt);
           return { user_id: userId, success: false, error: 'challenge_fetch_failed' };
         }
         const chs = await chRes.json();
-        const challenge = chs && chs[0];
+        const challenge = chs && (chs[0] as Record<string, unknown>);
         if (!challenge) {
           return { user_id: userId, success: false, error: 'no_challenge' };
         }
@@ -159,11 +169,11 @@ export default async function handler(req: Request) {
         const partRes = await fetch(partUrl, { headers: adminHeaders });
         if (!partRes.ok) {
           const txt = await partRes.text();
-          console.error('[supabase/function] participant fetch failed:', partRes.status, txt);
+          log.error('[supabase/function] participant fetch failed:', partRes.status, txt);
           return { user_id: userId, success: false, error: 'participant_fetch_failed' };
         }
         const parts = await partRes.json();
-        const participant = parts && parts[0];
+        const participant = parts && (parts[0] as Record<string, unknown>);
         if (!participant) {
           return { user_id: userId, success: false, error: 'not_registered' };
         }
@@ -173,9 +183,9 @@ export default async function handler(req: Request) {
         const endTs = Math.floor(new Date(challenge.end_date).getTime() / 1000) + 24 * 60 * 60;
         let page = 1;
         const perPage = 200;
-        let allRuns: any[] = [];
-        const minPace = challenge.min_pace_seconds || 240;
-        const maxPace = challenge.max_pace_seconds || 720;
+        let allRuns: unknown[] = [];
+        const minPace = Number(challenge.min_pace_seconds ?? 240);
+        const maxPace = Number(challenge.max_pace_seconds ?? 720);
 
         while (true) {
           const url = `https://www.strava.com/api/v3/athlete/activities?after=${startTs}&before=${endTs}&page=${page}&per_page=${perPage}`;
@@ -186,47 +196,67 @@ export default async function handler(req: Request) {
           }
           const items = await sres.json();
           if (!Array.isArray(items) || items.length === 0) break;
-
-          const valid = items.filter((a: any) => {
-            if (a.type !== 'Run' && a.type !== 'Walk') return false;
-            const distanceMeters = a.distance || 0;
-            const moving = a.moving_time || a.elapsed_time || 0;
+          const valid = items.filter((a: unknown) => {
+            const ai = a as Record<string, unknown>;
+            const atype = String(ai.type ?? ai['type'] ?? '');
+            if (atype !== 'Run' && atype !== 'Walk') return false;
+            const distanceMeters = Number(ai.distance ?? ai['distance'] ?? 0);
+            const moving = Number(ai.moving_time ?? ai.elapsed_time ?? 0);
             if (!distanceMeters || distanceMeters <= 0 || !moving || moving <= 0) return false;
             const pace = Math.round(moving / (distanceMeters / 1000));
             if (pace < minPace || pace > maxPace) return false;
             return true;
           });
 
-          allRuns = allRuns.concat(valid);
+          allRuns = allRuns.concat(valid as unknown[]);
           if (items.length < perPage) break;
           page += 1;
         }
 
         // 5) Aggregate
-        const totalMeters = allRuns.reduce((s: number, a: any) => s + (a.distance || 0), 0);
+        const totalMeters = allRuns.reduce((s: number, a: unknown) => {
+          const ai = a as Record<string, unknown>;
+          return s + Number(ai.distance ?? ai['distance'] ?? 0);
+        }, 0);
         const totalKm = Math.round((totalMeters / 1000) * 100) / 100;
-        const totalSeconds = allRuns.reduce((s: number, a: any) => s + (a.moving_time || a.elapsed_time || 0), 0);
+        const totalSeconds = allRuns.reduce((s: number, a: unknown) => {
+          const ai = a as Record<string, unknown>;
+          return s + Number(ai.moving_time ?? ai.elapsed_time ?? 0);
+        }, 0);
         const totalActivities = allRuns.length;
         const avgPaceSeconds = totalKm > 0 ? Math.round(totalSeconds / totalKm) : 0;
 
         // 6) Upsert activities into activities table
         if (allRuns.length > 0) {
-          const activitiesPayload = allRuns.map((activity: any) => ({
-            strava_activity_id: activity.id,
-            user_id: userId,
-            challenge_participant_id: participant.id,
-            name: activity.name,
-            type: activity.type || activity.sport_type,
-            distance: activity.distance || 0,
-            moving_time: activity.moving_time || 0,
-            elapsed_time: activity.elapsed_time || 0,
-            elevation_gain: activity.total_elevation_gain || null,
-            average_heartrate: activity.average_heartrate || null,
-            max_heartrate: activity.max_heartrate || null,
-            average_cadence: activity.average_cadence || null,
-            start_date: activity.start_date,
-            raw_json: activity,
-          }));
+          const stripNulls = (obj: Record<string, unknown>) => {
+            const out: Record<string, unknown> = {};
+            Object.keys(obj).forEach((k) => {
+              const v = obj[k];
+              if (v !== null && v !== undefined) out[k] = v;
+            });
+            return out;
+          };
+          const activitiesPayload = allRuns.map((activity: unknown) => {
+            const act = activity as Record<string, unknown>;
+            const item: Record<string, unknown> = {
+              strava_activity_id: act['id'],
+              user_id: userId,
+              challenge_participant_id: participant.id,
+              name: act['name'],
+              type: act['type'] ?? act['sport_type'],
+              distance: Number(act['distance'] ?? 0),
+              moving_time: Number(act['moving_time'] ?? 0),
+              elapsed_time: Number(act['elapsed_time'] ?? 0),
+              total_elevation_gain: act['total_elevation_gain'] ?? act['elevation_gain'] ?? null,
+              average_heartrate: act['average_heartrate'] ?? null,
+              max_heartrate: act['max_heartrate'] ?? null,
+              average_cadence: act['average_cadence'] ?? null,
+              map_summary_polyline: (act['map'] as Record<string, unknown> | undefined)?.summary_polyline ?? act['map_summary_polyline'] ?? null,
+              start_date: act['start_date'],
+              raw_json: act,
+            };
+            return stripNulls(item);
+          });
 
           const actUrl = `${String(SUPABASE_URL).replace(/\/$/, '')}/rest/v1/activities?on_conflict=strava_activity_id`;
           const actRes = await fetch(actUrl, {
@@ -236,7 +266,7 @@ export default async function handler(req: Request) {
           });
           if (!actRes.ok) {
             const txt = await actRes.text();
-            console.error('[supabase/function] activity upsert failed:', actRes.status, txt);
+            log.error('[supabase/function] activity upsert failed:', actRes.status, txt);
           }
         }
 
@@ -249,7 +279,7 @@ export default async function handler(req: Request) {
 
         const isCompleted = participant.target_km ? totalKm >= Number(participant.target_km) : false;
 
-        const updatePayload: any = {
+        const updatePayload: Record<string, unknown> = {
           // canonical fields
           actual_km: totalKm,
           avg_pace_seconds: avgPaceSeconds,
@@ -270,7 +300,7 @@ export default async function handler(req: Request) {
         });
         if (!updRes.ok) {
           const txt = await updRes.text();
-          console.error('[supabase/function] participant update failed:', updRes.status, txt);
+          log.error('[supabase/function] participant update failed:', updRes.status, txt);
         }
 
         // 8) Call DB-side RPC to recalc cached aggregates if available
@@ -282,7 +312,7 @@ export default async function handler(req: Request) {
             headers: adminHeaders,
             body: JSON.stringify({ p_challenge_id: challenge.id, p_participant_id: participant.id }),
           });
-        } catch (rpcErr) {
+        } catch {
           // Fallback: try the older RPC name if present (keeps backward compatibility)
           try {
             const rpcUrlOld = `${String(SUPABASE_URL).replace(/\/$/, '')}/rpc/recalc_challenge_participant_status`;
@@ -292,14 +322,15 @@ export default async function handler(req: Request) {
               body: JSON.stringify({ p_participant_id: participant.id }),
             });
           } catch (e) {
-            console.debug('[supabase/function] No recalc RPC available', e);
+            log.debug('[supabase/function] No recalc RPC available', e);
           }
         }
 
         return { user_id: userId, success: true, totalKm, totalActivities };
-      } catch (err: any) {
-        console.error('[supabase/function] Error for user', p.id, err);
-        return { user_id: p.id, success: false, error: err?.message || String(err) };
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error('[supabase/function] Error for user', userId, message);
+        return { user_id: userId, success: false, error: message };
       }
     }
 
@@ -307,9 +338,9 @@ export default async function handler(req: Request) {
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
     // Process profiles in batches to control concurrency and avoid rate limits
-    for (let i = 0; i < (profiles || []).length; i += BATCH_SIZE) {
+        for (let i = 0; i < (profiles || []).length; i += BATCH_SIZE) {
       const batch = (profiles || []).slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.all(batch.map((p: any) => processProfile(p)));
+      const batchResults = await Promise.all(batch.map((p: unknown) => processProfile(p)));
       results.push(...batchResults);
       // Delay between batches to avoid hitting Strava/Supabase rate limits
       if (i + BATCH_SIZE < (profiles || []).length) {
@@ -319,7 +350,7 @@ export default async function handler(req: Request) {
 
     return jsonResponse({ success: true, processed: results.length, results });
   } catch (err) {
-    console.error('[supabase/function] Exception', err);
+    log.error('[supabase/function] Exception', err);
     return jsonResponse({ error: String(err) }, 500);
   }
 }

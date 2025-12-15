@@ -12,12 +12,12 @@ This guide covers the Strava OAuth integration for the HLR Running Club applicat
 
 ### 1. OAuth Flow
 
-**Login Route** (`/api/auth/strava/login`)
+**Connect Route** (`/api/strava/connect/login`) - used to connect an existing Supabase account to Strava
 - Generates Strava authorization URL
 - Redirects user to Strava OAuth consent screen
 - User grants permission for activity access
 
-**Callback Route** (`/api/auth/strava/callback`)
+**Callback Route** (`/api/strava/connect/callback`)
 - Receives authorization code from Strava
 - Exchanges code for access/refresh tokens
 - Stores tokens securely in profiles table
@@ -118,10 +118,10 @@ const response = await fetch(
 ## User Flow
 
 1. User clicks "Connect with Strava" button
-2. Gets redirected to `/api/auth/strava/login`
+2. Gets redirected to `/api/strava/connect/login`
 3. Redirected to Strava OAuth page
 4. User grants permission for activity access
-5. Strava redirects to `/api/auth/strava/callback` with auth code
+5. Strava redirects to `/api/strava/connect/callback` with auth code
 6. Token stored in database
 7. User redirected to dashboard with success message
 8. Next sync event pulls activities and updates challenge progress

@@ -1,11 +1,14 @@
 "use client";
 
 import { Activity, LogOut, User, Menu, X, Shield, Moon, Sun } from "lucide-react";
+import Image from "next/image";
+import Link from "next/link";
 import { useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+// Header no longer calls Supabase directly for sign-out; use server API.
 import { usePathname } from "next/navigation";
 import { useTheme } from "@/lib/theme";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole } from "@/lib/auth/role";
 
 // Common Header Component for all pages
 export default function Header() {
@@ -13,7 +16,11 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [logoAvailable, setLogoAvailable] = useState(true);
   const { darkMode, toggleDarkMode } = useTheme();
-  const { user, profile, isLoading } = useAuth(); // Use AuthContext instead of local state
+  const { user, profile, isLoading, sessionChecked } = useAuth(); // Use AuthContext instead of local state
+  const authPending = isLoading || !sessionChecked;
+  const loggedIn = !!user || !!profile;
+  // Prefer server-controlled `app_metadata.role`; fallback to `profiles.role` only when missing
+  const effectiveRole = getEffectiveRole(user, profile);
 
   const handleLogout = async () => {
     try {
@@ -26,8 +33,6 @@ export default function Header() {
       }
       // Call logout API to clear cookies/session (do not await)
       fetch('/api/auth/logout', { method: 'POST' });
-      // Sign out from Supabase (do not await)
-      supabase.auth.signOut();
       // Redirect immediately
       window.location.href = '/login';
     } catch (error) {
@@ -46,11 +51,7 @@ export default function Header() {
     };
     return labels[role] || role;
   };
-
-  const getRoleBadgeColor = (role: string): string => {
-    // Use empty string, will use inline styles instead
-    return "";
-  };
+  
   
   const getRoleBadgeStyle = (role: string): React.CSSProperties => {
     const styles: Record<string, React.CSSProperties> = {
@@ -70,141 +71,140 @@ export default function Header() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <a href="/dashboard" className="flex items-center gap-2 shrink-0">
-            <img
+          <Link href="/dashboard" className="flex items-center gap-3 shrink-0">
+            <Image
               src="/media/logo/logo.svg"
               alt="Hải Lăng Runners"
-              className="w-10 h-10 rounded-lg object-cover"
+              width={48}
+              height={48}
+              className="w-12 h-12 object-contain p-0"
               style={{ display: logoAvailable ? 'block' : 'none' }}
-              onError={(e) => { try { setLogoAvailable(false); } catch {} }}
-              onLoad={(e) => { try { setLogoAvailable(true); } catch {} }}
+              onError={() => setLogoAvailable(false)}
+              onLoad={() => setLogoAvailable(true)}
             />
             {!logoAvailable && <Activity size={32} style={{ color: "var(--color-primary)" }} />}
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 hidden sm:block">Hải Lăng Runners</h1>
             <h1 className="text-xl font-bold text-gray-900 sm:hidden">HLR</h1>
-          </a>
+          </Link>
 
           {/* Desktop Navigation */}
           <nav className="hidden lg:flex items-center gap-1">
-            {user ? (
+            {loggedIn ? (
               <>
-                <a
+                {/* Show Challenges to all logged-in users (including member) */}
+                <Link
                   href="/challenges"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/challenges') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/challenges') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Thử thách
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/hall-of-fame"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/hall-of-fame') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/hall-of-fame') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Bảng vàng
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/races"
-                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/races') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  className="px-2 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-2"
+                  style={isActive('/races') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Races
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/rewards"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/rewards') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/rewards') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quà tặng
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/finance"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/finance') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/finance') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quỹ CLB
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/rules"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/rules') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/rules') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Quy định
-                </a>
-                <a
+                </Link>
+
+                <Link
                   href="/profile"
                   className="px-2 py-1.5 rounded-lg text-xs font-medium transition"
-                  style={isActive('/profile') 
-                    ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
-                    : { color: 'var(--color-text-secondary)' }}
+                  style={isActive('/profile') ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' } : { color: 'var(--color-text-secondary)' }}
                   onMouseEnter={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
                   onMouseLeave={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'transparent')}
                 >
                   Thành viên
-                </a>
-                {user?.user_metadata?.role && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(user.user_metadata.role) && (
-                  <a
+                </Link>
+
+                {effectiveRole && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(effectiveRole) && (
+                  <Link
                     href="/admin"
                     className="ml-2 px-3 py-2 rounded-lg text-sm font-semibold transition flex items-center gap-1"
                     style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                   >
                     <Shield size={16} />
                     Quản trị
-                  </a>
+                  </Link>
                 )}
+
                 <div className="flex flex-col items-end gap-1 ml-4 pl-4 border-l" style={{ borderColor: "var(--color-border)" }}>
                   {/* Row 1: Email + Role Badge */}
                   <div className="flex items-center gap-1.5">
-                    <img
+                    <Image
                       src={profile?.avatar_url || '/media/avatars/avatar-placeholder.svg'}
                       alt={profile?.full_name ? `${profile.full_name} avatar` : 'User avatar'}
+                      width={24}
+                      height={24}
                       className="w-6 h-6 rounded-full object-cover border"
                       style={{ borderColor: 'var(--color-border)' }}
-                      onError={(e: any) => { e.currentTarget.src = '/media/avatars/avatar-placeholder.svg'; }}
                     />
                     <span className="text-sm font-medium" style={{ color: "var(--color-text-primary)" }}>
-                      {user.email}
+                      {profile?.full_name || user?.email || profile?.id}
                     </span>
-                    {user?.user_metadata?.role && (
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(user.user_metadata.role)}>
-                        {getRoleLabel(user.user_metadata.role)}
+                    {effectiveRole && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(String(effectiveRole))}>
+                        {getRoleLabel(String(effectiveRole))}
                       </span>
                     )}
                   </div>
                   
                   {/* Row 2: Theme Settings + Dark Mode + Logout */}
                   <div className="flex items-center gap-2">
-                    <a
+                    <Link
                       href="/profile/theme"
                       className="text-xs hover:opacity-80 transition"
                       style={{ color: "var(--color-text-secondary)" }}
                       title="Cài đặt giao diện"
+                      onClick={() => setMobileMenuOpen(false)}
                     >
                       🎨 Theme
-                    </a>
+                    </Link>
                     <span style={{ color: "var(--color-border)" }}>|</span>
                     <button
                       onClick={toggleDarkMode}
@@ -228,19 +228,19 @@ export default function Header() {
                   </div>
                 </div>
               </>
-            ) : isLoading ? (
+            ) : authPending ? (
               // Show minimal loading state instead of login button during initial load
               <div className="flex items-center gap-2">
                 <div className="w-20 h-8 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
               </div>
             ) : (
-              <a
+              <Link
                 href="/login"
                 className="px-4 py-2 rounded-lg transition font-semibold"
                 style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
               >
                 Đăng nhập
-              </a>
+              </Link>
             )}
           </nav>
 
@@ -260,32 +260,32 @@ export default function Header() {
         {mobileMenuOpen && (
           <div className="lg:hidden absolute left-0 right-0 top-full bg-white border-b border-gray-200 shadow-lg">
             <nav className="flex flex-col p-4 space-y-2">
-              {user ? (
+              {loggedIn ? (
                 <>
                   <div className="pb-3 mb-3 border-b border-gray-200">
-                    <div className="flex items-center gap-2 mb-2">
+                      <div className="flex items-center gap-2 mb-2">
                       <User size={20} className="text-gray-600" />
                       <span className="font-medium text-gray-900">
-                        {profile?.full_name || user.email}
+                        {profile?.full_name || user?.email || profile?.id}
                       </span>
                     </div>
-                    {user?.user_metadata?.role && (
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(user.user_metadata.role)}>
-                        {getRoleLabel(user.user_metadata.role)}
+                    {effectiveRole && (
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={getRoleBadgeStyle(String(effectiveRole))}>
+                        {getRoleLabel(String(effectiveRole))}
                       </span>
                     )}
                     {/* Mobile Theme Settings & Dark Mode */}
                     <div className="flex items-center gap-3 mt-3">
-                      <a
-                        href="/profile/theme"
-                        className="text-sm transition"
-                        style={{ color: "var(--color-text-secondary)" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "var(--color-primary)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "var(--color-text-secondary)")}
-                        onClick={() => setMobileMenuOpen(false)}
-                      >
-                        🎨 Cài đặt theme
-                      </a>
+                      <Link
+                          href="/profile/theme"
+                          className="text-sm transition"
+                          style={{ color: "var(--color-text-secondary)" }}
+                          onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-primary)"; }}
+                          onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = "var(--color-text-secondary)"; }}
+                          onClick={() => setMobileMenuOpen(false)}
+                        >
+                          🎨 Cài đặt theme
+                        </Link>
                       <button
                         onClick={toggleDarkMode}
                         className="text-sm transition flex items-center gap-1"
@@ -298,92 +298,92 @@ export default function Header() {
                       </button>
                     </div>
                   </div>
-                  <a
+                    <Link
                     href="/challenges"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/challenges') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/challenges') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/challenges')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/challenges')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Thử thách
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/hall-of-fame"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/hall-of-fame') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/hall-of-fame') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/hall-of-fame')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/hall-of-fame')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Bảng vàng
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/races"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/races') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/races') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/races')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/races')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Races
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/rewards"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/rewards') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/rewards') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/rewards')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/rewards')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quà tặng
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/finance"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/finance') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/finance') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/finance')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/finance')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quỹ CLB
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/rules"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/rules') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/rules') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/rules')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/rules')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Quy định
-                  </a>
-                  <a
+                  </Link>
+                  <Link
                     href="/profile"
                     className="px-3 py-2 rounded-lg font-medium transition"
                     style={isActive('/profile') 
                       ? { backgroundColor: 'var(--color-bg-tertiary)', color: 'var(--color-primary)' }
                       : { color: 'var(--color-text-secondary)' }}
-                    onMouseEnter={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'var(--color-bg-secondary)')}
-                    onMouseLeave={(e) => !isActive('/profile') && (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onMouseEnter={(e) => { if (!isActive('/profile')) (e.currentTarget as HTMLElement).style.backgroundColor = 'var(--color-bg-secondary)'; }}
+                    onMouseLeave={(e) => { if (!isActive('/profile')) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent'; }}
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     Thành viên
-                  </a>
-                  {user?.user_metadata?.role && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(user.user_metadata.role) && (
-                    <a
+                  </Link>
+                  {effectiveRole && ["admin", "mod_finance", "mod_challenge", "mod_member"].includes(effectiveRole) && (
+                    <Link
                       href="/admin"
                       className="px-3 py-2 rounded-lg font-semibold text-center flex items-center justify-center gap-1 transition"
                       style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
@@ -391,7 +391,7 @@ export default function Header() {
                     >
                       <Shield size={16} />
                       Quản trị
-                    </a>
+                    </Link>
                   )}
                   <button
                     onClick={handleLogout}
@@ -401,21 +401,21 @@ export default function Header() {
                     <span>Đăng xuất</span>
                   </button>
                 </>
-              ) : isLoading ? (
+              ) : authPending ? (
                 // Show loading skeleton for mobile menu during initial load
                 <div className="space-y-2">
                   <div className="h-10 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
                   <div className="h-10 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--color-border-light)' }}></div>
                 </div>
               ) : (
-                <a
+                <Link
                   href="/login"
                   className="px-4 py-2 rounded-lg font-semibold text-center transition"
                   style={{ background: "var(--color-primary)", color: "var(--color-text-inverse)" }}
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Đăng nhập
-                </a>
+                </Link>
               )}
             </nav>
           </div>

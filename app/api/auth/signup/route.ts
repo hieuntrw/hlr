@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import serverDebug from '@/lib/server-debug';
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,12 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password, full_name, role } = body;
+    const body = (await request.json()) as unknown;
+    const parsed = (typeof body === 'object' && body) ? body as Record<string, unknown> : {};
+    const email = typeof parsed.email === 'string' ? parsed.email : undefined;
+    const password = typeof parsed.password === 'string' ? parsed.password : undefined;
+    const full_name = typeof parsed.full_name === 'string' ? parsed.full_name : undefined;
+    const role = typeof parsed.role === 'string' ? parsed.role : undefined;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -39,7 +44,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    console.log("Creating user:", email);
+    serverDebug.info("Creating user:", email);
 
     // Create user in Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (authError) {
-      console.error("Signup error:", authError);
+      serverDebug.error("Signup error:", authError);
       return NextResponse.json(
         { error: authError.message },
         { status: 400 }
@@ -68,7 +73,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log("User created, creating profile:", authData.user.id);
+    serverDebug.info("User created, creating profile:", authData.user.id);
 
     // Create/update profile record with role
     const { error: profileError } = await supabase.from("profiles").upsert({
@@ -83,24 +88,25 @@ export async function POST(request: NextRequest) {
     });
 
     if (profileError) {
-      console.error("Profile creation error:", profileError);
+      serverDebug.error("Profile creation error:", profileError);
       return NextResponse.json(
         { error: `Tài khoản đã tạo nhưng profile gặp lỗi: ${profileError.message}` },
         { status: 500 }
       );
     }
 
-    console.log("Profile created successfully");
+    serverDebug.info("Profile created successfully");
 
     return NextResponse.json({
       ok: true,
       user: authData.user,
       message: "Tài khoản đã được tạo thành công",
     });
-  } catch (err: any) {
-    console.error("Server error:", err);
+  } catch (err: unknown) {
+    serverDebug.error("Server error:", err);
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: err?.message || "Lỗi máy chủ" },
+      { error: message || "Lỗi máy chủ" },
       { status: 500 }
     );
   }

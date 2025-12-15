@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
+// Server APIs are used for protected operations; avoid client-side Supabase here.
 import { useAuth } from "@/lib/auth/AuthContext";
-import { Edit, Trash2, UserPlus, X, Save } from "lucide-react";
+import { getEffectiveRole, isAdminRole, isModRole } from "@/lib/auth/role";
+import { Edit, Trash2 } from "lucide-react";
 
 interface Member {
   id: string;
@@ -100,7 +101,7 @@ function formatTokenExpiry(expiresAt: string | null): string {
 }
 
 export default function MembersAdminPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
@@ -124,12 +125,65 @@ export default function MembersAdminPage() {
   const [dobDisplay, setDobDisplay] = useState("");
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [formLoading, setFormLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const fetchMembers = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      console.log("[Members Page] Fetching members...");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      let res: Response;
+      try {
+        res = await fetch('/api/admin/profiles', { signal: controller.signal, credentials: 'same-origin' });
+      } finally {
+        clearTimeout(timeout);
+      }
+
+      const bodyRaw = await res.json().catch(() => ({})) as unknown;
+      if (!res.ok) {
+        const bodyObj = bodyRaw as { error?: string };
+        console.error('[Members Page] API error:', bodyObj?.error || res.statusText);
+        setFetchError('Lỗi khi tải danh sách: ' + (bodyObj?.error || res.statusText));
+        return;
+      }
+
+      const bodyObj = bodyRaw as { data?: unknown[] };
+      const data = (bodyObj.data || []) as unknown as Member[];
+      console.log('[Members Page] Loaded members (API):', data.length || 0);
+      setMembers(data);
+    } catch (err) {
+      console.error('[Members Page] Exception:', err);
+      const e = err as { name?: string; message?: string };
+      if (e?.name === 'AbortError') {
+        setFetchError('Yêu cầu bị hủy do thời gian chờ. Vui lòng thử lại.');
+      } else {
+        setFetchError('Lỗi: ' + String(err));
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const checkRole = useCallback(async () => {
+    if (!user) {
+      router.push('/debug-login');
+      return;
+    }
+    const role = getEffectiveRole(user, profile);
+    if (!role || !["admin", "mod_member"].includes(role)) {
+      router.push('/');
+    }
+  }, [user, profile, router]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
+    console.log('[Members Page] authLoading:', authLoading, 'user:', user?.id, 'profile:', profile?.id);
     checkRole();
     fetchMembers();
-  }, [user, authLoading]);
+  }, [user, profile, authLoading, sessionChecked, checkRole, fetchMembers]);
 
   useEffect(() => {
     // Filter members by email
@@ -143,47 +197,18 @@ export default function MembersAdminPage() {
     }
   }, [searchEmail, members]);
 
-  async function checkRole() {
-    // user from AuthContext
-    if (!user) {
-      router.push("/debug-login");
-      return;
-    }
-    // Chỉ kiểm tra quyền qua Supabase Auth metadata
-    const role = user.user_metadata?.role;
-    if (!role || !["admin", "mod_member"].includes(role)) {
-      router.push("/");
-    }
-  }
-
-  async function fetchMembers() {
-    setLoading(true);
-
-    try {
-      console.log("[Members Page] Fetching members...");
-      
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, role, is_active, join_date, leave_date, phone_number, dob, device_name, gender, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, strava_id, strava_access_token, strava_refresh_token, strava_token_expires_at")
-        .order("join_date", { ascending: false });
-
-      console.log("[Members Page] Query result:", { data, error });
-
-      if (error) {
-        console.error("[Members Page] Error:", error);
-        alert("Lỗi khi tải danh sách: " + error.message);
-        return;
+  // Ensure we don't stay in a loading spinner forever — show retry UI after timeout
+  useEffect(() => {
+    if (!loading) return;
+    const id = setTimeout(() => {
+      if (loading) {
+        console.warn('[Members Page] loading exceeded timeout, showing retry UI');
+        setFetchError('Yêu cầu quá lâu. Vui lòng thử lại.');
+        setLoading(false);
       }
-
-      console.log("[Members Page] Loaded members:", data?.length || 0);
-      setMembers(data || []);
-    } catch (err) {
-      console.error("[Members Page] Exception:", err);
-      alert("Lỗi: " + String(err));
-    } finally {
-      setLoading(false);
-    }
-  }
+    }, 12000); // 12s
+    return () => clearTimeout(id);
+  }, [loading]);
 
   const getRoleLabel = (role: string): string => {
     const labels: { [key: string]: string } = {
@@ -252,9 +277,10 @@ export default function MembersAdminPage() {
           setFormMessage(null);
         }, 2000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Create member error:", err);
-      setFormMessage("Lỗi kết nối: " + (err?.message || "Không thể kết nối đến server"));
+      const e = err as { message?: string };
+      setFormMessage("Lỗi kết nối: " + (e?.message || "Không thể kết nối đến server"));
     } finally {
       setFormLoading(false);
     }
@@ -272,10 +298,12 @@ export default function MembersAdminPage() {
       const pbHmSeconds = timeToSeconds(formData.pb_hm_time);
       const pbFmSeconds = timeToSeconds(formData.pb_fm_time);
 
-      // Update profiles table with all fields
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .update({
+      // Update profiles via server-side API to respect RLS and avoid exposing keys
+      const updRes = await fetch(`/api/admin/profiles/${editingMember.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
           full_name: formData.full_name,
           phone_number: formData.phone_number || null,
           dob: formData.dob || null,
@@ -283,20 +311,23 @@ export default function MembersAdminPage() {
           device_name: formData.device_name || null,
           join_date: formData.join_date || null,
           role: formData.role,
-          // PB fields - Admin edit = auto-approved
           pb_hm_seconds: pbHmSeconds,
           pb_fm_seconds: pbFmSeconds,
-          pb_hm_approved: pbHmSeconds !== null, // Auto-approve if value provided
-          pb_fm_approved: pbFmSeconds !== null, // Auto-approve if value provided
-        })
-        .eq("id", editingMember.id);
+          pb_hm_approved: pbHmSeconds !== null,
+          pb_fm_approved: pbFmSeconds !== null,
+        }),
+      });
 
-      if (profileError) throw profileError;
+      if (!updRes.ok) {
+        const errBody = await updRes.json().catch(() => ({}));
+        throw new Error(errBody.error || updRes.statusText || 'Failed to update profile');
+      }
 
       // Update auth metadata via API
       const res = await fetch("/api/admin/update-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: 'same-origin',
         body: JSON.stringify({
           userId: editingMember.id,
           role: formData.role,
@@ -320,8 +351,9 @@ export default function MembersAdminPage() {
         setDobDisplay("");
         setFormMessage(null);
       }, 2000);
-    } catch (err: any) {
-      setFormMessage(err?.message || "Lỗi khi cập nhật");
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setFormMessage(e?.message || "Lỗi khi cập nhật");
     } finally {
       setFormLoading(false);
     }
@@ -331,20 +363,21 @@ export default function MembersAdminPage() {
     if (!confirm("Bạn có chắc muốn đánh dấu thành viên này đã rời CLB?")) return;
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          is_active: false,
-          leave_date: new Date().toISOString().split("T")[0],
-        })
-        .eq("id", memberId);
-
-      if (error) throw error;
-
-      alert("✓ Đã đánh dấu thành viên rời CLB");
+      // Use server API to mark member as left (soft-delete)
+      const delRes = await fetch(`/api/admin/profiles/${memberId}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!delRes.ok) {
+        const errBody = await delRes.json().catch(() => ({}));
+        alert('Lỗi: ' + (errBody.error || delRes.statusText || 'Không thể cập nhật'));
+        return;
+      }
+      alert('✓ Đã đánh dấu thành viên rời CLB');
       fetchMembers();
-    } catch (err: any) {
-      alert("Lỗi: " + (err?.message || "Không thể cập nhật"));
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      alert("Lỗi: " + (e?.message || "Không thể cập nhật"));
     }
   };
 
@@ -712,12 +745,28 @@ export default function MembersAdminPage() {
           </div>
           
           {loading ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-600">Đang tải...</p>
-            </div>
+            fetchError ? (
+              <div className="p-8 text-center">
+                <p className="text-red-600 mb-3">{fetchError}</p>
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => fetchMembers()}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                  >Thử lại</button>
+                  <button
+                    onClick={() => { setFetchError(null); setLoading(false); }}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg"
+                  >Đóng</button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <p className="text-gray-600">Đang tải...</p>
+              </div>
+            )
           ) : filteredMembers.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="w-full overflow-hidden">
+              <table className="w-full text-sm table-auto">
                 <thead>
                   <tr className="border-b-2 border-gray-300 bg-gray-50">
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Tên</th>
@@ -727,46 +776,42 @@ export default function MembersAdminPage() {
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày sinh</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">PB HM</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">PB FM</th>
-                    <th className="text-left py-3 px-4 font-bold text-gray-700">Thiết bị</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Vai Trò</th>
                     <th className="text-left py-3 px-4 font-bold text-gray-700">Gia Nhập</th>
                     <th className="text-center py-3 px-4 font-bold text-gray-700">Trạng Thái</th>
-                    <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
+                    <th className="text-center py-3 px-4 font-bold text-gray-700" style={{ width: '8rem' }}>Hành Động</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredMembers.map((member) => (
                     <tr key={member.id} className={`border-b border-gray-200 hover:bg-gray-50 ${!member.is_active ? 'bg-red-50' : ''}`}>
-                      <td className="py-3 px-4 font-semibold whitespace-nowrap max-w-[220px] truncate" title={member.full_name}>
+                      <td className="py-3 px-4 font-semibold text-sm whitespace-nowrap truncate max-w-[220px]" title={member.full_name}>
                         {member.full_name}
                       </td>
-                      <td className="py-3 px-4">{member.email}</td>
-                      <td className="py-3 px-4">
-                        {member.gender === 'male' ? '👨 Nam' : member.gender === 'female' ? '👩 Nữ' : 'N/A'}
-                      </td>
-                      <td className="py-3 px-4">{member.phone_number || 'N/A'}</td>
-                      <td className="py-3 px-4">{formatDateSimple(member.dob)}</td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 text-sm whitespace-nowrap truncate max-w-[260px]" title={member.email}>{member.email}</td>
+                      <td className="py-3 px-4 min-w-0 text-sm">{member.gender === 'male' ? '👨 Nam' : member.gender === 'female' ? '👩 Nữ' : 'N/A'}</td>
+                      <td className="py-3 px-4 min-w-0 break-words whitespace-normal">{member.phone_number || 'N/A'}</td>
+                      <td className="py-3 px-4 min-w-0 text-sm">{formatDateSimple(member.dob)}</td>
+                      <td className="py-3 px-4 min-w-0 text-sm">
                         <span className={member.pb_hm_approved ? 'text-green-700 font-semibold' : 'text-yellow-600'}>
                           {formatTime(member.pb_hm_seconds)}
                           {member.pb_hm_seconds && !member.pb_hm_approved && ' ⏳'}
                         </span>
                       </td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 min-w-0 text-sm break-words">
                         <span className={member.pb_fm_approved ? 'text-green-700 font-semibold' : 'text-yellow-600'}>
                           {formatTime(member.pb_fm_seconds)}
                           {member.pb_fm_seconds && !member.pb_fm_approved && ' ⏳'}
                         </span>
                       </td>
-                      <td className="py-3 px-4">{member.device_name || 'N/A'}</td>
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 min-w-0 break-words">
                         <span
                           className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${
-                            member.role.includes("admin")
-                              ? "bg-red-100 text-red-800"
-                              : member.role.includes("mod")
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-purple-100 text-purple-800"
+                              isAdminRole(member.role)
+                                ? "bg-red-100 text-red-800"
+                                : isModRole(member.role)
+                                ? "bg-blue-100 text-blue-800"
+                                : "bg-purple-100 text-purple-800"
                           }`}
                         >
                           {getRoleLabel(member.role)}

@@ -31,7 +31,7 @@ export default function Navigation({ isMobile, isLoggedIn }: { isMobile: boolean
   if (!isLoggedIn) {
     return (
       <nav className="fixed bottom-0 left-0 w-full bg-[var(--color-bg)] border-t border-[var(--color-border)] flex justify-center z-50">
-        <Link href="/api/auth/strava/login" className="flex flex-col items-center justify-center py-2 px-6 text-[var(--color-primary)]">
+        <Link href="/login" className="flex flex-col items-center justify-center py-2 px-6 text-[var(--color-primary)]">
           {icons.login}
           <span className="text-xs mt-1">Đăng nhập</span>
         </Link>

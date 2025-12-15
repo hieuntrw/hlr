@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkStravaConnection } from "@/lib/strava-token";
+import serverDebug from '@/lib/server-debug';
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(status);
   } catch (error) {
-    console.error("[Strava Check] Error:", error);
+    serverDebug.error("[Strava Check] Error:", error);
     return NextResponse.json(
       { error: "Failed to check connection" },
       { status: 500 }

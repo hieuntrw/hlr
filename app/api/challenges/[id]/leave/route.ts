@@ -1,11 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import serverDebug from '@/lib/server-debug'
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
   try {
     // Create server supabase client to read session from cookies
-    const res = NextResponse.next();
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -38,13 +40,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq('user_id', user_id);
 
     if (error) {
-      console.error('POST /api/challenges/[id]/leave error', error);
+      serverDebug.error('POST /api/challenges/[id]/leave error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ message: 'Left challenge' });
-  } catch (err: any) {
-    console.error('POST /api/challenges/[id]/leave exception', err);
+  } catch (err: unknown) {
+    serverDebug.error('POST /api/challenges/[id]/leave exception', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

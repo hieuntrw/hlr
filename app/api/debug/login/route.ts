@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +35,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, user: data.user ?? null });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || String(err) }, { status: 500 });
+  } catch (err: unknown) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

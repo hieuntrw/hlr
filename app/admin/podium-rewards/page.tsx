@@ -2,8 +2,8 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 import { Star, Plus, CheckCircle, Clock, Calendar, User } from "lucide-react";
 
 interface Race {
@@ -41,12 +41,18 @@ interface PodiumReward {
   };
 }
 
+interface Member {
+  id: string;
+  full_name: string;
+  email: string;
+}
+
 export default function PodiumRewardsPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const [configs, setConfigs] = useState<PodiumConfig[]>([]);
   const [rewards, setRewards] = useState<PodiumReward[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
-  const [members, setMembers] = useState<any[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -57,49 +63,29 @@ export default function PodiumRewardsPage() {
   });
 
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
+    // Ensure only admins load this page
+    if (!user) {
+      window.location.href = '/login';
+      return;
+    }
+    const resolved = getEffectiveRole(user, profile) || 'member';
+    if (!isAdminRole(resolved)) {
+      window.location.href = '/';
+      return;
+    }
     loadData();
-  }, [user, authLoading]);
+  }, [user, profile, authLoading, sessionChecked]);
 
   const loadData = async () => {
     try {
-      // Load configs
-      const { data: configsData } = await supabase
-        .from("reward_podium_config")
-        .select("*")
-        .eq("is_active", true)
-        .order("podium_type", { ascending: true })
-        .order("rank", { ascending: true });
-
-      if (configsData) setConfigs(configsData);
-
-      // Load rewards
-      const { data: rewardsData } = await supabase
-        .from("member_podium_rewards")
-        .select(`
-          *,
-          race:races(id, name, date, location),
-          member:profiles(full_name, email)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (rewardsData) setRewards(rewardsData);
-
-      // Load races (only events with ≥2000 runners)
-      const { data: racesData } = await supabase
-        .from("races")
-        .select("*")
-        .order("date", { ascending: false });
-
-      if (racesData) setRaces(racesData);
-
-      // Load members
-      const { data: membersData } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .order("full_name", { ascending: true });
-
-      if (membersData) setMembers(membersData);
+      const res = await fetch('/api/admin/podium-rewards', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load');
+      const j = await res.json().catch(() => null);
+      setConfigs(j?.configs || []);
+      setRewards(j?.rewards || []);
+      setRaces(j?.races || []);
+      setMembers(j?.members || []);
 
     } catch (error) {
       console.error("Error loading data:", error);
@@ -122,22 +108,19 @@ export default function PodiumRewardsPage() {
         return;
       }
 
-      // Insert mapping: UI uses `user_id`, DB currently expects `member_id`.
-      const { error } = await supabase.from("member_podium_rewards").insert([
-        {
-          race_id: formData.race_id,
-          member_id: formData.user_id,
-          podium_config_id: formData.podium_config_id,
-          notes: formData.notes,
-          podium_type: config.podium_type,
-          rank: config.rank,
-          reward_description: config.reward_description,
-          cash_amount: config.cash_amount,
-          status: 'pending',
-        },
-      ]);
-
-      if (error) throw error;
+      const payload = {
+        race_id: formData.race_id,
+        member_id: formData.user_id,
+        podium_config_id: formData.podium_config_id,
+        notes: formData.notes,
+        podium_type: config.podium_type,
+        rank: config.rank,
+        reward_description: config.reward_description,
+        cash_amount: config.cash_amount,
+        status: 'pending',
+      };
+      const r = await fetch('/api/admin/podium-rewards', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error('Insert failed');
 
       alert("Thêm phần thưởng đứng bục thành công!");
       setShowAddForm(false);
@@ -159,16 +142,8 @@ export default function PodiumRewardsPage() {
       // user from AuthContext
 if (!user) return;
 
-      const { error } = await supabase
-        .from("member_podium_rewards")
-        .update({
-          status: "delivered",
-          delivered_at: new Date().toISOString(),
-          approved_by: user.id,
-        })
-        .eq("id", rewardId);
-
-      if (error) throw error;
+      const r = await fetch('/api/admin/podium-rewards', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: rewardId, status: 'delivered', delivered_at: new Date().toISOString(), approved_by: user.id }) });
+      if (!r.ok) throw new Error('Update failed');
 
       alert("Đã đánh dấu đã trao!");
       loadData();

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { syncUserActivitiesForCurrentMonth } from '@/lib/services/stravaService';
+import serverDebug from '@/lib/server-debug'
 
 export const dynamic = 'force-dynamic';
 
@@ -25,25 +26,27 @@ export async function POST(request: NextRequest) {
       .is('is_active', true);
 
     if (profilesErr) {
-      console.error('[cron/strava-sync] Failed to load profiles:', profilesErr);
+      serverDebug.error('[cron/strava-sync] Failed to load profiles:', profilesErr);
       return NextResponse.json({ error: 'Failed to load profiles' }, { status: 500 });
     }
 
-    const results: any[] = [];
+    const results: unknown[] = [];
 
-    for (const p of profiles || []) {
+    for (const p of (profiles || []) as Array<Record<string, unknown>>) {
+      const userId = String(p.id);
       try {
-        const res = await syncUserActivitiesForCurrentMonth(p.id);
-        results.push({ user_id: p.id, success: true, result: res });
-      } catch (err: any) {
-        console.error(`[cron/strava-sync] Failed for user ${p.id}:`, err);
-        results.push({ user_id: p.id, success: false, error: err?.message || String(err) });
+        const res = await syncUserActivitiesForCurrentMonth(userId);
+        results.push({ user_id: userId, success: true, result: res });
+      } catch (err: unknown) {
+        serverDebug.error(`[cron/strava-sync] Failed for user ${userId}:`, err);
+        const msg = err instanceof Error ? err.message : String(err);
+        results.push({ user_id: userId, success: false, error: msg });
       }
     }
 
     return NextResponse.json({ success: true, processed: results.length, results });
-  } catch (err: any) {
-    console.error('[cron/strava-sync] Exception:', err);
+  } catch (err: unknown) {
+    serverDebug.error('[cron/strava-sync] Exception:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

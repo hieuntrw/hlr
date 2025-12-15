@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 interface SystemSetting {
   key: string;
@@ -12,7 +13,7 @@ interface SystemSetting {
 }
 
 export default function SettingsPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,26 +21,24 @@ export default function SettingsPage() {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
 
-  useEffect(() => {
-    if (authLoading) return;
-    checkRole();
-  }, [user, authLoading]);
-
-  async function checkRole() {
-    // user from AuthContext
+  const checkRole = useCallback(async function checkRole() {
     if (!user) {
       router.push("/debug-login");
       return;
     }
-    const role = user.user_metadata?.role;
-    if (role !== "admin") {
+    const role = getEffectiveRole(user, profile);
+    if (!isAdminRole(role || '')) {
       router.push("/");
       return;
     }
 
-    // user is admin — safe to fetch settings (send cookies)
     fetchSettings();
-  }
+  }, [user, profile, router]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkRole();
+  }, [authLoading, sessionChecked, checkRole]);
 
   async function fetchSettings() {
     setLoading(true);
@@ -119,7 +118,7 @@ export default function SettingsPage() {
               <p className="text-gray-600">Đang tải...</p>
             </div>
           ) : settings.length > 0 ? (
-            <table className="w-full text-sm">
+              <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-gray-300 bg-gray-50">
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Khóa</th>

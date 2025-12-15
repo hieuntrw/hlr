@@ -1,7 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useRef, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import AuthVerifying from "@/components/AuthVerifying";
 import { supabase } from "@/lib/supabase-client";
+import { getEffectiveRole, isAdminRole, isModRole } from "@/lib/auth/role";
 import type { User } from "@supabase/supabase-js";
 
 interface Profile {
@@ -19,246 +21,158 @@ interface AuthContextType {
   isMod: boolean;
   refreshAuth: () => Promise<void>;
   fullLoadAttempted?: boolean;
+  sessionChecked?: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+const CACHE_KEY = "hlr_auth_cache_v1";
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+function getCachedAuth(): { profile?: Profile; expiresAt?: number } | null {
+  try {
+    if (typeof window === "undefined") return null;
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function setCachedAuth(profile: Profile) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ profile, expiresAt: Date.now() + 5 * 60 * 1000 })); } catch {}
+}
+function clearCachedAuth() { try { localStorage.removeItem(CACHE_KEY); } catch {} }
+
+function getRoleFromUser(u: User | null): string | undefined {
+  if (!u) return undefined;
+  const uobj = u as unknown;
+  if (!isRecord(uobj)) return undefined;
+  const am = (uobj as Record<string, unknown>).app_metadata;
+  if (isRecord(am) && typeof (am as Record<string, unknown>).role === "string") return (am as Record<string, unknown>).role as string;
+  return undefined;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const fullLoadAttempted = useRef(false);
-  const [fullLoadAttemptedFlag, setFullLoadAttemptedFlag] = useState(false);
+  const mounted = useRef(true);
 
-  // Use localStorage for persistent session (30 days)
-  const CACHE_KEY = 'hlr_auth_cache';
-  const CACHE_DURATION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-
-  const getCachedAuth = () => {
-    if (typeof window === 'undefined') return null;
+  async function fetchProfileForUser(u: User): Promise<Profile> {
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (!cached) return null;
-      const parsed = JSON.parse(cached);
-      // Check expiresAt
-      if (!parsed.expiresAt || Date.now() > parsed.expiresAt) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
-  };
-
-  const setCachedAuth = (userData: User | null, profileData: Profile | null) => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        user: userData,
-        profile: profileData,
-        timestamp: Date.now(),
-        expiresAt: Date.now() + CACHE_DURATION_MS
-      }));
-    } catch {}
-  };
-
-  const clearCachedAuth = () => {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.removeItem(CACHE_KEY);
-    } catch {}
-  };
-
-  const loadUserData = async (mounted: { current: boolean }) => {
-    const startAll = performance.now();
-    console.log('[AuthContext] PERF: loadUserData start', startAll);
-    try {
-      // Use cache if available and recent
-      const cached = getCachedAuth();
-      const isRecent = cached && cached.timestamp && (Date.now() - cached.timestamp < 5 * 60 * 1000);
-      if (cached && cached.user && isRecent) {
-        setUser(cached.user);
-        setProfile(cached.profile);
-        setIsLoading(false);
-        console.log('[AuthContext] PERF: used cached auth, duration:', (performance.now() - startAll).toFixed(2), 'ms');
-        return;
+      const res = await fetch(`/api/profiles/${u.id}`, { credentials: "same-origin" });
+      if (res.ok) {
+        const body = await res.json().catch(() => null);
+        if (isRecord(body) && isRecord(body.profile)) {
+          const p = body.profile as Record<string, unknown>;
+          const full_name = typeof p.full_name === "string" ? (p.full_name as string) : null;
+          const role = typeof p.role === "string" ? (p.role as string) : getRoleFromUser(u);
+          return { id: u.id, full_name, role };
+        }
       }
-      // Only fetch if cache is missing or expired
-      const startGetUser = performance.now();
-      const { data: { user: authUser }, error } = await supabase.auth.getUser();
-      const endGetUser = performance.now();
-      console.log('[AuthContext] PERF: getUser end', endGetUser, 'duration:', (endGetUser - startGetUser).toFixed(2), 'ms');
-      if (!mounted.current) return;
-      if (error || !authUser) {
-        setUser(null);
-        setProfile(null);
-        setIsLoading(false);
-        clearCachedAuth();
-        return;
-      }
-      setUser(authUser);
-      const startProfile = performance.now();
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, full_name, role")
-        .eq("id", authUser.id)
-        .single();
-      const endProfile = performance.now();
-      console.log('[AuthContext] PERF: profile query end', endProfile, 'duration:', (endProfile - startProfile).toFixed(2), 'ms');
-      if (!mounted.current) return;
-      const profile = {
-        id: authUser.id,
-        full_name: profileData?.full_name || null,
-        role: authUser.user_metadata?.role || profileData?.role
-      };
-      setProfile(profile);
-      setCachedAuth(authUser, profile);
-    } catch (error) {
-      setUser(null);
-      setProfile(null);
-    } finally {
-      setIsLoading(false);
-      console.log('[AuthContext] PERF: loadUserData end', performance.now(), 'total duration:', (performance.now() - startAll).toFixed(2), 'ms');
+    } catch {}
+    const uobj = u as unknown;
+    if (isRecord(uobj)) {
+      const um = (uobj as Record<string, unknown>).user_metadata;
+      const full_name = isRecord(um) && typeof (um as Record<string, unknown>).fullName === "string" ? (um as Record<string, unknown>).fullName as string : null;
+      return { id: u.id, full_name, role: getRoleFromUser(u) };
     }
-  };
+    return { id: u.id, full_name: null };
+  }
 
-  const refreshAuth = async () => {
-    const mounted = { current: true };
-    await loadUserData(mounted);
-  };
-
-  // OPTIMIZED: Always verify session with Supabase on app load, even if cache is valid
-  useEffect(() => {
-    const mounted = { current: true };
-    // Fallback: if auth verification stalls, ensure we stop loading and retry earlier
-    const timeoutId = setTimeout(() => {
-      if (mounted.current) {
-        console.warn('[AuthContext] Fallback timeout reached, forcing isLoading=false and triggering load');
-        setIsLoading(false);
-        // attempt a fresh load to recover, but only once to avoid loops
+  const load = async () => {
+    if (!mounted.current) return;
+    setIsLoading(true);
+    try {
+      const { data: { user: supUser } } = await supabase.auth.getUser();
+      let resolved: User | null = supUser ?? null;
+      if (!resolved) {
         try {
-          if (!fullLoadAttempted.current) {
-            fullLoadAttempted.current = true;
-            setFullLoadAttemptedFlag(true);
-            loadUserData(mounted).catch(() => {});
-          } else {
-            console.warn('[AuthContext] Full load already attempted, skipping repeated attempt');
+          const resp = await fetch("/api/auth/whoami", { credentials: "same-origin" });
+          if (resp.ok) {
+            const j = await resp.json().catch(() => null);
+            if (isRecord(j) && j.ok && isRecord(j.user)) resolved = j.user as unknown as User;
           }
-        } catch (e) {
-          console.warn('[AuthContext] Error scheduling full load', e);
-        }
+        } catch {}
       }
-    }, 5000);
 
-    const cached = getCachedAuth();
-    const isRecent = cached && cached.expiresAt && Date.now() < cached.expiresAt;
-
-    if (cached && cached.user && isRecent) {
-      console.log('[AuthContext] Using cached auth from localStorage');
-      setUser(cached.user);
-      setProfile(cached.profile);
+      if (!mounted.current) return;
+      setUser(resolved);
+      if (!resolved) { setProfile(null); clearCachedAuth(); return; }
+      const p = await fetchProfileForUser(resolved);
+      if (!mounted.current) return;
+      setProfile(p);
+      setCachedAuth(p);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn("[AuthContext] load error", err);
+    } finally {
+      if (!mounted.current) return;
       setIsLoading(false);
-      // Verify session with Supabase in background without blocking the UI.
-      // If the background check fails (network timeout or other), keep using the
-      // cached auth since the cookie/local session is still valid.
-      try {
-        try { clearTimeout(timeoutId); } catch (e) {}
-        (async () => {
-          try {
-            const { data: { user: authUser }, error } = await supabase.auth.getUser();
-            if (!mounted.current) return;
-            if (error || !authUser) {
-              console.warn('[AuthContext] Supabase session invalid during background check, clearing cache');
-              setUser(null);
-              setProfile(null);
-              setIsLoading(false);
-              clearCachedAuth();
-            } else {
-              if (!cached.profile || cached.user.id !== authUser.id) {
-                try {
-                  const { data: profileData } = await supabase
-                    .from("profiles")
-                    .select("id, full_name, role")
-                    .eq("id", authUser.id)
-                    .single();
-                  if (!mounted.current) return;
-                  const profile = {
-                    id: authUser.id,
-                    full_name: profileData?.full_name || null,
-                    role: authUser.user_metadata?.role || profileData?.role
-                  };
-                  setProfile(profile);
-                  setCachedAuth(authUser, profile);
-                } catch (e) {
-                  console.warn('[AuthContext] Failed to refresh profile after cached auth', e);
-                }
-              }
-            }
-          } catch (e) {
-            // Network or other error: keep cached auth and schedule a background refresh
-            console.warn('[AuthContext] Background supabase.getUser failed; keeping cached auth', e);
-            if (!fullLoadAttempted.current) {
-              fullLoadAttempted.current = true;
-              setFullLoadAttemptedFlag(true);
-              // schedule a non-blocking full reload attempt
-              loadUserData(mounted).catch(() => {});
-            }
-          }
-        })();
-      } catch (e) {
-        console.error('[AuthContext] Unexpected error scheduling background auth check', e);
-      }
+      setSessionChecked(true);
+      if (!fullLoadAttempted.current) fullLoadAttempted.current = true;
+    }
+  };
+
+  useEffect(() => {
+    mounted.current = true;
+    const cached = getCachedAuth();
+    const valid = cached && !!cached.expiresAt && Date.now() < cached.expiresAt;
+    if (valid && cached?.profile) {
+      setProfile(cached.profile as Profile);
+      setIsLoading(false);
+      setSessionChecked(true);
+      void load();
     } else {
-      // Không có cache hoặc cache hết hạn, xác thực lại như cũ
-      loadUserData(mounted).then(() => {
-        clearTimeout(timeoutId);
-      });
+      void load();
     }
 
-    // Lắng nghe sự kiện Supabase
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted.current) return;
-      if (event === 'SIGNED_OUT') {
+      if (!session) {
         setUser(null);
         setProfile(null);
-        setIsLoading(false);
         clearCachedAuth();
-      } else if (event === 'SIGNED_IN' && session?.user) {
-        await loadUserData(mounted);
-      } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-        setUser(session.user);
-        if (profile) {
-          setCachedAuth(session.user, profile);
-        }
+        setIsLoading(false);
+      } else {
+        void load();
       }
     });
 
-    return () => {
-      mounted.current = false;
-      clearTimeout(timeoutId);
-      subscription.unsubscribe();
-    };
+    return () => { mounted.current = false; try { subscription.unsubscribe(); } catch {} };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const isAdmin = user?.user_metadata?.role === 'admin';
-  const isMod = user?.user_metadata?.role === 'mod';
-
-  const value = { user, profile, isLoading, isAdmin, isMod, refreshAuth, fullLoadAttempted: fullLoadAttemptedFlag };
+  const value: AuthContextType = {
+    user,
+    profile,
+    isLoading,
+    isAdmin: isAdminRole(getEffectiveRole(user, profile)),
+    isMod: isModRole(getEffectiveRole(user, profile)),
+    refreshAuth: load,
+    fullLoadAttempted: fullLoadAttempted.current,
+    sessionChecked,
+  };
 
   return (
     <AuthContext.Provider value={value}>
       {children}
+      {!sessionChecked ? (
+        <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.8)", zIndex: 9999 }}>
+          <AuthVerifying />
+        </div>
+      ) : null}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const c = useContext(AuthContext);
+  if (!c) throw new Error("useAuth must be used within an AuthProvider");
+  return c;
 }
 
-// Optional hook: returns context or undefined when not inside provider
-export function useAuthOptional() {
-  return useContext(AuthContext);
-}
+export function useAuthOptional() { return useContext(AuthContext); }

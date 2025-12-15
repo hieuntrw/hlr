@@ -1,23 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useTheme } from "@/lib/theme";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 import { Theme } from "@/lib/theme/types";
 import { defaultTheme, blueTheme, greenTheme } from "@/lib/theme/defaultTheme";
-import { Settings, Palette, Users, Moon, Sun, Save, Upload, Download } from "lucide-react";
+// icons removed (unused)
 
 export default function AdminThemeSettingsPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
-  const { theme, setTheme, applyCustomizations, resetTheme, saveUserPreference, themePresets, loadThemePresets } = useTheme();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const router = useRouter();
+  const { theme, setTheme, applyCustomizations, resetTheme, saveUserPreference, loadThemePresets } = useTheme();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"customize" | "system" | "presets">("customize");
-  
+
+  type SystemSettings = {
+    default_theme_id: string;
+    dark_mode_enabled: boolean;
+    allow_user_themes: boolean;
+    allow_user_dark_mode: boolean;
+    allow_user_font_size: boolean;
+  };
+
   // System settings
-  const [systemSettings, setSystemSettings] = useState<any>({
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
     default_theme_id: 'hlr-default',
     dark_mode_enabled: true,
     allow_user_themes: true,
@@ -32,49 +41,58 @@ export default function AdminThemeSettingsPage() {
     { id: "green", name: "Green Theme", theme: greenTheme },
   ];
 
-  useEffect(() => {
-    if (authLoading) return;
-    checkAdminStatus();
-    loadThemePresets();
-    loadSystemSettings();
-  }, [user, authLoading]);
-
-  const loadSystemSettings = async () => {
+  const loadSystemSettings = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("system_theme_settings")
-        .select("*")
-        .single();
-      
-      if (data && !error) {
-        setSystemSettings(data);
+      const resp = await fetch('/api/admin/theme-settings', { credentials: 'same-origin' });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        console.error('Error loading system settings:', json);
+        return;
       }
+      const sys = json.systemSettings || {
+        default_theme_id: 'hlr-default',
+        dark_mode_enabled: true,
+        allow_user_themes: true,
+        allow_user_dark_mode: true,
+        allow_user_font_size: true,
+      };
+      setSystemSettings(sys);
     } catch (error) {
       console.error("Error loading system settings:", error);
     }
-  };
+  }, []);
 
-  const checkAdminStatus = async () => {
+  const checkAdminStatus = useCallback(async () => {
     try {
-      // user from AuthContext + isAdmin from AuthContext
       if (!user) {
-        window.location.href = "/login";
+        router.replace("/login");
         return;
       }
 
-      if (!isAdmin) {
-        window.location.href = "/";
+      const resolved = getEffectiveRole(user, profile) || 'member';
+      if (!isAdminRole(resolved)) {
+        router.replace("/");
         return;
       }
-
-      // Admin check passed via AuthContext
     } catch (error) {
       console.error("Error checking admin status:", error);
-      window.location.href = "/";
+      router.replace("/");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, profile, router]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkAdminStatus();
+    loadThemePresets();
+    loadSystemSettings();
+  }, [authLoading, sessionChecked, checkAdminStatus, loadThemePresets, loadSystemSettings]);
+
+  // resolved role computed after session/loading to avoid premature checks
+
+  const resolvedRole = getEffectiveRole(user, profile) || 'member';
+  const isAdminResolved = isAdminRole(resolvedRole);
 
   const handlePresetTheme = (presetTheme: Theme) => {
     setTheme(presetTheme);
@@ -129,14 +147,17 @@ export default function AdminThemeSettingsPage() {
     setMessage("");
 
     try {
-      const { error } = await supabase
-        .from("system_theme_settings")
-        .update(systemSettings)
-        .eq("id", systemSettings.id);
-
-      if (error) throw error;
-
-      setMessage("✅ Cài đặt hệ thống đã được lưu!");
+      const resp = await fetch('/api/admin/theme-settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'updateSystem', settings: systemSettings }),
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(json?.error || resp.statusText);
+      }
+      setMessage('✅ Cài đặt hệ thống đã được lưu!');
     } catch (error) {
       console.error("Error saving system settings:", error);
       setMessage("❌ Có lỗi khi lưu cài đặt. Vui lòng thử lại.");
@@ -147,15 +168,19 @@ export default function AdminThemeSettingsPage() {
 
   const handleTogglePresetActive = async (presetId: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from("theme_presets")
-        .update({ is_active: !currentStatus })
-        .eq("id", presetId);
+      const resp = await fetch('/api/admin/theme-settings', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'togglePreset', id: presetId, is_active: !currentStatus }),
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        throw new Error(json?.error || resp.statusText);
+      }
 
-      if (error) throw error;
-
-      await loadThemePresets();
-      setMessage("✅ Cập nhật theme preset thành công!");
+      await loadSystemSettings();
+      setMessage('✅ Cập nhật theme preset thành công!');
     } catch (error) {
       console.error("Error toggling preset:", error);
       setMessage("❌ Có lỗi khi cập nhật preset.");
@@ -173,7 +198,7 @@ export default function AdminThemeSettingsPage() {
     );
   }
 
-  if (!isAdmin) {
+  if (!isAdminResolved) {
     return null;
   }
 
@@ -240,6 +265,24 @@ export default function AdminThemeSettingsPage() {
             ))}
           </div>
         </div>
+
+        {/* Admin-only preset controls */}
+        {isAdminResolved && (
+          <div className="bg-white rounded-xl shadow-md p-4 mb-6">
+            <h3 className="font-semibold mb-2">Quản lý Preset (Admin)</h3>
+            <div className="flex gap-2 flex-wrap">
+              {presetThemes.map((p) => (
+                <button
+                  key={p.id + "-toggle"}
+                  onClick={() => handleTogglePresetActive(p.id, false)}
+                  className="px-3 py-1 rounded-md border border-gray-200 text-sm hover:bg-gray-50"
+                >
+                  Chuyển đổi: {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Color Customization */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
@@ -355,6 +398,15 @@ export default function AdminThemeSettingsPage() {
           >
             🔄 Reset
           </button>
+          {isAdminResolved && (
+            <button
+              onClick={handleSaveSystemSettings}
+              disabled={saving}
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+            >
+              {saving ? "Đang lưu..." : "💾 Lưu Cài Đặt Hệ Thống"}
+            </button>
+          )}
         </div>
 
         {/* Info */}

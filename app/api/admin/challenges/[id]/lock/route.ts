@@ -1,7 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import serverDebug from '@/lib/server-debug';
 
-async function ensureAdmin(supabaseAuth: any) {
+export const dynamic = 'force-dynamic';
+
+async function ensureAdmin(supabaseAuth: SupabaseClient) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
@@ -48,14 +52,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle();
 
     if (error) {
-      console.error('POST /api/admin/challenges/[id]/lock error', error);
+      serverDebug.error('POST /api/admin/challenges/[id]/lock error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ challenge: data });
-  } catch (err: any) {
-    console.error('POST /api/admin/challenges/[id]/lock exception', err);
-    const status = err?.status || 500;
-    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  } catch (err: unknown) {
+    serverDebug.error('POST /api/admin/challenges/[id]/lock exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }

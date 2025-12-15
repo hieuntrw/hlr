@@ -38,7 +38,7 @@ export async function getPublicFundStats() {
     .select('amount, type')
     .in('type', ['fund_collection', 'donation']);
   if (creditError) throw new Error('getPublicFundStats credit error: ' + creditError.message);
-  const totalIncome = (creditRows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalIncome = (creditRows || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.amount ?? 0), 0);
 
   // Sum expenses
   const { data: expenseRows, error: expenseError } = await supabase
@@ -46,7 +46,7 @@ export async function getPublicFundStats() {
     .select('amount, type')
     .in('type', ['expense', 'reward_payout', 'fine', 'purchase']);
   if (expenseError) throw new Error('getPublicFundStats expense error: ' + expenseError.message);
-  const totalExpense = (expenseRows || []).reduce((s, r) => s + Number(r.amount || 0), 0);
+  const totalExpense = (expenseRows || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.amount ?? 0), 0);
 
   // Get 10 latest expenses (date, description, amount)
   const { data: latestExpenses, error: latestError } = await supabase
@@ -60,13 +60,14 @@ export async function getPublicFundStats() {
   return {
     totalBalance: totalIncome - totalExpense,
     latestExpenses: (latestExpenses || []).map(e => ({
-      date: e.created_at,
-      description: e.description,
-      amount: Number(e.amount || 0)
+      date: (e as Record<string, unknown>).created_at,
+      description: (e as Record<string, unknown>).description,
+      amount: Number((e as Record<string, unknown>).amount ?? 0)
     }))
   };
 }
 import { supabase } from "@/lib/supabase-client";
+import serverDebug from "@/lib/server-debug";
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 async function getSystemSetting(key: string) {
@@ -112,10 +113,10 @@ export async function generateMonthlyFund() {
   if (!Array.isArray(members) || members.length === 0) return { created: 0 };
 
   // For each member, avoid duplicates for same month/type
-  const inserts: any[] = [];
+  const inserts: Record<string, unknown>[] = [];
 
   for (const m of members) {
-    const userId = m.id;
+    const userId = (m as Record<string, unknown>).id as string;
 
     // Check existing transaction for this user, type and month
     const { data: existing } = await supabase
@@ -191,7 +192,7 @@ export async function processChallengeFines(challengeId: string) {
   }
 
   const participantUserIds = Array.isArray(participants)
-    ? participants.map((p: any) => p.user_id)
+    ? participants.map((p: Record<string, unknown>) => p.user_id as string)
     : [];
 
   const notRegisteredUsers: string[] = [];
@@ -206,7 +207,7 @@ export async function processChallengeFines(challengeId: string) {
 
   if (toFine.size === 0) return { finesCreated: 0 };
 
-  const inserts: any[] = [];
+  const inserts: Record<string, unknown>[] = [];
 
   // Use related_challenge_id to mark which challenge
   for (const userId of Array.from(toFine)) {
@@ -245,10 +246,12 @@ export async function processChallengeFines(challengeId: string) {
   return { finesCreated: inserts.length };
 }
 
-export default {
+const financeService = {
   generateMonthlyFund,
   processChallengeFines,
 };
+
+export default financeService;
 
 // Client-friendly helpers ---------------------------------------------------
 
@@ -261,12 +264,12 @@ export async function fetchUserTransactionsClient(supabaseClient: SupabaseClient
       .order('created_at', { ascending: false })
       .limit(500);
     if (error) {
-      console.error('fetchUserTransactionsClient error', error);
+      serverDebug.error('fetchUserTransactionsClient error', error);
       return [];
     }
     return data || [];
   } catch (err) {
-    console.error('fetchUserTransactionsClient exception', err);
+    serverDebug.error('fetchUserTransactionsClient exception', err);
     return [];
   }
 }
@@ -280,7 +283,7 @@ export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient)
         let balance = 0;
         if (typeof rpcData === 'number') balance = rpcData;
         else if (Array.isArray(rpcData) && rpcData[0] && rpcData[0].balance) balance = Number(rpcData[0].balance);
-        else if ((rpcData as any).balance) balance = Number((rpcData as any).balance);
+        else if (rpcData && typeof rpcData === 'object' && (rpcData as Record<string, unknown>).balance) balance = Number((rpcData as Record<string, unknown>).balance);
 
         const { data: recentExp } = await supabaseClient
           .from('transactions')
@@ -291,7 +294,7 @@ export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient)
 
         return { balance, recentExpenses: recentExp || [] };
       }
-    } catch (e) {
+    } catch {
       // fallback
     }
 
@@ -300,7 +303,7 @@ export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient)
       .select('amount, type')
       .in('type', ['fund_collection', 'donation'])
       .limit(10000);
-    const credits = (creditRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const credits = (creditRows || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.amount ?? 0), 0);
 
     const { data: expenseRows } = await supabaseClient
       .from('transactions')
@@ -308,7 +311,7 @@ export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient)
       .in('type', ['expense', 'reward_payout', 'fine', 'purchase'])
       .order('created_at', { ascending: false })
       .limit(10000);
-    const expenses = (expenseRows || []).reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
+    const expenses = (expenseRows || []).reduce((s: number, r: Record<string, unknown>) => s + Number(r.amount ?? 0), 0);
 
     const { data: recentExpenses } = await supabaseClient
       .from('transactions')
@@ -319,7 +322,7 @@ export async function fetchPublicFundStatsClient(supabaseClient: SupabaseClient)
 
     return { balance: credits - expenses, recentExpenses: recentExpenses || [] };
   } catch (err) {
-    console.error('fetchPublicFundStatsClient exception', err);
+    serverDebug.error('fetchPublicFundStatsClient exception', err);
     return { balance: 0, recentExpenses: [] };
   }
 }
@@ -337,12 +340,12 @@ export async function uploadReceiptForTransactionClient(
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `receipts/${year}/${month}/${transactionId}_${safeName}`;
 
-    const { data: uploadData, error: uploadError } = await supabaseClient.storage
+    const { error: uploadError } = await supabaseClient.storage
       .from('receipts')
       .upload(path, file, { cacheControl: '3600', upsert: false });
 
     if (uploadError) {
-      console.error('uploadReceipt error', uploadError);
+      serverDebug.error('uploadReceipt error', uploadError);
       return { error: uploadError };
     }
 
@@ -357,13 +360,13 @@ export async function uploadReceiptForTransactionClient(
       .single();
 
     if (txError) {
-      console.error('update transaction with receipt error', txError);
+      serverDebug.error('update transaction with receipt error', txError);
       return { error: txError };
     }
 
     return { ok: true, transaction: txData };
   } catch (err) {
-    console.error('uploadReceiptForTransactionClient exception', err);
+    serverDebug.error('uploadReceiptForTransactionClient exception', err);
     return { error: err };
   }
 }

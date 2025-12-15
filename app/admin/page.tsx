@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole, isModRole } from "@/lib/auth/role";
 import Link from "next/link";
 import {
   Users,
@@ -31,7 +31,7 @@ interface DashboardStats {
 }
 
 export default function AdminPage() {
-  const { user, profile, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const [localProfile, setLocalProfile] = useState<AdminProfile | null>(null);
   const [stats, setStats] = useState<DashboardStats>({
     pendingMembers: 0,
@@ -45,35 +45,42 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      window.location.href = "/login";
-      return;
-    }
-    // Ưu tiên dùng profile từ AuthContext nếu có
-    if (profile) {
-      setLocalProfile({
-        id: profile.id,
-        full_name: profile.full_name ?? '',
-        role: profile.role || "member"
-      });
-    } else {
-      fetchProfileFromSupabase();
-    }
-    // Chỉ fetch khi user thay đổi hoặc cache hết hạn
-    fetchStats();
-  }, [user, profile, authLoading]);
 
-  async function fetchProfileFromSupabase() {
+
+  const fetchStats = useCallback(async function fetchStats() {
+    try {
+      const resp = await fetch('/api/admin/overview', { credentials: 'same-origin' });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        console.error('Error fetching overview:', json);
+        setLastError(json?.error || resp.statusText);
+        setStats({ pendingMembers: 0, pendingPBApprovals: 0, totalFund: 0, monthlyCollection: 0, pendingFines: 0, activeChallenges: 0, totalMembers: 0 });
+        return;
+      }
+      const d = json || {};
+      setStats({
+        pendingMembers: d.pendingMembers || 0,
+        pendingPBApprovals: d.pendingPBApprovals || 0,
+        totalFund: d.totalFund || 0,
+        monthlyCollection: d.monthlyCollection || 0,
+        pendingFines: d.pendingFines || 0,
+        activeChallenges: d.activeChallenges || 0,
+        totalMembers: d.totalMembers || 0,
+      });
+    } catch (err) {
+      console.error('Error fetching stats:', err);
+      setLastError(String(err));
+      setStats({ pendingMembers: 0, pendingPBApprovals: 0, totalFund: 0, monthlyCollection: 0, pendingFines: 0, activeChallenges: 0, totalMembers: 0 });
+    }
+  }, []);
+
+  const fetchProfileFromSupabase = useCallback(async function fetchProfileFromSupabase() {
     setLoading(true);
 
     try {
       // user from AuthContext
 
       console.log("[Admin Page] User from auth:", user);
-      console.log("[Admin Page] User metadata:", user?.user_metadata);
-      console.log("[Admin Page] User role from metadata:", user?.user_metadata?.role);
 
       if (!user) {
         console.log("[Admin Page] No user, redirecting to login");
@@ -81,112 +88,77 @@ export default function AdminPage() {
         return;
       }
 
-      // Get role from Supabase Auth metadata
-      const authRole = user.user_metadata?.role;
+      // Resolve canonical role (prefer server app_metadata when available)
+      const authRole = getEffectiveRole(user, profile) || "member";
       console.log("[Admin Page] Auth role:", authRole);
 
       // Check if user has admin/mod permissions
-      const validRoles = ["admin", "mod_finance", "mod_challenge", "mod_member"];
-      if (!authRole || !validRoles.includes(authRole)) {
+      if (!authRole || (!isAdminRole(authRole) && !isModRole(authRole))) {
         console.log("[Admin Page] Invalid role, redirecting to dashboard");
         window.location.href = "/dashboard";
         return;
       }
 
       // Trong fetchProfileAndStats, ưu tiên dùng profile từ AuthContext nếu có, chỉ truy vấn Supabase nếu chưa có hoặc cache hết hạn
-      setLocalProfile({ id: user.id, full_name: user.user_metadata?.full_name ?? '', role: authRole }); // Use auth role, not profile role
+      // Attempt to fetch profile by UID for reliable full_name
+      try {
+        const resp = await fetch('/api/profiles/me', { credentials: 'same-origin' });
+        const json = await resp.json().catch(() => null);
+        if (resp.ok && json?.profile) {
+          const row = json.profile;
+          const fullName = row?.full_name || profile?.full_name || (user as unknown as { email?: string })?.email || '';
+          setLocalProfile({ id: user.id, full_name: fullName, role: authRole });
+        } else {
+          setLocalProfile({ id: user.id, full_name: profile?.full_name || (user as unknown as { email?: string })?.email || '', role: authRole });
+        }
+      } catch {
+        setLocalProfile({ id: user.id, full_name: profile?.full_name || (user as unknown as { email?: string })?.email || '', role: authRole });
+      }
 
       // Fetch dashboard statistics
-      await fetchStats(authRole);
+      await fetchStats();
     } catch (err) {
       console.error("[Admin Page] Unexpected error:", err);
       setLastError(String(err));
     } finally {
       setLoading(false);
     }
-  }
+  }, [fetchStats, user, profile]);
 
-  async function fetchStats(role?: string) {
-    try {
-      // Fetch total members
-      const { count: totalMembersCount, error: membersError } = await supabase
-        .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("is_active", true);
-
-      if (membersError) {
-        console.error("Members count error:", membersError);
-        setLastError(`Members: ${membersError.message}`);
+  useEffect(() => {
+    // Allow proceeding when auth is still verifying but we already have a cached user
+    (async () => {
+      if (authLoading && !user) return;
+      // Wait until sessionChecked completes to avoid false-positive redirects
+      if (!sessionChecked) return;
+      if (!user) {
+        window.location.href = "/login";
+        return;
       }
-
-      // Fetch active challenges (not locked)
-      const { count: activeChallengesCount, error: challengesError } = await supabase
-        .from("challenges")
-        .select("*", { count: "exact", head: true })
-        .eq("is_locked", false);
-
-      if (challengesError) {
-        console.error("Challenges count error:", challengesError);
-        setLastError(`Challenges: ${challengesError.message}`);
+      setLoading(true);
+      try {
+        // Use canonical role resolution
+        const resolved = getEffectiveRole(user, profile) || "member";
+        if (profile) {
+          setLocalProfile({
+            id: profile.id,
+            full_name: profile.full_name ?? '',
+            role: resolved
+          });
+          // Fetch stats using resolved role
+          await fetchStats();
+        } else {
+          // This function sets loading false in its finally block
+          await fetchProfileFromSupabase();
+        }
+      } catch (err) {
+        console.error('[Admin Page] Error during init:', err);
+        setLastError(String(err));
+      } finally {
+        setLoading(false);
       }
-
-      // Fetch pending transactions
-      const { count: pendingTransactionsCount, error: pendingError } = await supabase
-        .from("transactions")
-        .select("*", { count: "exact", head: true })
-        .eq("payment_status", "pending");
-
-      if (pendingError) {
-        console.error("Pending transactions error:", pendingError);
-        setLastError(`Pending: ${pendingError.message}`);
-      }
-
-      // Calculate fund balance from approved transactions
-      const { data: fundData, error: fundError } = await supabase
-        .from("transactions")
-        .select("amount, type")
-        .eq("payment_status", "paid");
-
-      if (fundError) {
-        console.error("Fund data error:", fundError);
-        setLastError(`Fund: ${fundError.message}`);
-      }
-
-      let totalFund = 0;
-      if (fundData) {
-        fundData.forEach((t) => {
-          if (t.type === "fund_collection" || t.type === "fine" || t.type === "donation") {
-            totalFund += t.amount;
-          } else if (t.type === "expense" || t.type === "reward_payout") {
-            totalFund -= t.amount;
-          }
-        });
-      }
-
-      setStats({
-        pendingMembers: 0, // TODO: implement when status column is added
-        pendingPBApprovals: 0, // TODO: implement when approval columns are added
-        totalFund: totalFund,
-        monthlyCollection: 0, // TODO: calculate current month
-        pendingFines: pendingTransactionsCount || 0,
-        activeChallenges: activeChallengesCount || 0,
-        totalMembers: totalMembersCount || 0,
-      });
-    } catch (err) {
-      console.error("Error fetching stats:", err);
-      setLastError(String(err));
-      // Set default stats on error
-      setStats({
-        pendingMembers: 0,
-        pendingPBApprovals: 0,
-        totalFund: 0,
-        monthlyCollection: 0,
-        pendingFines: 0,
-        activeChallenges: 0,
-        totalMembers: 0,
-      });
-    }
-  }
+    })();
+  }, [user, profile, authLoading, sessionChecked, fetchProfileFromSupabase, fetchStats]);
 
   const getRoleLabel = (role: string): string => {
     const labels: { [key: string]: string } = {
@@ -218,9 +190,9 @@ export default function AdminPage() {
 
   if (!localProfile) return null;
 
-  const hasFinanceAccess = ["admin", "mod_finance"].includes(localProfile.role);
-  const hasMemberAccess = ["admin", "mod_member"].includes(localProfile.role);
-  const hasChallengeAccess = ["admin", "mod_challenge"].includes(localProfile.role);
+  const hasFinanceAccess = isAdminRole(localProfile.role) || localProfile.role === "mod_finance";
+  const hasMemberAccess = isAdminRole(localProfile.role) || localProfile.role === "mod_member";
+  const hasChallengeAccess = isAdminRole(localProfile.role) || localProfile.role === "mod_challenge";
 
   return (
     <div className="space-y-6">

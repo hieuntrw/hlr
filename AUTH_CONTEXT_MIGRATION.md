@@ -60,13 +60,14 @@ export default function MyPage() {
 
 ```typescript
 const {
-  user,        // Supabase User object (với email, id, user_metadata)
+  user,        // Supabase User object (với email, id, app_metadata)
   profile,     // Profile object { id, full_name, role }
   isLoading,   // Boolean - true khi đang load lần đầu
   isAdmin,     // Boolean - true nếu user là admin
   isMod,       // Boolean - true nếu user là admin/mod
   refreshAuth  // Function - gọi để refresh user data manually
 } = useAuth();
+// Note: prefer server-controlled `app_metadata` for authorization. Use `profile.role` for display fallback.
 ```
 
 ## Common Use Cases
@@ -79,8 +80,9 @@ const userId = user?.id;
 
 ### 2. Check User Role
 ```tsx
-const { user, isAdmin, isMod } = useAuth();
-const role = user?.user_metadata?.role;
+const { user, isAdmin, isMod, profile } = useAuth();
+// Prefer server-controlled `app_metadata` (from JWT). Fallback to profile.role for display.
+const role = (user as any)?.app_metadata?.role || profile?.role;
 
 // Or use helpers:
 if (isAdmin) { /* admin only */ }
@@ -108,7 +110,7 @@ return (
   <div>
     <p>Email: {user?.email}</p>
     <p>Tên: {profile?.full_name}</p>
-    <p>Vai trò: {user?.user_metadata?.role}</p>
+    <p>Vai trò: {(user as any)?.app_metadata?.role || profile?.role}</p>
   </div>
 );
 ```

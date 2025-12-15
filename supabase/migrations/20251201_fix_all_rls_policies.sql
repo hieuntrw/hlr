@@ -12,17 +12,17 @@ CREATE POLICY "Admins create challenges"
   ON challenges FOR INSERT
   TO authenticated
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
   );
 
 CREATE POLICY "Admins and mod_challenge can update challenges"
   ON challenges FOR UPDATE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge')
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge')
   );
 
 -- ========================================
@@ -35,7 +35,7 @@ CREATE POLICY "Admins and mods read all challenge participations"
   ON challenge_participants FOR SELECT
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge') OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge') OR
     user_id = auth.uid()
   );
 
@@ -54,7 +54,7 @@ CREATE POLICY "Admins and mod_finance read all transactions"
   ON transactions FOR SELECT
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_finance') OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance') OR
     user_id = auth.uid()
   );
 
@@ -62,24 +62,24 @@ CREATE POLICY "Admins and mod_finance create transactions"
   ON transactions FOR INSERT
   TO authenticated
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_finance')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance')
   );
 
 CREATE POLICY "Admins and mod_finance update transactions"
   ON transactions FOR UPDATE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_finance')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance')
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_finance')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance')
   );
 
 CREATE POLICY "Admins delete transactions"
   ON transactions FOR DELETE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
   );
 
 -- ========================================
@@ -95,24 +95,24 @@ CREATE POLICY "Admins and mod_challenge create races"
   ON races FOR INSERT
   TO authenticated
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge')
   );
 
 CREATE POLICY "Admins and mod_challenge update races"
   ON races FOR UPDATE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge')
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge')
   );
 
 CREATE POLICY "Admins delete races"
   ON races FOR DELETE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
   );
 
 -- ========================================
@@ -129,24 +129,24 @@ CREATE POLICY "Admins and mods create race results"
   ON race_results FOR INSERT
   TO authenticated
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
   );
 
 CREATE POLICY "Admins and mods update race results"
   ON race_results FOR UPDATE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_challenge', 'mod_member')
   );
 
 CREATE POLICY "Admins delete race results"
   ON race_results FOR DELETE
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') = 'admin'
+    (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
   );
 
 -- ========================================
@@ -159,11 +159,11 @@ CREATE POLICY "Admins and mods manage rewards"
   ON member_rewards FOR ALL
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member') OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member') OR
     user_id = auth.uid()
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member')
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member')
   );
 
 -- ========================================
@@ -176,10 +176,10 @@ CREATE POLICY "Admins and mod_member manage pb_history"
   ON pb_history FOR ALL
   TO authenticated
   USING (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member') OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member') OR
     user_id = auth.uid()
   )
   WITH CHECK (
-    (auth.jwt() -> 'user_metadata' ->> 'role') IN ('admin', 'mod_member') OR
+    (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_member') OR
     user_id = auth.uid()
   );

@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase-client";
+import serverDebug from "@/lib/server-debug";
 
 /**
  * Reward Service: Handle complex reward logic for HLR Running Club
@@ -28,7 +29,7 @@ async function getUserGender(userId: string): Promise<"Male" | "Female" | null> 
     .single();
 
   if (error) {
-    console.error(`[rewardService] Failed to fetch user gender:`, error);
+    serverDebug.error(`[rewardService] Failed to fetch user gender:`, error);
     return null;
   }
 
@@ -48,21 +49,33 @@ function getRaceCategory(distance: string): "HM" | "FM" | null {
 /**
  * Helper: Check if reward already awarded
  */
-async function isRewardAlreadyAwarded(
-  userId: string,
-  raceResultId: string,
-  rewardDefinitionId: string
-): Promise<boolean> {
+async function isMilestoneAlreadyAwarded(userId: string, milestoneId: string): Promise<boolean> {
   const { data, error } = await supabase
-    .from("member_rewards")
+    .from("member_milestone_rewards")
     .select("id")
-    .eq("user_id", userId)
-    .eq("race_result_id", raceResultId)
-    .eq("reward_definition_id", rewardDefinitionId)
+    .eq("member_id", userId)
+    .eq("milestone_id", milestoneId)
     .limit(1);
 
   if (error) {
-    console.error(`[rewardService] Failed to check reward history:`, error);
+    serverDebug.error(`[rewardService] Failed to check milestone history:`, error);
+    return false;
+  }
+
+  return data && data.length > 0;
+}
+
+async function isPodiumAlreadyAwarded(userId: string, podiumConfigId: string, raceResultId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("member_podium_rewards")
+    .select("id")
+    .eq("member_id", userId)
+    .eq("podium_config_id", podiumConfigId)
+    .eq("race_result_id", raceResultId)
+    .limit(1);
+
+  if (error) {
+    serverDebug.error(`[rewardService] Failed to check podium history:`, error);
     return false;
   }
 
@@ -86,12 +99,12 @@ async function isRewardAlreadyAwarded(
  * - FM Male Sub 3:30 → 500K + Bảng gỗ
  */
 export async function checkRaceReward(userId: string, raceResult: RaceResult) {
-  console.log(`[rewardService] Checking race reward for user ${userId}, race ${raceResult.race_id}`);
+  serverDebug.debug(`[rewardService] Checking race reward for user ${userId}, race ${raceResult.race_id}`);
 
   // 1) Determine race category (HM/FM)
   const category = getRaceCategory(raceResult.distance);
   if (!category) {
-    console.warn(
+    serverDebug.warn(
       `[rewardService] Race distance "${raceResult.distance}" not eligible for time-based rewards`
     );
     return { awarded: false, reason: "Distance not eligible (only HM/FM)" };
@@ -100,105 +113,102 @@ export async function checkRaceReward(userId: string, raceResult: RaceResult) {
   // 2) Get user's gender
   const gender = await getUserGender(userId);
   if (!gender) {
-    console.warn(`[rewardService] Could not determine user gender`);
+    serverDebug.warn(`[rewardService] Could not determine user gender`);
     return { awarded: false, reason: "Gender not found in profile" };
   }
 
-  // 3) Fetch applicable rewards (time-based, matching category + gender, active)
-  const { data: rewards, error: rewardErr } = await supabase
-    .from("reward_matrix")
-    .select("id, condition_value, prize_desc, cash_amount, priority")
-    .eq("category", category)
-    .eq("gender", gender)
-    .eq("condition_type", "Time")
-    .eq("active", true)
-    .order("priority", { ascending: true });
+  // 3) Fetch matching milestone configs from reward_milestones
+  const { data: milestones, error: milestoneErr } = await supabase
+    .from('reward_milestones')
+    .select('id, reward_description, cash_amount, priority, time_seconds')
+    .eq('race_type', category)
+    .in('gender', [gender, null])
+    .eq('is_active', true)
+    .order('priority', { ascending: false });
 
-  if (rewardErr) {
-    console.error(`[rewardService] Failed to fetch rewards:`, rewardErr);
-    return { awarded: false, reason: "Could not fetch rewards from DB" };
+  if (milestoneErr) {
+    serverDebug.error(`[rewardService] Failed to fetch milestones:`, milestoneErr);
+    return { awarded: false, reason: 'Could not fetch milestones' };
   }
 
-  if (!rewards || rewards.length === 0) {
-    console.log(`[rewardService] No time-based rewards configured for ${category}/${gender}`);
-    return { awarded: false, reason: "No rewards configured" };
+  if (!milestones || milestones.length === 0) {
+    serverDebug.debug(`[rewardService] No milestones configured for ${category}/${gender}`);
+    return { awarded: false, reason: 'No milestones configured' };
   }
 
-  // 4) Find highest tier (best/fastest) that user achieved
-  // condition_value is time in seconds (e.g., 10800 = 3:00)
-  let awardedReward: any = null;
-  for (const reward of rewards) {
-    if (raceResult.chip_time_seconds <= reward.condition_value) {
-      awardedReward = reward;
+  // Find highest-priority milestone that the user achieved (priority desc)
+  let awardedMilestone: Record<string, unknown> | null = null;
+  for (const m of milestones) {
+    if (raceResult.chip_time_seconds <= m.time_seconds) {
+      awardedMilestone = m;
       break;
     }
   }
 
-  if (!awardedReward) {
-    console.log(`[rewardService] User did not achieve any tier`);
-    return { awarded: false, reason: "Did not meet any reward threshold" };
+  if (!awardedMilestone) {
+    serverDebug.debug(`[rewardService] User did not achieve any milestone`);
+    return { awarded: false, reason: 'Did not meet any milestone threshold' };
   }
 
-  // 5) Check if already awarded
-  const alreadyAwarded = await isRewardAlreadyAwarded(userId, raceResult.id, awardedReward.id);
-  if (alreadyAwarded) {
-    console.log(`[rewardService] Reward already awarded for this race`);
-    return { awarded: false, reason: "Reward already awarded for this race" };
+  // Check if member already has this milestone
+  const milestoneId = awardedMilestone ? String(awardedMilestone.id) : null;
+  const already = milestoneId ? await isMilestoneAlreadyAwarded(userId, milestoneId) : false;
+  if (already) {
+    serverDebug.debug('[rewardService] Milestone already awarded for this member');
+    return { awarded: false, reason: 'Milestone already awarded' };
   }
 
-  // 6) Insert member_rewards
-  const { data: mrInserted, error: insertErr } = await supabase
-    .from("member_rewards")
-    .insert({
-      user_id: userId,
-      member_id: userId,
-      race_result_id: raceResult.id,
-      reward_definition_id: awardedReward.id,
-      awarded_date: new Date().toISOString().slice(0, 10),
-      status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    console.error(`[rewardService] Failed to insert member_reward:`, insertErr);
-    return { awarded: false, reason: "Failed to record reward" };
-  }
-
-  // 7) Create transaction for cash reward
-  if (awardedReward.cash_amount > 0 && mrInserted?.id) {
+  // Create transaction first if cash amount
+  let relatedTxnId: string | null = null;
+  const cashAmount = awardedMilestone ? Number(awardedMilestone.cash_amount ?? 0) : 0;
+  if (cashAmount > 0) {
     const { data: txnIns, error: txnErr } = await supabase
-      .from("transactions")
+      .from('transactions')
       .insert({
         user_id: userId,
-        type: "reward_payout",
-        amount: awardedReward.cash_amount,
-        description: `Race reward: ${awardedReward.prize_desc} (${category} - ${gender})`,
+        type: 'reward_payout',
+        amount: cashAmount,
+        description: `Race milestone reward: ${String(awardedMilestone?.reward_description ?? '')} (${category})`,
         transaction_date: new Date().toISOString().slice(0, 10),
-        payment_status: "pending",
-        related_challenge_id: null,
-        related_member_reward_id: mrInserted.id,
+        payment_status: 'pending'
       })
-      .select("id")
-      .single();
+      .select('id')
+      .maybeSingle();
 
     if (txnErr) {
-      console.error(`[rewardService] Failed to create transaction:`, txnErr);
-    } else if (txnIns?.id) {
-      await supabase
-        .from("member_rewards")
-        .update({ related_transaction_id: txnIns.id })
-        .eq("id", mrInserted.id);
+      serverDebug.error('[rewardService] Failed to create transaction:', txnErr);
+    } else {
+      relatedTxnId = txnIns?.id ?? null;
     }
   }
+  const { error: insertErr } = await supabase
+    .from('member_milestone_rewards')
+    .insert({
+      member_id: userId,
+      race_id: raceResult.race_id,
+      race_result_id: raceResult.id,
+      milestone_id: milestoneId,
+      achieved_time_seconds: raceResult.chip_time_seconds,
+      reward_description: String(awardedMilestone?.reward_description ?? ''),
+      cash_amount: cashAmount,
+      status: 'pending',
+      related_transaction_id: relatedTxnId,
+    })
+    .select('id')
+    .maybeSingle();
 
-  console.log(`[rewardService] Reward awarded: ${awardedReward.prize_desc}`);
+  if (insertErr) {
+    serverDebug.error('[rewardService] Failed to insert member_milestone_rewards:', insertErr);
+    return { awarded: false, reason: 'Failed to record milestone' };
+  }
+
+  serverDebug.debug(`[rewardService] Milestone awarded: ${awardedMilestone.reward_description}`);
 
   return {
     awarded: true,
-    rewardId: awardedReward.id,
-    prize: awardedReward.prize_desc,
-    cashAmount: awardedReward.cash_amount,
+    rewardId: awardedMilestone.id,
+    prize: awardedMilestone.reward_description,
+    cashAmount: awardedMilestone.cash_amount,
   };
 }
 
@@ -215,7 +225,7 @@ export async function checkPodiumReward(
   raceResult: RaceResult,
   rankType: "overall" | "age_group" = "overall"
 ) {
-  console.log(
+  serverDebug.debug(
     `[rewardService] Checking podium reward for user ${userId}, rank_type=${rankType}`
   );
 
@@ -223,91 +233,86 @@ export async function checkPodiumReward(
 
   // Only ranks 1-3 eligible
   if (!rank || rank < 1 || rank > 3) {
-    console.log(`[rewardService] Rank ${rank} not in podium (1-3)`);
+    serverDebug.debug(`[rewardService] Rank ${rank} not in podium (1-3)`);
     return { awarded: false, reason: "Rank not in top 3" };
   }
 
-  // 2) Fetch podium reward from reward_matrix (condition_type='Rank', condition_value=rank)
-  const { data: podiumRewards, error: rewardErr } = await supabase
-    .from("reward_matrix")
-    .select("id, prize_desc, cash_amount")
-    .eq("condition_type", "Rank")
-    .eq("condition_value", rank)
-    .eq("active", true)
+  // 2) Fetch podium config from reward_podium_config
+  const { data: podiumConfigs, error: podiumErr } = await supabase
+    .from('reward_podium_config')
+    .select('id, reward_description, cash_amount')
+    .eq('podium_type', rankType)
+    .eq('rank', rank)
+    .eq('is_active', true)
     .limit(1);
 
-  if (rewardErr) {
-    console.error(`[rewardService] Failed to fetch podium reward:`, rewardErr);
-    return { awarded: false, reason: "Could not fetch rewards from DB" };
+    if (podiumErr) {
+    serverDebug.error('[rewardService] Failed to fetch podium config:', podiumErr);
+    return { awarded: false, reason: 'Could not fetch podium config' };
   }
 
-  if (!podiumRewards || podiumRewards.length === 0) {
-    console.log(`[rewardService] No podium reward configured for rank ${rank}`);
-    return { awarded: false, reason: "No reward configured for this rank" };
+  if (!podiumConfigs || podiumConfigs.length === 0) {
+    serverDebug.debug('[rewardService] No podium reward configured for this rank');
+    return { awarded: false, reason: 'No reward configured for this rank' };
   }
 
-  const podiumReward = podiumRewards[0];
+  const podiumConfig = podiumConfigs[0];
 
-  // 3) Check if already awarded for this specific race
-  const alreadyAwarded = await isRewardAlreadyAwarded(userId, raceResult.id, podiumReward.id);
-  if (alreadyAwarded) {
-    console.log(`[rewardService] Podium reward already awarded for this race`);
-    return { awarded: false, reason: "Reward already awarded for this race" };
+  // Check existing podium award for same race result
+  const alreadyPod = await isPodiumAlreadyAwarded(userId, podiumConfig.id, raceResult.id);
+  if (alreadyPod) {
+    serverDebug.debug('[rewardService] Podium reward already awarded for this race result');
+    return { awarded: false, reason: 'Podium already awarded for this race' };
   }
 
-  // 4) Insert member_rewards
-  const { data: mrInserted, error: insertErr } = await supabase
-    .from("member_rewards")
-    .insert({
-    user_id: userId,
-    member_id: userId,
-    race_result_id: raceResult.id,
-    reward_definition_id: podiumReward.id,
-    awarded_date: new Date().toISOString().slice(0, 10),
-    status: "pending",
-    })
-    .select("id")
-    .single();
-
-  if (insertErr) {
-    console.error(`[rewardService] Failed to insert member_reward:`, insertErr);
-    return { awarded: false, reason: "Failed to record reward" };
-  }
-
-  // 5) Create transaction
-  if (podiumReward.cash_amount > 0 && mrInserted?.id) {
+  // Create transaction first if needed
+  let relatedTxnId: string | null = null;
+  if (podiumConfig.cash_amount && podiumConfig.cash_amount > 0) {
     const { data: txnIns, error: txnErr } = await supabase
-      .from("transactions")
+      .from('transactions')
       .insert({
         user_id: userId,
-        type: "reward_payout",
-        amount: podiumReward.cash_amount,
-        description: `Podium reward: ${rankType} rank ${rank} - ${podiumReward.prize_desc}`,
+        type: 'reward_payout',
+        amount: podiumConfig.cash_amount,
+        description: `Podium reward: ${rankType} rank ${rank} - ${podiumConfig.reward_description}`,
         transaction_date: new Date().toISOString().slice(0, 10),
-        payment_status: "pending",
-        related_challenge_id: null,
-        related_member_reward_id: mrInserted.id,
+        payment_status: 'pending'
       })
-      .select("id")
-      .single();
+      .select('id')
+      .maybeSingle();
 
-    if (txnErr) {
-      console.error(`[rewardService] Failed to create transaction:`, txnErr);
-    } else if (txnIns?.id) {
-      await supabase
-        .from("member_rewards")
-        .update({ related_transaction_id: txnIns.id })
-        .eq("id", mrInserted.id);
-    }
+    if (txnErr) serverDebug.error('[rewardService] Failed to create transaction for podium:', txnErr);
+    else relatedTxnId = txnIns?.id ?? null;
   }
 
-  console.log(`[rewardService] Podium reward awarded: ${podiumReward.prize_desc}`);
+  const { error: insertErr } = await supabase
+    .from('member_podium_rewards')
+    .insert({
+      member_id: userId,
+      race_id: raceResult.race_id,
+      race_result_id: raceResult.id,
+      podium_config_id: podiumConfig.id,
+      podium_type: rankType,
+      rank: rank,
+      reward_description: podiumConfig.reward_description,
+      cash_amount: podiumConfig.cash_amount,
+      status: 'pending',
+      related_transaction_id: relatedTxnId,
+    })
+    .select('id')
+    .maybeSingle();
+  if (insertErr) {
+    serverDebug.error('[rewardService] Failed to insert member_podium_rewards:', insertErr);
+    return { awarded: false, reason: 'Failed to record podium reward' };
+  }
+
+  serverDebug.debug('[rewardService] Podium reward awarded:', podiumConfig.reward_description);
 
   return {
     awarded: true,
-    rewardId: podiumReward.id,
-    prize: podiumReward.prize_desc,
-    cashAmount: podiumReward.cash_amount,
+    rewardId: podiumConfig.id,
+    prize: podiumConfig.reward_description,
+    cashAmount: podiumConfig.cash_amount,
     rank,
     rankType,
   };
@@ -325,17 +330,17 @@ export async function checkPodiumReward(
  * - excludeUserIds: (optional) list of user IDs with valid excuses
  */
 export async function checkChallengePenalty(challengeId: string, excludeUserIds: string[] = []) {
-  console.log(`[rewardService] Checking challenge penalties for challenge ${challengeId}`);
+  serverDebug.debug(`[rewardService] Checking challenge penalties for challenge ${challengeId}`);
 
   // 1) Get challenge
-  const { data: challenge, error: chErr } = await supabase
+  const { error: chErr } = await supabase
     .from("challenges")
     .select("id, end_date")
     .eq("id", challengeId)
     .single();
 
   if (chErr) {
-    console.error(`[rewardService] Failed to fetch challenge:`, chErr);
+    serverDebug.error(`[rewardService] Failed to fetch challenge:`, chErr);
     return { processed: false, reason: "Could not fetch challenge" };
   }
 
@@ -346,12 +351,12 @@ export async function checkChallengePenalty(challengeId: string, excludeUserIds:
     .eq("is_active", true);
 
   if (membErr) {
-    console.error(`[rewardService] Failed to fetch members:`, membErr);
+    serverDebug.error(`[rewardService] Failed to fetch members:`, membErr);
     return { processed: false, reason: "Could not fetch members" };
   }
 
   if (!allMembers || allMembers.length === 0) {
-    console.log(`[rewardService] No active members found`);
+    serverDebug.debug(`[rewardService] No active members found`);
     return { processed: true, penaltiesApplied: 0 };
   }
 
@@ -359,7 +364,7 @@ export async function checkChallengePenalty(challengeId: string, excludeUserIds:
 
   for (const member of allMembers) {
     if (excludeUserIds.includes(member.id)) {
-      console.log(`[rewardService] Skipping penalty for ${member.id} (excused)`);
+      serverDebug.debug(`[rewardService] Skipping penalty for ${member.id} (excused)`);
       continue;
     }
 
@@ -385,7 +390,7 @@ export async function checkChallengePenalty(challengeId: string, excludeUserIds:
     }
 
     if (shouldPenalize) {
-      console.log(`[rewardService] Member ${member.id} penalty: ${reason}`);
+      serverDebug.debug(`[rewardService] Member ${member.id} penalty: ${reason}`);
 
       const { error: txnErr } = await supabase.from("transactions").insert({
         user_id: member.id,
@@ -399,11 +404,13 @@ export async function checkChallengePenalty(challengeId: string, excludeUserIds:
 
       if (!txnErr) {
         penaltiesApplied++;
+      } else {
+        serverDebug.error('[rewardService] Failed to create fine transaction for member', member.id, txnErr);
       }
     }
   }
 
-  console.log(`[rewardService] Challenge penalties processed: ${penaltiesApplied} fines applied`);
+  serverDebug.debug(`[rewardService] Challenge penalties processed: ${penaltiesApplied} fines applied`);
 
   return {
     processed: true,
@@ -412,8 +419,10 @@ export async function checkChallengePenalty(challengeId: string, excludeUserIds:
   };
 }
 
-export default {
+const rewardService = {
   checkRaceReward,
   checkPodiumReward,
   checkChallengePenalty,
 };
+
+export default rewardService;

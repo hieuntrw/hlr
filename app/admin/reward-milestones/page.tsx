@@ -2,7 +2,6 @@
 
 import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
 import { Trophy, Plus, Edit, Trash2, Save, X } from "lucide-react";
 
 interface Milestone {
@@ -39,15 +38,10 @@ export default function RewardMilestonesPage() {
 
   const loadMilestones = async () => {
     try {
-      const { data, error } = await supabase
-        .from("reward_milestones")
-        .select("*")
-        .order("race_type", { ascending: true })
-        .order("gender", { ascending: true })
-        .order("priority", { ascending: true });
-
-      if (error) throw error;
-      setMilestones(data || []);
+      const res = await fetch('/api/admin/reward-milestones', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load');
+      const j = await res.json().catch(() => null);
+      setMilestones(j?.data || []);
     } catch (error) {
       console.error("Error loading milestones:", error);
       alert("Lỗi khi tải dữ liệu");
@@ -63,8 +57,13 @@ export default function RewardMilestonesPage() {
     }
 
     try {
-      const { error } = await supabase.from("reward_milestones").insert([formData]);
-      if (error) throw error;
+      const res = await fetch('/api/admin/reward-milestones', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
+      });
+      if (!res.ok) throw new Error('Insert failed');
 
       alert("Thêm mốc thành công!");
       setShowAddForm(false);
@@ -86,12 +85,13 @@ export default function RewardMilestonesPage() {
 
   const handleUpdate = async (id: string, updates: Partial<Milestone>) => {
     try {
-      const { error } = await supabase
-        .from("reward_milestones")
-        .update(updates)
-        .eq("id", id);
-
-      if (error) throw error;
+      const res = await fetch('/api/admin/reward-milestones', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates }),
+      });
+      if (!res.ok) throw new Error('Update failed');
       alert("Cập nhật thành công!");
       setEditingId(null);
       setEditFormData(null);
@@ -127,8 +127,8 @@ export default function RewardMilestonesPage() {
     if (!confirm("Bạn có chắc muốn xóa mốc này?")) return;
 
     try {
-      const { error } = await supabase.from("reward_milestones").delete().eq("id", id);
-      if (error) throw error;
+      const res = await fetch(`/api/admin/reward-milestones?id=${id}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Delete failed');
 
       alert("Xóa thành công!");
       loadMilestones();

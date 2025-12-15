@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useTheme } from "@/lib/theme";
-import { supabase } from "@/lib/supabase-client";
+// system theme settings fetched from server endpoint
 import { useAuth } from "@/lib/auth/AuthContext";
-import { Moon, Sun, Palette, Settings, Save, RotateCcw } from "lucide-react";
+import { Moon, Sun, Palette, Settings, Save } from "lucide-react";
 
 export default function UserThemeSettingsPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const {
     theme,
     setTheme,
@@ -18,59 +18,58 @@ export default function UserThemeSettingsPage() {
     themePresets,
     loadThemePresets,
     saveUserPreference,
-    applyCustomizations,
   } = useTheme();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
-  const [systemSettings, setSystemSettings] = useState<any>(null);
+  const [systemSettings, setSystemSettings] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
-    checkUser();
-    loadThemePresets();
-    loadSystemSettings();
-  }, [user, authLoading]);
+    if (authLoading || !sessionChecked) return;
 
-  const checkUser = async () => {
-    // Wait for auth to finish loading
-    if (authLoading) {
-      setLoading(false);
-      return;
-    }
-    
-    try {
-      // user from AuthContext
-      if (!user) {
-        window.location.href = "/login";
+    // inline helpers to keep effect dependencies minimal and stable
+    const checkUser = async () => {
+      if (authLoading) {
+        setLoading(false);
         return;
       }
-      // user already available from AuthContext
-    } catch (error) {
-      console.error("Error checking user:", error);
-      window.location.href = "/login";
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSystemSettings = async () => {
-    try {
-      const { data } = await supabase
-        .from("system_theme_settings")
-        .select("*")
-        .single();
-      
-      if (data) {
-        setSystemSettings(data);
+      try {
+        if (!user) {
+          window.location.href = "/login";
+          return;
+        }
+      } catch (error) {
+        console.error("Error checking user:", error);
+        window.location.href = "/login";
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error loading system settings:", error);
-    }
-  };
+    };
 
-  const handleThemeSelect = (selectedTheme: any) => {
-    setTheme(selectedTheme);
+    const loadSystemSettings = async () => {
+      try {
+        const resp = await fetch('/api/system-theme-settings', { credentials: 'same-origin' });
+        const j = await resp.json().catch(() => null);
+        if (resp.ok && j?.ok) {
+          setSystemSettings(j.data ?? null);
+        } else {
+          console.warn('[theme] system-theme-settings API failed', j);
+        }
+      } catch (error) {
+        console.error("Error loading system settings:", error);
+      }
+    };
+
+    (async () => {
+      await checkUser();
+      loadThemePresets();
+      await loadSystemSettings();
+    })();
+  }, [user, authLoading, sessionChecked, loadThemePresets]);
+
+  const handleThemeSelect = (selectedTheme: unknown) => {
+    setTheme(selectedTheme as unknown as typeof theme);
     setUseSystemTheme(false);
     setMessage("Theme đã được chọn. Nhấn 'Lưu' để lưu thay đổi.");
   };

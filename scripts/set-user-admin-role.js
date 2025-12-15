@@ -10,6 +10,14 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
+const DEBUG = process.env.DEBUG_SERVER_LOGS === '1';
+const log = {
+  debug: (...args) => { if (DEBUG) console.debug(...args); },
+  info: (...args) => { if (DEBUG) console.info(...args); },
+  warn: (...args) => { if (DEBUG) console.warn(...args); },
+  error: (...args) => { console.error(...args); },
+};
+
 // Load environment variables
 require('dotenv').config({ path: '.env.local' });
 
@@ -17,8 +25,8 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('❌ Missing environment variables!');
-  console.error('Required: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
+  log.error('❌ Missing environment variables!');
+  log.error('Required: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY');
   process.exit(1);
 }
 
@@ -36,7 +44,7 @@ async function setUserRole(email, role = 'admin') {
     // Get user by email
     const { data: users, error: listError } = await supabase.auth.admin.listUsers();
     if (listError) {
-      console.error('❌ Error listing users:', listError);
+      log.error('❌ Error listing users:', listError);
       return;
     }
 
@@ -47,42 +55,32 @@ async function setUserRole(email, role = 'admin') {
     }
 
     console.log(`✓ Found user: ${user.email} (${user.id})`);
-    console.log(`Current metadata:`, JSON.stringify(user.user_metadata, null, 2));
+    console.log(`Current app_metadata:`, JSON.stringify(user.app_metadata, null, 2));
 
-    // Update user metadata with role
+    // Update user: set app_metadata.role and remove role from user_metadata
+    const newUserMetadata = { ...(user.user_metadata || {}) };
+    delete newUserMetadata.role;
+    const newAppMetadata = { ...(user.app_metadata || {}), role };
+
     const { data: updatedUser, error: updateError } = await supabase.auth.admin.updateUserById(
       user.id,
       {
-        user_metadata: {
-          ...user.user_metadata,
-          role: role,
-        },
+        user_metadata: newUserMetadata,
+        app_metadata: newAppMetadata,
       }
     );
 
     if (updateError) {
-      console.error('❌ Error updating user:', updateError);
+      log.error('❌ Error updating user:', updateError);
       return;
     }
 
     console.log(`\n✅ Successfully set role="${role}" for ${email}`);
-    console.log(`Updated metadata:`, JSON.stringify(updatedUser.user.user_metadata, null, 2));
+    console.log(`Updated app_metadata:`, JSON.stringify(updatedUser.user.app_metadata, null, 2));
 
-    // Also update profiles table for consistency (optional)
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({ role: role })
-      .eq('id', user.id);
-
-    if (profileError) {
-      console.warn('⚠️  Warning: Could not update profiles table:', profileError.message);
-    } else {
-      console.log('✓ Also updated profiles table');
-    }
-
-    console.log('\n✅ Done! User can now access admin pages.');
+    console.log('\n✅ Done! User app_metadata updated; role removed from user_metadata.');
   } catch (err) {
-    console.error('❌ Unexpected error:', err);
+    log.error('❌ Unexpected error:', err);
   }
 }
 

@@ -1,7 +1,11 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import serverDebug from '@/lib/server-debug';
 
-async function ensureAdmin(supabaseAuth: any) {
+export const dynamic = 'force-dynamic';
+
+async function ensureAdmin(supabaseAuth: SupabaseClient) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
@@ -35,12 +39,12 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     const authInfo = await ensureAdmin(supabaseAuth);
     // Only allow full admins to hide challenges; moderators can still edit other fields
-    const role = (authInfo as any)?.role as string | undefined;
+    const role = (authInfo as Record<string, unknown>)?.role as string | undefined;
 
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, is_hide } = body;
 
-    const updatePayload: any = {};
+    const updatePayload: Record<string, unknown> = {};
     if (title) updatePayload.title = title;
     if (start_date) updatePayload.start_date = start_date;
     if (end_date) updatePayload.end_date = end_date;
@@ -59,15 +63,15 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .maybeSingle();
 
     if (error) {
-      console.error('PATCH /api/admin/challenges/[id] error', error);
+      serverDebug.error('PATCH /api/admin/challenges/[id] error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ challenge: data });
-  } catch (err: any) {
-    console.error('PATCH /api/admin/challenges/[id] exception', err);
-    const status = err?.status || 500;
-    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  } catch (err: unknown) {
+    serverDebug.error('PATCH /api/admin/challenges/[id] exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }
 
@@ -90,7 +94,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
 
     const authInfo = await ensureAdmin(supabaseAuth);
     // Only full admins may hide (soft-delete) challenges via DELETE
-    const role = (authInfo as any)?.role as string | undefined;
+    const role = (authInfo as Record<string, unknown>)?.role as string | undefined;
     if (role !== 'admin') return NextResponse.json({ error: 'Only admin can hide challenges' }, { status: 403 });
 
     // Fetch challenge and participant count
@@ -100,7 +104,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .eq('id', id)
       .maybeSingle();
     if (chErr) {
-      console.error('DELETE /api/admin/challenges/[id] fetch challenge error', chErr);
+      serverDebug.error('DELETE /api/admin/challenges/[id] fetch challenge error', chErr);
       return NextResponse.json({ error: chErr.message }, { status: 500 });
     }
     if (!challenge) {
@@ -115,7 +119,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .select('id', { count: 'exact' })
       .eq('challenge_id', id);
     if (pErr) {
-      console.error('DELETE /api/admin/challenges/[id] fetch participants error', pErr);
+      serverDebug.error('DELETE /api/admin/challenges/[id] fetch participants error', pErr);
       return NextResponse.json({ error: pErr.message }, { status: 500 });
     }
 
@@ -134,14 +138,47 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       .update({ is_hide: true })
       .eq('id', id);
     if (hideErr) {
-      console.error('Ẩn (hide) /api/admin/challenges/[id] error', hideErr);
+      serverDebug.error('Ẩn (hide) /api/admin/challenges/[id] error', hideErr);
       return NextResponse.json({ error: hideErr.message }, { status: 500 });
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
-    console.error('Ẩn /api/admin/challenges/[id] exception', err);
-    const status = err?.status || 500;
-    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  } catch (err: unknown) {
+    serverDebug.error('Ẩn /api/admin/challenges/[id] exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
+  }
+}
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  const { id } = params;
+  try {
+    const supabaseAuth = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return request.cookies.get(name)?.value;
+          },
+          set() {},
+          remove() {},
+        },
+      }
+    );
+
+    await ensureAdmin(supabaseAuth);
+
+    const { data, error } = await supabaseAuth.from('challenges').select('*').eq('id', id).maybeSingle();
+    if (error) {
+      serverDebug.error('GET /api/admin/challenges/[id] error', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ challenge: data });
+  } catch (err: unknown) {
+    serverDebug.error('GET /api/admin/challenges/[id] exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }

@@ -1,66 +1,40 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { ClipboardList, User, Gift, Frown, Lock } from "lucide-react";
+import Image from "next/image";
 
 interface Challenge {
   id: string;
   title: string;
-  description: string;
+  description?: string | null;
   start_date: string;
   end_date: string;
   status: "Open" | "Closed";
-  is_locked: boolean;
+  is_locked?: boolean;
   min_pace_seconds: number;
   max_pace_seconds: number;
   target_km_options?: number[];
 }
 
-interface ParticipantWithActivity {
+interface Participant {
   user_id: string;
   target_km: number;
   actual_km: number;
-  avg_pace_seconds: number;
-  total_activities: number;
-  profile?: {
-    full_name: string;
-    gender?: string;
-  };
+  avg_pace_seconds?: number | null;
+  total_activities?: number | null;
+  status?: string | null;
+  profile?: { full_name?: string | null; avatar_url?: string | null } | null;
 }
 
-interface LuckyDraw {
-  id: string;
-  winner_user_id?: string;
-  prize_name?: string;
-  rank: number;
-  winner_profile?: {
-    full_name: string;
-
-  };
+function formatDate(d: string) {
+  try {
+    return new Date(d).toLocaleDateString("vi-VN");
+  } catch {
+    return d;
+  }
 }
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function formatTime(seconds: number): string {
-  if (isNaN(seconds) || seconds < 0) return "--:--:--";
-  const hrs = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs
-    .toString()
-    .padStart(2, "0")}`;
-}
-
 function formatPace(seconds: number): string {
   if (isNaN(seconds) || seconds < 0) return "--:--";
   const mins = Math.floor(seconds / 60);
@@ -68,271 +42,103 @@ function formatPace(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}/km`;
 }
 
-export default function ChallengePage({ params }: { params: { id: string } }) {
-  const { user, isLoading: authLoading } = useAuth();
-  const [challenge, setChallenge] = useState<Challenge | null>(null);
-  const [participants, setParticipants] = useState<ParticipantWithActivity[]>([]);
-  const [luckyDrawWinners, setLuckyDrawWinners] = useState<LuckyDraw[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [userParticipation, setUserParticipation] = useState<any>(null);
-  const [creatorProfile, setCreatorProfile] = useState<{ full_name?: string | null} | null>(null);
-  const [currentUser, setCurrentUser] = useState<string | null>(null);
-  const [selectedTarget, setSelectedTarget] = useState<number | null>(null);
-  const [registering, setRegistering] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
-  const [failedParticipants, setFailedParticipants] = useState<ParticipantWithActivity[]>([]);
+function getChallengeStatus(start?: string, end?: string) {
+  try {
+    const now = new Date();
+    const s = start ? new Date(start) : null;
+    const e = end ? new Date(end) : null;
+    if (e && !isNaN(e.getTime()) && e.getTime() < now.getTime()) return 'Đã diễn ra';
+    if (s && !isNaN(s.getTime()) && s.getTime() > now.getTime()) return 'Chưa diễn ra';
+    return 'Đang diễn ra';
+  } catch {
+    return '—';
+  }
+}
 
-  const [targetOptions, setTargetOptions] = useState<number[]>([70, 100, 150, 200, 250, 300]);
+export default function ChallengePage({ params }: { params: { id: string } }) {
+  const { id } = params;
+  const { sessionChecked, user } = useAuth();
+  const [creatorProfile, setCreatorProfile] = useState<{ full_name?: string | null } | null>(null);
+
+  
+  const [challenge, setChallenge] = useState<Challenge | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Wait for auth to finish loading
-    if (authLoading) return;
-    fetchData();
-  }, [params.id, user, authLoading]);
+    let mounted = true;
 
-  async function fetchData() {
-    setLoading(true);
-
-    // Get current user
-    // user from AuthContext
-    setCurrentUser(user?.id || null);
-
-    try {
-      // Fetch challenge details
-      const { data: challengeData, error: challengeError } = await supabase
-        .from("challenges")
-        .select(
-          "id, title, description, start_date, end_date, status, is_locked, min_pace_seconds, max_pace_seconds, created_by"
-        )
-        .eq("id", params.id)
-        .single();
-
-      if (challengeError) {
-        console.error("Error fetching challenge:", challengeError);
-        return;
-      }
-
-      // Load registration level options from system_settings
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
       try {
-        const { data: regSetting } = await supabase
-          .from('system_settings')
-          .select('value')
-          .eq('key', 'challenge_registration_levels')
-          .maybeSingle();
+        const chRes = await fetch(`/api/challenges/${id}`, { credentials: 'same-origin' });
+        if (!chRes.ok) throw new Error(`Failed to load challenge (${chRes.status})`);
+        const chJson = await chRes.json().catch(() => null);
+        const ch = chJson?.challenge ?? null;
+        if (mounted) setChallenge(ch);
 
-        if (regSetting && regSetting.value) {
-          const parts = String(regSetting.value).split(',').map((s: string) => s.trim()).filter((s: string) => s !== '');
-          const nums = parts.map((s: string) => Number(s)).filter((n: number) => !isNaN(n) && n > 0);
-          const uniqueSorted = Array.from(new Set(nums)).sort((a: number, b: number) => a - b);
-          if (uniqueSorted.length > 0) setTargetOptions(uniqueSorted);
-        }
-      } catch (e) {
-        console.warn('Could not load registration levels, using defaults', e);
-      }
-
-      if (challengeData) {
-        setChallenge(challengeData as Challenge);
-        // Fetch creator profile separately to avoid relying on a DB join name that
-        // may not exist in some environments. This is more robust across schema
-        // versions: if `created_by` is present, query `profiles` directly.
-        try {
-          if (challengeData.created_by) {
-            const { data: prof } = await supabase
-              .from('profiles')
-              .select('full_name')
-              .eq('id', challengeData.created_by)
-              .maybeSingle();
-            setCreatorProfile(prof ?? null);
-          } else {
-            setCreatorProfile(null);
-          }
-        } catch (e) {
-          console.warn('Could not fetch creator profile', e);
-          setCreatorProfile(null);
-        }
-      } else {
-        setChallenge(null);
-      }
-
-      // Fetch participants with activities directly via Supabase (RLS applies)
-      try {
-        // First, try to fetch participants with the joined profiles field. This works when
-        // the PostgREST join alias and RLS permit it. If that returns profile data, use it
-        // directly. Otherwise fall back to a separate profiles fetch.
-        const { data: joinedData, error: joinedError } = await supabase
-          .from('challenge_participants')
-          .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status, profiles(full_name)')
-          .eq('challenge_id', params.id)
-          .order('actual_km', { ascending: false });
-
-        if (joinedError) console.warn('Joined participants fetch error (will fallback):', joinedError.message);
-
-        if (joinedData && joinedData.length > 0 && joinedData[0].profiles) {
-          // Join worked and profiles are included
-          const mapped = (joinedData || []).map((p: any) => ({
-            user_id: p.user_id,
-            target_km: p.target_km,
-            actual_km: p.actual_km,
-            avg_pace_seconds: p.avg_pace_seconds,
-            total_activities: p.total_activities,
-            profile: p.profiles ?? null,
-          }));
-          setParticipants(mapped);
-          if (challengeData.status === "Closed") {
-            const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
-            setFailedParticipants(failed);
-          }
-        } else {
-          // Fallback: fetch participants without join, then fetch profiles separately.
-          const { data: participantsData, error: participantsError } = await supabase
-            .from('challenge_participants')
-            .select('user_id, target_km, actual_km, avg_pace_seconds, total_activities, status')
-            .eq('challenge_id', params.id)
-            .order('actual_km', { ascending: false });
-
-          if (participantsError) {
-            console.error('Failed to load participants via Supabase:', participantsError);
-          } else {
-            const ids = Array.from(new Set((participantsData || []).map((p: any) => p.user_id).filter(Boolean)));
-            let profilesMap: Record<string, any> = {};
-            if (ids.length > 0) {
-              try {
-                const { data: profilesData, error: profilesError } = await supabase
-                  .from('profiles')
-                  .select('id, full_name')
-                  .in('id', ids);
-                if (!profilesError && profilesData) {
-                  profilesMap = Object.fromEntries((profilesData as any[]).map((pr: any) => [pr.id, pr]));
-                }
-              } catch (pe) {
-                console.warn('Could not fetch participant profiles', pe);
-              }
+        const pRes = await fetch(`/api/challenges/${id}/participants`, { credentials: 'same-origin' });
+        if (!pRes.ok) throw new Error(`Failed to load participants (${pRes.status})`);
+        const pJson = await pRes.json().catch(() => null);
+        const parts = (pJson?.participants || []) as Participant[];
+        if (mounted) setParticipants(parts);
+          // fetch creator profile if challenge has created_by
+          try {
+            const createdBy = ch?.created_by;
+            if (createdBy && mounted) {
+              fetch(`/api/profiles/${createdBy}`, { credentials: 'same-origin' })
+                .then((r) => r.ok ? r.json().catch(() => null) : null)
+                .then((json) => {
+                  if (!mounted) return;
+                  const cp = json?.profile ?? null;
+                  setCreatorProfile(cp);
+                })
+                .catch(() => {});
             }
-
-            const mapped = (participantsData || []).map((p: any) => ({
-              user_id: p.user_id,
-              target_km: p.target_km,
-              actual_km: p.actual_km,
-              avg_pace_seconds: p.avg_pace_seconds,
-              total_activities: p.total_activities,
-              profile: profilesMap[p.user_id] ?? null,
-            }));
-
-            setParticipants(mapped);
-
-            if (challengeData.status === "Closed") {
-              const failed = mapped.filter((p: ParticipantWithActivity) => p.actual_km < p.target_km);
-              setFailedParticipants(failed);
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Participants fetch error', e);
+          } catch {}
+      } catch (err: unknown) {
+        console.error('[challenge.page] fetch error', String(err));
+        if (mounted) setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (mounted) setLoading(false);
       }
-
-      // Fetch lucky draw winners if challenge is closed
-      if (challengeData.status === "Closed") {
-        const { data: drawData, error: drawError } = await supabase
-          .from("lucky_draws")
-          .select(
-            `
-          id,
-          winner_user_id,
-          prize_name,
-          rank,
-          profiles!lucky_draws_winner_user_id_fkey(full_name)
-        `
-          )
-          .eq("challenge_id", params.id)
-          .not("winner_user_id", "is", null)
-          .order("rank", { ascending: true })
-          .limit(2);
-
-        if (drawError) {
-          console.error("Error fetching lucky draws:", drawError);
-        } else if (drawData) {
-          setLuckyDrawWinners(
-            drawData.map((d: any) => ({
-              id: d.id,
-              winner_user_id: d.winner_user_id,
-              prize_name: d.prize_name,
-              rank: d.rank,
-              winner_profile: d.profiles,
-            }))
-          );
-        }
-      }
-
-      // Check if user is already registered
-      if (user?.id) {
-        const { data: existingParticipation } = await supabase
-          .from("challenge_participants")
-          .select("*")
-          .eq("challenge_id", params.id)
-          .eq("user_id", user.id)
-          .single();
-
-        if (existingParticipation) {
-          setUserParticipation(existingParticipation);
-          setSelectedTarget(existingParticipation.target_km);
-        }
-      }
-    } catch (err) {
-      console.error("Error:", err);
-    } finally {
-      setLoading(false);
     }
-  }
 
-  async function handleRegister() {
-    if (!selectedTarget || !currentUser) return;
+    // ensure server-side session reconstruction (if any) has been attempted
+    if (sessionChecked) fetchData();
 
-    // Check password if required
-    // Do not compare password on the client. Server will validate the password.
+    return () => { mounted = false; };
+  }, [id, sessionChecked]);
 
-    setRegistering(true);
+  // derived values (keep only those used in the UI)
 
-    try {
-      // Use server-side API to join/update participation (server validates session)
-      const res = await fetch(`/api/challenges/${params.id}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target_km: selectedTarget }),
-        credentials: "same-origin",
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        console.error("Join API error:", json);
-        if (res.status === 401) {
-          alert(json.error || "Mật khẩu không đúng");
-        } else if (res.status === 403) {
-          alert(json.error || "Thử thách đã bị khoá");
-        } else {
-          alert(json.error || "Lỗi khi đăng ký thử thách");
-        }
-      } else {
-        alert(userParticipation ? "Cập nhật mục tiêu thành công!" : "Đăng ký thử thách thành công!");
-        setShowRegisterModal(false);
-        // Refresh data to reflect new participation
-        await fetchData();
-      }
-    } catch (err) {
-      console.error("Error:", err);
-      alert("Có lỗi xảy ra");
-    } finally {
-      setRegistering(false);
-    }
-  }
-
+  const userParticipation = useMemo(() => participants.find(pp => pp.user_id === user?.id) ?? null, [participants, user]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-bg-secondary)" }}>
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
-          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
+          <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu thử thách…</p>
+            <div>
+              <span className="font-semibold">Người tạo:</span>{' '}
+              <span>{creatorProfile?.full_name ?? '—'}</span>
+            </div>
+
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-bg-secondary)" }}>
+        <div className="text-center">
+          <p className="text-red-600">Lỗi: {error}</p>
+          <Link href="/challenges" className="mt-4 inline-block hover:underline" style={{ color: "var(--color-primary)" }}>
+            ← Quay lại danh sách thử thách
+          </Link>
         </div>
       </div>
     );
@@ -340,11 +146,11 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
   if (!challenge) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "var(--color-bg-secondary)" }}>
+      <div className="min-h-screen flex items-center justify-center p-8" style={{ background: "var(--color-bg-secondary)" }}>
         <div className="text-center">
-          <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Không tìm thấy thử thách</p>
+          <p>Không tìm thấy thử thách</p>
           <Link href="/challenges" className="mt-4 inline-block hover:underline" style={{ color: "var(--color-primary)" }}>
-            ← Quay lại danh sách
+            ← Quay lại danh sách thử thách
           </Link>
         </div>
       </div>
@@ -353,14 +159,14 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
 
   return (
     <div className="min-h-screen" style={{ background: "var(--color-bg-secondary)" }}>
-      {/* Header */}
       <div className="py-8 px-4 gradient-theme-primary">
         <div className="max-w-7xl mx-auto">
-          <Link href="/challenges" className="mb-4 inline-block hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
-            ← Quay lại
-          </Link>
-          <h1 className="text-4xl md:text-5xl font-bold mb-2" style={{ color: "var(--color-text-inverse)" }}>{challenge.title}</h1>
-          <p style={{ color: "var(--color-text-inverse)", opacity: 0.9 }}>
+          <div>
+            <Link href="/challenges" className="mb-4 inline-block hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
+              ← Quay lại
+            </Link>
+            <h1 className="text-4xl md:text-5xl font-bold mb-2" style={{ color: "var(--color-text-inverse)" }}>{challenge.title}</h1>
+            <p style={{ color: "var(--color-text-inverse)", opacity: 0.9 }}>
             {formatDate(challenge.start_date)} - {formatDate(challenge.end_date)}
           </p>
 
@@ -372,7 +178,7 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
             </div>
             <div>
               <span className="font-semibold">Trạng thái:</span>{' '}
-              <span>{challenge.is_locked ? 'Đã kết thúc' : 'Đang diễn ra'}</span>
+              <span>{getChallengeStatus(challenge.start_date, challenge.end_date)}</span>
             </div>
             <div>
               <span className="font-semibold">Pace yêu cầu:</span>{' '}
@@ -398,258 +204,88 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
               <span className="font-semibold">% Hoàn thành:</span>{' '}
               <span>{userParticipation && userParticipation.target_km ? `${Math.round(((userParticipation.actual_km ?? 0) / userParticipation.target_km) * 10000) / 100}%` : '—'}</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Description & Registration */}
-          <div className="lg:col-span-1">
-            {/* Two-column layout for info on wide screens; stacked on small screens */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-              {/* Description and stats now shown in the compact row under the title; removing duplicate cards here */}
-            </div>
-
-            {/* Registration Card */}
-            {challenge.status === "Open" && !userParticipation && (
-              <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg shadow-md p-6 border-2 border-green-300">
-                <h3 className="text-xl font-bold text-green-900 mb-4">🎯 Đăng Ký Tham Gia</h3>
-                <p className="text-sm text-gray-700 mb-4">
-                  Chọn mốc km và đăng ký ngay để tham gia thử thách!
-                </p>
-                <button
-                  onClick={() => setShowRegisterModal(true)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition-colors"
+            <div>
+              {user && userParticipation && challenge?.is_locked && (
+                <div
+                  className="ml-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-md text-sm text-gray-600"
+                  title="Thử thách đã khoá — không thể thực hiện thao tác này."
                 >
-                  Đăng Ký Ngay
-                </button>
-              </div>
-            )}
-
+                  <span className="text-sm">🔒</span>
+                  <span>Thử thách đã khoá</span>
+                </div>
+              )}
+            </div>
+          </div>
             
           </div>
 
-          {/* Right Column: Leaderboard & Lucky Draw */}
-          <div className="lg:col-span-2">
-            {/* Summary Section (if closed) */}
-            {challenge.status === "Closed" && (
-              <div className="space-y-6 mb-6">
-                {/* Lucky Draw Winners */}
-                {luckyDrawWinners.length > 0 && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <h3 className="text-2xl font-bold mb-4">🎁 Người Trúng Thưởng</h3>
-                    <div className="space-y-4">
-                      {luckyDrawWinners.map((draw, idx) => (
-                        <div
-                          key={draw.id}
-                          className={`p-4 rounded-lg border-2 flex items-center gap-4 ${
-                            idx === 0
-                              ? "bg-yellow-50 border-yellow-400"
-                              : "bg-gray-50 border-gray-300"
-                          }`}
-                        >
-                          <div
-                            className={`text-4xl font-bold w-12 text-center ${
-                              idx === 0 ? "text-yellow-600" : "text-gray-600"
-                            }`}
-                          >
-                            {idx === 0 ? "🥇" : "🥈"}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-bold text-gray-900">
-                              {draw.winner_profile?.full_name || "Anonymous"}
-                            </p>
-                            <p className="text-sm text-gray-600">{draw.prize_name}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+      
+          
+        </div>
+      </div>
 
-                {/* Failed Participants */}
-                {failedParticipants.length > 0 && (
-                  <div className="bg-white rounded-lg shadow-md p-6">
-                    <h3 className="text-2xl font-bold mb-4 text-red-600">⚠️ Danh Sách Bị Phạt</h3>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Các thành viên không đạt mục tiêu đã đăng ký
-                    </p>
-                    <div className="space-y-2">
-                      {failedParticipants.map((p) => (
-                        <div
-                          key={p.user_id}
-                          className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg"
-                        >
-                          <div className="w-10 h-10 rounded-full bg-red-400 flex items-center justify-center text-white font-bold">
-                            {p.profile?.full_name?.charAt(0) || "?"}
-                          </div>
-                          <div className="flex-1">
-                            <p className="font-semibold text-gray-900">
-                              {p.profile?.full_name ?? '—'}
-                            </p>
-                            <p className="text-xs text-gray-600">
-                              Đạt {p.actual_km}/{p.target_km} km (
-                              {Math.round((p.actual_km / p.target_km) * 100)}%)
-                            </p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Leaderboard */}
-            <div className="bg-white rounded-lg shadow-md p-6 mx-auto max-w-4xl">
-              <h3 className="text-2xl font-bold mb-6">📊 Bảng Xếp Hạng</h3>
-
-              {participants.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <div className="max-h-[520px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="text-left py-3 px-2 font-bold text-gray-700">#</th>
-                        <th className="text-left py-3 px-2 font-bold text-gray-700">Thành viên</th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">KM</th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">Pace</th>
-                        <th className="text-right py-3 px-2 font-bold text-gray-700">Tỉ lệ %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {participants
-                        .slice()
-                        .sort((a, b) => (b.actual_km || 0) - (a.actual_km || 0))
-                        .map((p, idx) => {
-                          const pct = p.target_km && p.target_km > 0 ? Math.round(((p.actual_km ?? 0) / p.target_km) * 100) : 0;
-                          const progressPercent = Math.min(Math.max(pct, 0), 999);
-                          // Color bands: <50 red, 50-74 yellow, 75-99 light green, >=100 dark green, tam thoi Xóa Avatar
-                          let barColor = 'bg-red-500';
-                          if (progressPercent >= 100) barColor = 'bg-green-700';
-                          else if (progressPercent >= 75) barColor = 'bg-green-300';
-                          else if (progressPercent >= 50) barColor = 'bg-yellow-400';
-
-                          return (
-                            <tr
-                              key={p.user_id}
-                              className="border-b border-gray-200 hover:bg-gray-50 transition-colors"
-                            >
-                              <td className="py-4 px-2">
-                                <div className="flex items-center justify-center">
-                                  {idx === 0 ? (
-                                    <span className="text-2xl">🥇</span>
-                                  ) : idx === 1 ? (
-                                    <span className="text-2xl">🥈</span>
-                                  ) : idx === 2 ? (
-                                    <span className="text-2xl">🥉</span>
-                                  ) : (
-                                    <span className="font-bold text-gray-600">{idx + 1}</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="py-4 px-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center">
-                                   
-                                  </div>
-                                  <span className="font-semibold text-gray-900">
-                                    {p.profile?.full_name ?? '—'}
-                                  </span>
-                                </div>
-                              </td>
-                              <td className="py-4 px-2 text-right">
-                                <div className="font-bold" style={{ color: "var(--color-primary)" }}>{p.actual_km} km</div>
-                                <div className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
-                                  Mục tiêu: {p.target_km} km
-                                </div>
-                              </td>
-                              <td className="py-4 px-2 text-right">
-                                {formatPace(p.avg_pace_seconds)}
-                              </td>
-                              <td className="py-4 px-2 text-right">
-                                <div className="flex flex-col items-end gap-1">
-                                  <span className={`font-bold ${progressPercent >= 100 ? 'text-green-700' : progressPercent >= 75 ? 'text-green-600' : progressPercent >=50 ? 'text-yellow-600' : 'text-red-600'}`}>
-                                    {progressPercent}%
-                                  </span>
-                                  <div className="w-32 h-2 bg-gray-200 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full ${barColor}`}
-                                      style={{ width: `${Math.min(progressPercent, 100)}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <div className="grid grid-cols-1 gap-8">
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow-md p-6">
+              <h3 className="text-2xl font-bold mb-4">📊 Bảng Xếp Hạng</h3>
+              {participants.length === 0 ? (
+                <p className="text-gray-500">Chưa có thành viên tham gia.</p>
               ) : (
-                <div className="text-center py-12">
-                  <p className="text-gray-500">Chưa có người tham gia</p>
+                <div className="overflow-hidden rounded-md border">
+                  <div className="grid grid-cols-12 items-center text-sm text-gray-600 px-4 py-2 border-b">
+                    <div className="col-span-1 font-semibold">#</div>
+                    <div className="col-span-4 font-semibold">Thành viên</div>
+                    <div className="col-span-3 text-right font-semibold">KM</div>
+                    <div className="col-span-2 text-right font-semibold">Pace</div>
+                    <div className="col-span-2 text-right font-semibold">Tỉ lệ %</div>
+                  </div>
+
+                  <div>
+                    {participants
+                      .slice()
+                      .sort((a, b) => (b.actual_km || 0) - (a.actual_km || 0))
+                      .map((p, idx) => {
+                        const rank = idx + 1;
+                        const percent = p.target_km ? Math.min(100, Math.round(((p.actual_km || 0) / p.target_km) * 100)) : 0;
+                        const percentColor = percent >= 100 ? 'text-green-600' : 'text-red-600';
+                        const rankBg = rank === 1 ? 'bg-yellow-300' : rank === 2 ? 'bg-gray-300' : rank === 3 ? 'bg-orange-200' : 'bg-gray-100';
+                        const rankText = rank <= 3 ? (rank === 1 ? '🥇' : rank === 2 ? '🥈' : '🥉') : String(rank);
+                        return (
+                          <div key={p.user_id} className="grid grid-cols-12 items-center gap-3 py-3 px-4 border-b last:border-b-0">
+                            <div className="col-span-1 flex items-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-semibold ${rankBg}`}>{rankText}</div>
+                            </div>
+
+                            <div className="col-span-4 flex items-center gap-3">
+                              <Image src={p.profile?.avatar_url || '/media/avatars/placeholder-avatar.png'} alt="avatar" width={40} height={40} className="w-10 h-10 rounded-full object-cover" />
+                              <div>
+                                <div className="font-medium">{p.profile?.full_name ?? p.user_id}</div>
+                              </div>
+                            </div>
+
+                            <div className="col-span-3 text-right">
+                              <div className="font-bold text-[var(--color-primary)]">{p.actual_km ?? 0} km</div>
+                              <div className="text-xs text-gray-500">Mục tiêu: {p.target_km} km</div>
+                            </div>
+                            <div className="col-span-2 text-right text-sm text-gray-700">{p.avg_pace_seconds ? `${Math.floor((p.avg_pace_seconds || 0) / 60)}:${String((p.avg_pace_seconds || 0) % 60).padStart(2, '0')}/km` : '—'}</div>
+
+                            <div className="col-span-2 text-right flex flex-col items-end">
+                              <div className={`text-sm font-semibold ${percentColor}`}>{percent}%</div>
+                              <div className="mt-2 w-full max-w-[160px] h-2 bg-gray-200 rounded-full overflow-hidden">
+                                <div className={`${percent >= 100 ? 'bg-green-500' : 'bg-red-400'} h-2`} style={{ width: `${percent}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Register Modal */}
-      {showRegisterModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-2xl font-bold text-[var(--color-primary)] mb-4">
-              Đăng Ký Thử Thách
-            </h3>
-
-            <div className="space-y-4 mb-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Chọn mục tiêu (km)
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {targetOptions.map((km) => (
-                    <button
-                      key={km}
-                      onClick={() => setSelectedTarget(km)}
-                      className={`py-2 px-3 border-2 rounded-lg font-semibold transition-all ${
-                        selectedTarget === km
-                          ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-white"
-                          : "border-gray-300 hover:border-[var(--color-primary)]"
-                      }`}
-                    >
-                      {km} km
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Password protection removed; no password input shown */}
-            </div>
-
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowRegisterModal(false)}
-                className="flex-1 py-3 bg-gray-200 text-gray-700 font-semibold rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Hủy
-              </button>
-              <button
-                onClick={handleRegister}
-                disabled={registering || !selectedTarget}
-                className="flex-1 py-3 bg-[var(--color-primary)] text-white font-semibold rounded-lg hover:opacity-90 disabled:bg-gray-400 transition-colors"
-              >
-                {registering ? "Đang xử lý..." : "Đăng Ký"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

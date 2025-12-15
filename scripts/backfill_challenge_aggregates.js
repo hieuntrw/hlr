@@ -4,17 +4,25 @@
 
 const { createClient } = require('@supabase/supabase-js');
 
+const DEBUG = process.env.DEBUG_SERVER_LOGS === '1';
+const log = {
+  debug: (...args) => { if (DEBUG) console.debug(...args); },
+  info: (...args) => { if (DEBUG) console.info(...args); },
+  warn: (...args) => { if (DEBUG) console.warn(...args); },
+  error: (...args) => { console.error(...args); },
+};
+
 async function main() {
   const challengeId = process.argv[2];
   if (!challengeId) {
-    console.error('Usage: node scripts/backfill_challenge_aggregates.js <challenge_id>');
+    log.error('Usage: node scripts/backfill_challenge_aggregates.js <challenge_id>');
     process.exit(1);
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || process.env.SUPABASE_DOMAIN;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
-    console.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in env');
+    log.error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in env');
     process.exit(2);
   }
 
@@ -23,7 +31,7 @@ async function main() {
   console.log('Fetching participants for challenge', challengeId);
   const { data: parts, error: partErr } = await supabase.from('challenge_participants').select('id,user_id,target_km').eq('challenge_id', challengeId);
   if (partErr) {
-    console.error('Failed to fetch participants', partErr);
+    log.error('Failed to fetch participants', partErr);
     process.exit(3);
   }
   const participantIds = (parts || []).map(p => p.id).filter(Boolean);
@@ -35,7 +43,7 @@ async function main() {
   console.log('Fetching activities for participants...');
   const { data: acts, error: actErr } = await supabase.from('activities').select('challenge_participant_id,distance,moving_time').in('challenge_participant_id', participantIds);
   if (actErr) {
-    console.error('Failed to fetch activities', actErr);
+    log.error('Failed to fetch activities', actErr);
     process.exit(4);
   }
 
@@ -70,7 +78,7 @@ async function main() {
       status: completed ? 'completed' : undefined,
     }).eq('id', pid);
     if (updErr) {
-      console.error('Failed to update participant', pid, updErr);
+      log.error('Failed to update participant', pid, updErr);
     }
   }
 

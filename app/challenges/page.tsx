@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Calendar, CheckCircle, Lock, List, User } from "lucide-react";
+import { Calendar, Lock, List, User } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 interface Challenge {
@@ -63,7 +63,7 @@ function ChallengeListItem({ challenge }: { challenge: ChallengeWithParticipatio
 export default function ChallengesPage() {
   // Temporarily disable pagination by requesting a large page size.
   // This returns the full list for both 'my' and 'all' tabs in most cases.
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'my'>('my');
   const [items, setItems] = useState<ChallengeWithParticipation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,8 +71,48 @@ export default function ChallengesPage() {
 
   const currentUser = user?.id || null;
 
+  const fetchPage = useCallback(async function fetchPage() {
+    setLoading(true);
+    try {
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const url = `${base}/api/challenges${activeTab === 'my' ? '?my=true' : ''}`;
+      const resp = await fetch(url, {
+        credentials: activeTab === 'my' ? 'same-origin' : 'omit',
+        headers: { Accept: 'application/json' },
+      });
+      if (!resp.ok) {
+        let bodyText = '';
+        try { bodyText = await resp.text(); } catch (e) { bodyText = String(e); }
+        console.error('Failed to fetch challenges', resp.status, bodyText);
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+
+      const json = await resp.json();
+      const loaded: ChallengeWithParticipation[] = (json.challenges || []).map((c: unknown) => {
+        const row = c as Record<string, unknown>;
+        return {
+          id: String(row.id),
+          title: String(row.title ?? ''),
+          start_date: String(row.start_date ?? ''),
+          end_date: String(row.end_date ?? ''),
+          status: (row.status as 'Open' | 'Closed') ?? 'Closed',
+          is_locked: Boolean(row.is_locked),
+          user_participates: row.user_participates ?? (activeTab === 'my'),
+        } as ChallengeWithParticipation;
+      });
+      setItems(loaded);
+    } catch (e: unknown) {
+      console.error('Error fetching challenges', String(e));
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
+
   useEffect(() => {
-    if (authLoading) return;
+    if (authLoading || !sessionChecked) return;
     // reset when tab or user changes
     setItems([]);
     if (activeTab === 'my' && !currentUser) {
@@ -80,31 +120,9 @@ export default function ChallengesPage() {
       return;
     }
     fetchPage();
-  }, [activeTab, currentUser, authLoading]);
+  }, [activeTab, currentUser, authLoading, sessionChecked, fetchPage]);
 
-  async function fetchPage() {
-    setLoading(true);
-    try {
-      const base = typeof window !== 'undefined' ? window.location.origin : '';
-      // Request the full list; server returns all challenges for the selected tab.
-      const resp = await fetch(`${base}/api/challenges`, { credentials: activeTab === 'my' ? 'same-origin' : 'omit' });
-      if (!resp.ok) {
-        console.error('Failed to fetch challenges', resp.status);
-        setItems([]);
-        setLoading(false);
-        return;
-      }
-
-      const json = await resp.json();
-      const loaded: ChallengeWithParticipation[] = (json.challenges || []).map((c: any) => ({ ...c, user_participates: activeTab === 'my' }));
-      setItems(loaded);
-    } catch (e) {
-      console.error('Error fetching challenges', e);
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  
 
   const shown = items.length;
 

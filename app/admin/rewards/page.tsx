@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client";
 import { Trophy, Plus, Edit, Trash2, Save, X } from "lucide-react";
 import AdminLayout from "@/components/AdminLayout";
 
@@ -38,16 +37,18 @@ export default function AdminRewardsPage() {
 
   async function fetchRewards() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("reward_definitions")
-      .select("*")
-      .order("category", { ascending: true })
-      .order("priority_level", { ascending: true });
-
-    if (error) {
-      console.error("Error fetching rewards:", error);
-    } else {
-      setRewards(data || []);
+    try {
+      const resp = await fetch('/api/admin/reward-definitions', { credentials: 'same-origin' });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        console.error('Error fetching rewards:', json);
+        setRewards([]);
+      } else {
+        setRewards(json.data || []);
+      }
+    } catch (e) {
+      console.error('Error fetching rewards:', e);
+      setRewards([]);
     }
     setLoading(false);
   }
@@ -55,53 +56,69 @@ export default function AdminRewardsPage() {
   async function handleSave(reward: Partial<RewardDefinition>) {
     if (editing) {
       // Update existing
-      const { error } = await supabase
-        .from("reward_definitions")
-        .update(reward)
-        .eq("id", editing);
-
-      if (error) {
-        alert("Lỗi cập nhật: " + error.message);
-      } else {
-        setEditing(null);
-        fetchRewards();
+      try {
+        const resp = await fetch('/api/admin/reward-definitions', {
+          method: 'PUT',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: editing, ...reward }),
+        });
+        const json = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          alert('Lỗi cập nhật: ' + (json?.error || resp.statusText));
+        } else {
+          setEditing(null);
+          fetchRewards();
+        }
+      } catch (e) {
+        alert('Lỗi cập nhật: ' + String(e));
       }
     } else {
       // Create new
-      const { error } = await supabase
-        .from("reward_definitions")
-        .insert([reward]);
-
-      if (error) {
-        alert("Lỗi tạo mới: " + error.message);
-      } else {
-        setShowAddForm(false);
-        setFormData({
-          category: "HM",
-          type: "milestone",
-          condition_value: 0,
-          condition_label: "",
-          prize_description: "",
-          cash_amount: 0,
-          priority_level: 100,
+      try {
+        const resp = await fetch('/api/admin/reward-definitions', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(reward),
         });
-        fetchRewards();
+        const json = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          alert('Lỗi tạo mới: ' + (json?.error || resp.statusText));
+        } else {
+          setShowAddForm(false);
+          setFormData({
+            category: 'HM',
+            type: 'milestone',
+            condition_value: 0,
+            condition_label: '',
+            prize_description: '',
+            cash_amount: 0,
+            priority_level: 100,
+          });
+          fetchRewards();
+        }
+      } catch (e) {
+        alert('Lỗi tạo mới: ' + String(e));
       }
     }
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Xác nhận xóa mốc thưởng này?")) return;
-
-    const { error } = await supabase
-      .from("reward_definitions")
-      .delete()
-      .eq("id", id);
-
-    if (error) {
-      alert("Lỗi xóa: " + error.message);
-    } else {
-      fetchRewards();
+    try {
+      const resp = await fetch(`/api/admin/reward-definitions?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok) {
+        alert('Lỗi xóa: ' + (json?.error || resp.statusText));
+      } else {
+        fetchRewards();
+      }
+    } catch (e) {
+      alert('Lỗi xóa: ' + String(e));
     }
   }
 
@@ -241,7 +258,7 @@ export default function AdminRewardsPage() {
           {rewards.length === 0 && (
             <div className="text-center py-12 text-gray-500">
               <Trophy className="mx-auto mb-3 text-gray-300" size={48} />
-              <p>Chưa có mốc thưởng nào. Nhấn "Thêm mốc thưởng" để bắt đầu.</p>
+              <p>Chưa có mốc thưởng nào. Nhấn &ldquo;Thêm mốc thưởng&rdquo; để bắt đầu.</p>
             </div>
           )}
         </div>
@@ -279,7 +296,7 @@ function RewardForm({
         <label className="block text-sm font-medium text-gray-700 mb-1">Danh mục</label>
         <select
           value={data.type || "milestone"}
-          onChange={(e) => onChange({ ...data, type: e.target.value as any })}
+          onChange={(e) => onChange({ ...data, type: e.target.value as "milestone" | "podium_overall" | "podium_age" })}
           className="w-full border border-gray-300 rounded-lg px-3 py-2"
         >
           <option value="milestone">Mốc thời gian</option>

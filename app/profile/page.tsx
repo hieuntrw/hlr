@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
-import { User, Mail, Phone, Cake, Calendar, Watch, Activity, Target, CheckCircle, Clock, Star } from "lucide-react";
+import { User, Phone, Cake, Calendar, Watch, Activity, Target, Star } from "lucide-react";
 
 import { useAuth } from "@/lib/auth/AuthContext";
 interface Profile {
   id: string;
   full_name: string | null;
+  total_stars?: number;
   avatar_url?: string | null;
   join_date?: string;
   device_name?: string;
@@ -90,6 +90,24 @@ function formatPace(seconds?: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins}:${secs.toString().padStart(2, "0")}/km`;
+}
+
+// Return local YYYY-MM-DD (date key) for a Date object
+function localDateKey(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Parse YYYY-MM-DD into a Date in local timezone
+function parseLocalDateKey(key: string) {
+  const parts = key.split('-');
+  if (parts.length !== 3) return new Date(key);
+  const y = Number(parts[0]);
+  const m = Number(parts[1]) - 1;
+  const d = Number(parts[2]);
+  return new Date(y, m, d);
 }
 
 function PBModal({
@@ -199,7 +217,7 @@ function PBModal({
 }
 
 export default function ProfilePage() {
-  const { user, profile, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked, refreshAuth } = useAuth();
   const router = useRouter();
   const [localProfile, setLocalProfile] = useState<Profile | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -222,31 +240,11 @@ export default function ProfilePage() {
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
   // Tách loading cho từng phần dữ liệu
-  const [profileLoading, setProfileLoading] = useState(true);
-  const [activitiesLoading, setActivitiesLoading] = useState(true);
-  const [rewardsLoading, setRewardsLoading] = useState(true);
+  const [, setProfileLoading] = useState(true);
+  const [, setActivitiesLoading] = useState(true);
+  const [, setRewardsLoading] = useState(true);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      router.push(`/login?redirect=${encodeURIComponent("/profile")}`);
-      return;
-    }
-    // Ưu tiên dùng profile từ AuthContext nếu có
-    if (profile) {
-      setLocalProfile(profile);
-      setProfileLoading(false);
-    } else {
-      setProfileLoading(true);
-      fetchProfileFromSupabase().finally(() => setProfileLoading(false));
-    }
-    // Fetch activities
-    setActivitiesLoading(true);
-    fetchActivities().finally(() => setActivitiesLoading(false));
-    // Fetch rewards
-    setRewardsLoading(true);
-    fetchRewards().finally(() => setRewardsLoading(false));
-  }, [user, profile, authLoading]);
+ 
 
   useEffect(() => {
     if (showEditModal && localProfile) {
@@ -260,102 +258,72 @@ export default function ProfilePage() {
     }
   }, [showEditModal, localProfile]);
 
-  async function fetchProfileFromSupabase() {
-    // Wait for auth to finish loading
-    if (authLoading) return;
-    setLoading(true);
+  const fetchProfileFromSupabase = useCallback(async () => {
+    if (!user) return;
 
     try {
-      // Using user from AuthContext
-      if (!user) {
-        window.location.href = "/debug-login";
+      const resp = await fetch('/api/profile/me', { credentials: 'same-origin' });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json?.ok) {
+        console.error('[Profile] /api/profile/me error', json);
+        // Try fallback: lookup by email via server route
+        if (user?.email) {
+          try {
+            const byEmailResp = await fetch(`/api/profiles/by-email?email=${encodeURIComponent(user.email)}`, { credentials: 'same-origin' });
+            const byEmailJson = await byEmailResp.json().catch(() => null);
+            if (byEmailResp.ok && byEmailJson?.ok) {
+              const profileData = byEmailJson.profile ?? null;
+              if (profileData) {
+                setLocalProfile(profileData);
+                return profileData;
+              }
+            }
+          } catch (e) {
+            console.warn('[Profile] profiles/by-email fallback failed', e);
+          }
+        }
         return;
       }
 
-      // Log session/JWT/token for debugging
-      const session = supabase.auth.getSession ? await supabase.auth.getSession() : null;
-      console.log("[Profile] User:", user);
-      console.log("[Profile] Session:", session);
-      if (session && session.data && session.data.session) {
-        console.log("[Profile] JWT:", session.data.session.access_token);
-      }
-      console.log("[Profile] Fetching for user:", user.id, user.email);
-
-      // Fetch profile by ID first, then fallback to email if not found
-      let { data: profileData, error: profileError } = await supabase
-        .from("profiles")
-        .select(
-          "id, full_name, join_date, device_name, strava_id, strava_athlete_name, strava_access_token, strava_refresh_token, strava_token_expires_at, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, gender"
-        )
-        .eq("id", user.id)
-        .maybeSingle();
-
-      // If not found by ID, try by email
-      if (!profileData && user.email) {
-        console.log("[Profile] Not found by ID, trying email:", user.email);
-        const result = await supabase
-          .from("profiles")
-          .select(
-            "id, full_name, join_date, device_name, strava_id, strava_athlete_name, strava_access_token, strava_refresh_token, strava_token_expires_at, pb_hm_seconds, pb_fm_seconds, pb_hm_approved, pb_fm_approved, dob, phone_number, email, gender"
-          )
-          .eq("email", user.email)
-          .maybeSingle();
-        
-        profileData = result.data;
-        profileError = result.error;
-      }
-
-      if (profileError) {
-        console.error("[Profile] Error fetching profile:", profileError);
-        alert("Lỗi khi tải hồ sơ: " + profileError.message);
-        return;
-      }
-
-      if (!profileData) {
-        console.error("[Profile] No profile found for user:", user.id, user.email);
-        alert("Không tìm thấy hồ sơ. Vui lòng liên hệ admin.");
-        return;
-      }
-
-      console.log("[Profile] Profile loaded:", profileData);
+      const profileData = json.profile ?? json.data ?? null;
       setLocalProfile(profileData);
-      
-      // Check Strava connection and token validity
+     // return profileData;
+
+      // Check Strava connection and token validity based on server-side profile
       const hasStravaId = !!profileData?.strava_id;
       const hasValidToken = profileData?.strava_access_token && profileData?.strava_token_expires_at;
-      
+
       if (hasStravaId && hasValidToken) {
-        const tokenExpiresAt = new Date(profileData.strava_token_expires_at * 1000);
+        const tokenExpiresAt = new Date((profileData.strava_token_expires_at as number) * 1000);
         const now = new Date();
-        const isTokenValid = tokenExpiresAt > now;
-        
-        if (isTokenValid) {
-          console.log("[Profile] Strava token is valid until:", tokenExpiresAt);
+
+        if (tokenExpiresAt > now) {
           setStravaConnected(true);
         } else {
-          console.log("[Profile] Strava token expired at:", tokenExpiresAt);
-          // Try to refresh token if refresh token exists
+          // Token expired — attempt server-side refresh if we have a refresh token
           if (profileData.strava_refresh_token) {
-            console.log("[Profile] Attempting to refresh Strava token...");
             try {
-              const refreshResponse = await fetch("/api/strava/refresh-token", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
+              const refreshResponse = await fetch('/api/strava/refresh-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: user.id }),
+                credentials: 'same-origin',
               });
-              
+
               if (refreshResponse.ok) {
-                console.log("[Profile] Token refreshed successfully");
+                console.log('[Profile] Token refreshed successfully');
                 setStravaConnected(true);
-                // Reload profile data to get new token
-                fetchProfileFromSupabase();
-                return;
+                // Re-fetch profile to pick up updated token fields
+                const r2 = await fetch('/api/profile/me', { credentials: 'same-origin' });
+                const j2 = await r2.json().catch(() => null);
+                const refreshedProfile = j2?.profile ?? j2?.data ?? null;
+                if (r2.ok && refreshedProfile) setLocalProfile(refreshedProfile);
               } else {
-                console.log("[Profile] Token refresh failed");
+                console.log('[Profile] Token refresh failed');
                 setStravaConnected(false);
               }
             } catch (err) {
-              console.error("[Profile] Token refresh error:", err);
+              console.error('[Profile] Token refresh error:', err);
               setStravaConnected(false);
             }
           } else {
@@ -365,219 +333,212 @@ export default function ProfilePage() {
       } else {
         setStravaConnected(false);
       }
-      
-      // Initialize edit form with current data
-      const initialEditData = {
-        phone: profileData.phone_number || "",
-        birth_date: profileData.dob || "",
-        device_name: profileData.device_name || "",
-        pb_hm_time: profileData.pb_hm_seconds ? formatTime(profileData.pb_hm_seconds) : "",
-        pb_fm_time: profileData.pb_fm_seconds ? formatTime(profileData.pb_fm_seconds) : "",
-      };
-      setEditFormData(initialEditData);
-
-      // Fetch member rewards (milestone achievements)
-      const { data: rewardsData, error: rewardsError } = await supabase
-        .from("member_rewards")
-        .select(`
-          id,
-          reward_type,
-          reward_name,
-          reward_amount,
-          awarded_at,
-          status
-        `)
-        .eq("user_id", user.id)
-        .eq("reward_type", "milestone")
-        .order("awarded_at", { ascending: false });
-
-      if (rewardsData) {
-        console.log("[Profile] Rewards loaded:", rewardsData);
-        // Map returned shape to MemberReward[] expected by state
-        const mapped = rewardsData.map((r: any) => ({
-          id: r.id,
-          user_id: user.id,
-          status: r.status,
-          awarded_date: r.awarded_at || r.awarded_at || '',
-          created_at: r.awarded_at || new Date().toISOString(),
-          reward_definition_id: '',
-          reward_definitions: null,
-        }));
-        setRewards(mapped);
-      }
-
-      // Fetch recent activities (30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activities")
-        .select("id, name, distance, moving_time, elapsed_time, average_heartrate, average_cadence, total_elevation_gain, start_date, type, map_summary_polyline")
-        .eq("user_id", profileData.id)
-        .gte("start_date", thirtyDaysAgo.toISOString())
-        .order("start_date", { ascending: false });
-
-      if (activitiesError) {
-        console.error("Error fetching activities:", activitiesError);
-      } else if (activitiesData) {
-        setActivities(activitiesData);
-
-        // Aggregate activities by date for chart
-        const aggregatedData: { [key: string]: number } = {};
-
-        activitiesData.forEach((activity) => {
-          // Use ISO date (YYYY-MM-DD) for proper sorting
-          const date = new Date(activity.start_date).toISOString().split("T")[0];
-          const kmDistance = activity.distance / 1000;
-          aggregatedData[date] = (aggregatedData[date] || 0) + kmDistance;
-        });
-
-        // Generate full 30-day range (including days with no activities)
-        const chartData: ActivityData[] = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split("T")[0];
-          chartData.push({
-            date: dateStr,
-            km: aggregatedData[dateStr] || 0
-          });
-        }
-
-        console.log("[Profile] Chart data (30 days with zeros):", chartData);
-        setActivityData(chartData);
-      }
+      return profileData;
     } catch (err) {
-      console.error("Unexpected error:", err);
-      alert("Có lỗi xảy ra: " + String(err));
-    } finally {
-      setLoading(false);
+      console.error('[Profile] Failed to fetch /api/profile/me', err);
     }
-  }
+  }, [user]);
 
-  async function fetchActivities() {
+  
+
+  const fetchActivities = useCallback(async () => {
     if (!user) return;
 
     try {
-      // Fetch recent activities (30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-      const { data: activitiesData, error: activitiesError } = await supabase
-        .from("activities")
-        .select("id, name, distance, moving_time, elapsed_time, average_heartrate, average_cadence, total_elevation_gain, start_date, type, map_summary_polyline")
-        .eq("user_id", user.id)
-        .gte("start_date", thirtyDaysAgo.toISOString())
-        .order("start_date", { ascending: false });
-
-      if (activitiesError) {
-        console.error("Error fetching activities:", activitiesError);
-      } else if (activitiesData) {
-        setActivities(activitiesData);
-
-        // Aggregate activities by date for chart
-        const aggregatedData: { [key: string]: number } = {};
-
-        activitiesData.forEach((activity) => {
-          // Use ISO date (YYYY-MM-DD) for proper sorting
-          const date = new Date(activity.start_date).toISOString().split("T")[0];
-          const kmDistance = activity.distance / 1000;
-          aggregatedData[date] = (aggregatedData[date] || 0) + kmDistance;
-        });
-
-        // Generate full 30-day range (including days with no activities)
-        const chartData: ActivityData[] = [];
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        for (let i = 29; i >= 0; i--) {
-          const date = new Date(today);
-          date.setDate(date.getDate() - i);
-          const dateStr = date.toISOString().split("T")[0];
-          chartData.push({
-            date: dateStr,
-            km: aggregatedData[dateStr] || 0
-          });
-        }
-
-        setActivityData(chartData);
+      const res = await fetch('/api/profile/activities?days=30', { credentials: 'same-origin' });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Failed to load activities');
       }
+      const activitiesData = await res.json().catch(() => []);
+      setActivities(activitiesData || []);
+
+      // Aggregate activities by local date for chart (avoid UTC shifts from Strava timestamps)
+      const aggregatedData: { [key: string]: number } = {};
+
+      (Array.isArray(activitiesData) ? activitiesData : []).forEach((activity: unknown) => {
+        const rec = (activity as Record<string, unknown>) || {};
+        const dt = new Date(String(rec.start_date ?? ''));
+        const date = localDateKey(dt);
+        const kmDistance = Number(rec.distance ?? 0) / 1000;
+        aggregatedData[date] = (aggregatedData[date] || 0) + kmDistance;
+      });
+
+      // Generate full 30-day range (including days with no activities)
+      const chartData: ActivityData[] = [];
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      for (let i = 29; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const dateStr = date.toISOString().split('T')[0];
+        chartData.push({ date: dateStr, km: aggregatedData[dateStr] || 0 });
+      }
+
+      setActivityData(chartData);
     } catch (err) {
-      console.error("Error fetching activities:", err);
+      console.error('Error fetching activities:', err);
     }
-  }
+  }, [user]);
 
-  async function fetchRewards() {
+  const fetchRewards = useCallback(async () => {
     if (!user) return;
-
     try {
-      // Fetch member rewards (milestone achievements) with join to reward_definitions
-      const { data: rewardsData, error: rewardsError } = await supabase
-        .from("member_rewards")
-        .select(`id, user_id, status, awarded_date, created_at, reward_definition_id, reward_definitions(id, type, category, condition_label, prize_description, cash_amount)`)
-        .eq("user_id", user.id)
-        .order("awarded_date", { ascending: false });
-
-      if (rewardsError) throw rewardsError;
-      if (rewardsData) {
-        const mapped = (rewardsData as any[]).map((r) => {
-          const rd = Array.isArray(r.reward_definitions) ? r.reward_definitions[0] : r.reward_definitions;
-          return {
-            id: r.id,
-            user_id: r.user_id,
-            status: r.status,
-            awarded_date: r.awarded_at || r.awarded_at || '',
-            created_at: r.created_at || '',
-            reward_definition_id: r.reward_definition_id || '',
-            reward_definitions: rd
-              ? {
-                  id: rd.id || '',
-                  type: rd.type || '',
-                  category: rd.category || '',
-                  condition_label: rd.condition_label || '',
-                  prize_description: rd.prize_description || '',
-                  cash_amount: Number(rd.cash_amount || 0),
-                }
-              : null,
-            reward_name: r.reward_name || (rd ? rd.condition_label : undefined),
-            reward_amount: r.reward_amount || (rd ? Number(rd.cash_amount || 0) : undefined),
-          } as MemberReward;
-        });
-        setRewards(mapped);
+      const resp = await fetch('/api/profile/rewards-summary', { credentials: 'same-origin' });
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json?.ok) {
+        console.error('[Profile] /api/profile/rewards-summary error', json);
+        setRewards([]);
+        return;
       }
+
+      // rewards-summary returns several arrays: achieved, podium, lucky
+      const achieved = json.achieved || [];
+      const podium = json.podium || [];
+      const lucky = json.lucky || [];
+
+      const combined = [...achieved, ...podium, ...lucky];
+
+      const mapped = (Array.isArray(combined) ? combined : []).map((r: unknown) => {
+        const rec = (r as Record<string, unknown>) || {};
+        const rdRaw = rec.reward_definitions;
+        const rd = Array.isArray(rdRaw) ? rdRaw[0] as Record<string, unknown> : rdRaw as Record<string, unknown> | undefined;
+        return {
+          id: String(rec.id ?? `${rec.challenge_id ?? ''}-${rec.created_at ?? ''}`),
+          user_id: String(rec.user_id ?? user.id),
+          status: String(rec.status ?? 'achieved'),
+          awarded_date: String(rec.awarded_date ?? rec.awarded_at ?? rec.created_at ?? rec.delivered_at ?? ''),
+          created_at: String(rec.created_at ?? ''),
+          reward_definition_id: String(rec.reward_definition_id ?? rd?.id ?? ''),
+          reward_definitions: rd
+            ? {
+                id: String(rd.id ?? ''),
+                type: String(rd.type ?? ''),
+                category: String(rd.category ?? ''),
+                condition_label: String(rd.condition_label ?? rd.condition_label ?? ''),
+                prize_description: String(rd.prize_description ?? rd.prize ?? ''),
+                cash_amount: Number(rd.cash_amount ?? 0),
+              }
+            : null,
+          reward_name: String(rec.reward_name ?? (rd ? rd.condition_label : rec.reward_description) ?? ''),
+          reward_amount: rec.reward_amount ?? (rd ? Number(rd.cash_amount ?? 0) : undefined),
+        } as MemberReward;
+      });
+
+      setRewards(mapped);
     } catch (err) {
-      console.error("Error fetching rewards:", err);
+      console.error('Error fetching rewards:', err);
       setRewards([]);
     }
-  }
+  }, [user]);
+
+  // Initialization effect: runs after helper callbacks are defined
+  useEffect(() => {
+    // Run an async initialization so we can await all fetches and clear the
+    // global `loading` flag once the visible parts are ready. Include
+    // `sessionChecked` so this runs when whoami completes.
+    (async () => {
+      if (authLoading || !sessionChecked) return;
+      if (!user) {
+        try {
+          await refreshAuth();
+          await new Promise((res) => setTimeout(res, 500));
+        } catch (e) {
+          console.warn('[Profile] refreshAuth attempt failed', e);
+        }
+        if (!user) {
+          router.push(`/login?redirect=${encodeURIComponent("/profile")}`);
+          return;
+        }
+      }
+
+      setLoading(true);
+
+      try {
+        // Prefer server profile fetched using HttpOnly cookies (RLS + server session).
+        // If server profile is available use it; otherwise fall back to `profile` from AuthContext.
+        let serverProfile = null;
+        try {
+          serverProfile = await fetchProfileFromSupabase();
+        } catch (e) {
+          console.warn('[Profile] fetchProfileFromSupabase failed', e);
+        }
+
+        if (serverProfile) {
+          setLocalProfile(serverProfile as Profile);
+          setProfileLoading(false);
+        } else if (profile) {
+          setLocalProfile(profile as Profile);
+          setProfileLoading(false);
+          // also attempt background refresh
+          fetchProfileFromSupabase().catch((e) => console.warn('[Profile] background fetch failed', e));
+        } else {
+          setProfileLoading(true);
+          await fetchProfileFromSupabase();
+          setProfileLoading(false);
+        }
+
+          // Ensure Strava token is valid (server-side) before trying to sync/fetch activities
+          try {
+            const checkResp = await fetch('/api/strava/check-connection', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ userId: user.id }),
+              credentials: 'same-origin',
+            });
+            const checkJson = await checkResp.json().catch(() => null);
+            console.debug('[Profile] strava.check-connection', checkJson);
+            // If needsReauth true, mark disconnected so UI shows reconnect CTA
+            if (checkJson?.needsReauth) {
+              setStravaConnected(false);
+            }
+          } catch (e) {
+            console.warn('[Profile] check-connection failed', e);
+          }
+
+          // Activities and rewards via server endpoints (use HttpOnly cookies / server session)
+          setActivitiesLoading(true);
+          setRewardsLoading(true);
+          await Promise.all([fetchActivities(), fetchRewards()]);
+          setActivitiesLoading(false);
+          setRewardsLoading(false);
+      } catch (e) {
+        console.error('[Profile] init error', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user, profile, authLoading, sessionChecked, fetchProfileFromSupabase, fetchActivities, fetchRewards, refreshAuth, router]);
 
   async function handleStravaToggle() {
     if (stravaConnected) {
       // Disconnect
       // Using user from AuthContext
       if (user) {
-        await supabase
-          .from("profiles")
-          .update({
-            strava_id: null,
-            strava_athlete_name: null,
-            strava_access_token: null,
-            strava_refresh_token: null,
-            strava_token_expires_at: null,
-          })
-          .eq("id", user.id);
-
-        setStravaConnected(false);
-        alert("Đã ngắt kết nối Strava");
-        // Reload profile to reflect changes
-        fetchProfileFromSupabase();
+        try {
+          const resp = await fetch('/api/profile/me', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ disconnectStrava: true }),
+          });
+          const j = await resp.json().catch(() => null);
+          if (!resp.ok || !j?.ok) {
+            console.error('[Profile] disconnect strava failed', j);
+            alert('Lỗi khi ngắt kết nối Strava');
+          } else {
+            setStravaConnected(false);
+            alert('Đã ngắt kết nối Strava');
+            fetchProfileFromSupabase();
+          }
+        } catch (e) {
+          console.error('[Profile] disconnect strava exception', e);
+          alert('Lỗi khi ngắt kết nối Strava');
+        }
       }
     } else {
       // Connect
-      window.location.href = "/api/auth/strava/login";
+      window.location.href = "/api/strava/connect/login";
     }
   }
 
@@ -593,17 +554,22 @@ export default function ProfilePage() {
     try {
       const response = await fetch("/api/strava/sync-activities", {
         method: "POST",
+        credentials: 'same-origin',
       });
 
       const result = await response.json();
 
       if (response.ok) {
-        setSyncMessage(`✅ ${result.message || "Đồng bộ thành công!"}`);
-        // Reload activities after sync
-        setTimeout(() => {
-          fetchProfileFromSupabase();
-          setSyncMessage("");
-        }, 2000);
+        const added = result?.data?.newInserted ?? result?.data?.totalInserted ?? 0;
+        const recalcFailed = (result?.data?.recalcFailedCount || 0) > 0;
+        setSyncMessage(recalcFailed ? `đã thêm ${added} hoạt động mới — một vài cập nhật chưa hoàn tất` : `đã thêm ${added} hoạt động mới`);
+        // Refresh profile, activities and rewards so UI shows newly-synced data
+        try {
+          await Promise.all([fetchProfileFromSupabase(), fetchActivities(), fetchRewards()]);
+        } catch (e) {
+          console.warn('[Profile] post-sync refresh failed', e);
+        }
+        setTimeout(() => setSyncMessage(""), 2000);
       } else {
         setSyncMessage(`❌ Lỗi: ${result.error || "Không thể đồng bộ"}`);
         setTimeout(() => setSyncMessage(""), 3000);
@@ -628,22 +594,34 @@ export default function ProfilePage() {
       const [hours, minutes, seconds] = data.time.split(":").map(Number);
       const totalSeconds = hours * 3600 + minutes * 60 + seconds;
 
-      // Insert into pb_history (pending approval)
-      const { error } = await supabase.from("pb_history").insert({
-        user_id: user.id,
-        distance: data.distance === "21" ? "HM" : "FM",
-        time_seconds: totalSeconds,
-        achieved_at: new Date().toISOString().split("T")[0],
-        evidence_link: data.evidence_link,
-      });
+      // Insert into pb_history (pending approval) via server API to avoid
+      // direct browser Supabase calls (proxy/Kong/406 issues). The server
+      // endpoint will attach the authenticated user id from HttpOnly cookies.
+      try {
+        const resp = await fetch('/api/profile/pb-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            distance: data.distance === '21' ? 'HM' : 'FM',
+            time_seconds: totalSeconds,
+            achieved_at: new Date().toISOString().split('T')[0],
+            evidence_link: data.evidence_link,
+          }),
+        });
 
-      if (error) {
-        console.error("Error submitting PB:", error);
-        alert("Lỗi khi gửi thành tích");
-      } else {
-        alert("Thành tích đã được gửi cho Admin duyệt!");
-        setShowPBModal(false);
-        fetchProfileFromSupabase();
+        const j = await resp.json().catch(() => null);
+        if (!resp.ok) {
+          console.error('Error submitting PB via API:', j);
+          alert('Lỗi khi gửi thành tích');
+        } else {
+          alert('Thành tích đã được gửi cho Admin duyệt!');
+          setShowPBModal(false);
+          fetchProfileFromSupabase();
+        }
+      } catch (e) {
+        console.error('Error submitting PB via API:', e);
+        alert('Lỗi khi gửi thành tích');
       }
     } catch (err) {
       console.error("Error:", err);
@@ -661,19 +639,27 @@ export default function ProfilePage() {
       // Using user from AuthContext
       if (!user) return;
 
-      // Update basic profile info
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          phone_number: editFormData.phone || null,
-          dob: editFormData.birth_date || null,
-          device_name: editFormData.device_name || null,
-        })
-        .eq("id", localProfile.id);
-
-      if (error) {
-        console.error("Error updating profile:", error);
-        alert("Lỗi khi cập nhật: " + error.message);
+      // Update basic profile info via server PATCH to avoid exposing anon/service keys
+      try {
+        const resp = await fetch('/api/profile/me', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            phone_number: editFormData.phone || null,
+            dob: editFormData.birth_date || null,
+            device_name: editFormData.device_name || null,
+          }),
+        });
+        const j = await resp.json().catch(() => null);
+        if (!resp.ok || !j?.ok) {
+          console.error('Error updating profile via API:', j);
+          alert('Lỗi khi cập nhật: ' + (j?.error || 'Unknown'));
+          return;
+        }
+      } catch (e) {
+        console.error('Error updating profile via API exception:', e);
+        alert('Lỗi khi cập nhật');
         return;
       }
 
@@ -714,15 +700,26 @@ export default function ProfilePage() {
 
       // Submit PR updates for approval
       if (prUpdates.length > 0) {
-        const { error: prError } = await supabase.from("pb_history").insert(prUpdates);
-        if (prError) {
-          console.error("Error submitting PR:", prError);
-          alert("⚠️ Cập nhật thông tin thành công nhưng PR cần admin duyệt");
-        } else {
-          alert("✓ Cập nhật thành công! PR mới đã gửi cho admin duyệt.");
+        try {
+          const resp = await fetch('/api/profile/pb-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify(prUpdates),
+          });
+          const j = await resp.json().catch(() => null);
+          if (!resp.ok) {
+            console.error('Error submitting PR via API:', j);
+            alert('⚠️ Cập nhật thông tin thành công nhưng PR cần admin duyệt');
+          } else {
+            alert('✓ Cập nhật thành công! PR mới đã gửi cho admin duyệt.');
+          }
+        } catch (e) {
+          console.error('Error submitting PR via API:', e);
+          alert('⚠️ Cập nhật thông tin thành công nhưng PR cần admin duyệt');
         }
       } else {
-        alert("✓ Cập nhật thông tin thành công!");
+        alert('✓ Cập nhật thông tin thành công!');
       }
 
       setShowEditModal(false);
@@ -775,6 +772,10 @@ export default function ProfilePage() {
                   </div>
                   <div className="flex-1">
                     <h1 className="text-2xl font-bold mb-3 text-gray-900">{localProfile.full_name}</h1>
+                    <div className="flex items-center gap-3 mb-2">
+                      <Star size={16} className="text-yellow-500" fill="currentColor" />
+                      <div className="text-sm font-semibold text-gray-900">{(localProfile.total_stars ?? 0)} sao</div>
+                    </div>
                     <div className="space-y-1.5 text-base text-gray-700">
                       <p className="flex items-center gap-2"><Cake size={16} /> {formatDate(localProfile.dob)}</p>
                       <p className="flex items-center gap-2"><Watch size={16} /> {localProfile.device_name || "Chưa cập nhật"}</p>
@@ -841,7 +842,7 @@ export default function ProfilePage() {
                             </span>
                           </div>
                           <div className="text-[10px] text-gray-600 mt-0.5">
-                            {formatDate((reward as any).awarded_date ?? (reward as any).awarded_at)}
+                            {formatDate(String(reward.awarded_date ?? (reward as unknown as Record<string, unknown>).awarded_at ?? ''))}
                           </div>
                         </div>
                       ))}
@@ -857,7 +858,7 @@ export default function ProfilePage() {
                 {stravaConnected ? (
                   <div className="backdrop-blur rounded-lg p-4 border" style={{ background: "rgba(var(--color-bg-secondary-rgb, 255, 255, 255), 0.6)", borderColor: 'var(--color-accent)' }}>
                     <div className="flex items-center gap-2 mb-3" style={{ color: 'var(--color-success)' }}>
-                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                      <svg className="w-5 h-5 text-orange-500" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169"/>
                       </svg>
                       <span className="font-bold text-[16px]" style={{ color: 'var(--color-success)' }}>Đã kết nối Strava</span>
@@ -1038,7 +1039,7 @@ export default function ProfilePage() {
           ) : (
             <div className="text-center py-12">
               <p className="text-gray-500">Chưa có hoạt động nào trong 30 ngày gần nhất</p>
-              <p className="text-sm text-gray-400 mt-2">Nhấn nút "Đồng bộ Activities" để tải hoạt động từ Strava</p>
+              <p className="text-sm text-gray-400 mt-2">Nhấn nút &quot;Đồng bộ Activities&quot; để tải hoạt động từ Strava</p>
             </div>
           )}
         </div>
@@ -1066,8 +1067,8 @@ export default function ProfilePage() {
                   <div className="h-80 flex items-end justify-between border-l-2 border-b-2 border-gray-300 px-2">
                     {activityData.map((data, idx) => {
                       const heightPercent = maxChartValue > 0 ? (data.km / maxChartValue) * 100 : 0;
-                      const dateShort = new Date(data.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
-                      const dateFull = new Date(data.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+                      const dt = parseLocalDateKey(data.date);
+                      const dateFull = dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
                       return (
                         <div
                           key={idx}
@@ -1101,7 +1102,7 @@ export default function ProfilePage() {
                   {/* Date labels below */}
                   <div className="flex justify-between px-2" style={{ height: '48px', marginTop: '4px' }}>
                     {activityData.map((data, idx) => {
-                      const dateShort = new Date(data.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+                      const dateShort = parseLocalDateKey(data.date).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
                       return (
                         <div
                           key={idx}

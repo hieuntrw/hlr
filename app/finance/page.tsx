@@ -1,20 +1,34 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import QRCode from 'qrcode';
-import { supabase } from "@/lib/supabase-client";
+import Image from "next/image";
+// QRCode generation removed (unused)
 import { useAuth } from "@/lib/auth/AuthContext";
-import {
-  fetchUserTransactionsClient,
-  fetchPublicFundStatsClient,
-  uploadReceiptForTransactionClient,
-} from '@/lib/services/financeService';
+
+interface Transaction {
+  id: string;
+  created_at: string;
+  type: string;
+  description?: string;
+  amount?: number;
+  payment_status?: string;
+  status?: string;
+  receipt_url?: string | null;
+}
+
+interface Expense {
+  id: string;
+  created_at: string;
+  description?: string;
+  amount?: number;
+  type?: string;
+}
 
 // Mobile-first personal finance page for members
 export default function FinancePage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<any>(null);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
+  const [profile, setProfile] = useState<Record<string, unknown> | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [pendingTotal, setPendingTotal] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [showPayModal, setShowPayModal] = useState<boolean>(false);
@@ -23,49 +37,71 @@ export default function FinancePage() {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [uploadingReceipt, setUploadingReceipt] = useState<boolean>(false);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
-  const [paymentQrUrl, setPaymentQrUrl] = useState<string | null>(null);
+  // payment QR removed — not used in UI
   const [activeTab, setActiveTab] = useState<'personal'|'report'>('personal');
-  const [publicFund, setPublicFund] = useState<{ balance: number, recentExpenses: any[] }>({ balance: 0, recentExpenses: [] });
+  const [publicFund, setPublicFund] = useState<{ balance: number, recentExpenses: Expense[] }>({ balance: 0, recentExpenses: [] });
 
   useEffect(() => {
     (async () => {
-      // Wait for auth to finish loading
-      if (authLoading) return;
+      // Wait for auth to finish loading and session check to complete
+      if (authLoading || !sessionChecked) return;
       
       setLoading(true);
       // user from AuthContext
 
       if (user) {
-        // Fetch profile for full_name
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', user.id)
-          .single();
-        if (profileData) {
-          setProfile(profileData);
+        // Fetch profile via server endpoint
+        try {
+          const pRes = await fetch(`/api/profiles/${user.id}`, { credentials: 'same-origin' });
+          if (pRes.ok) {
+            const pj = await pRes.json().catch(() => null);
+            setProfile(pj?.profile ?? null);
+          }
+        } catch (e) {
+          console.warn('Failed to fetch profile via server endpoint', e);
         }
-        
-        const trs = await fetchUserTransactionsClient(supabase, user.id);
-        setTransactions(trs);
-        const pending = trs
-          .filter((t: any) => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' || t.payment_status === 'submitted'))
-          .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
-        setPendingTotal(pending);
+
+        // Fetch user transactions via server endpoint
+        try {
+          const trsRes = await fetch('/api/profile/transactions', { credentials: 'same-origin' });
+          if (trsRes.ok) {
+            const tj = await trsRes.json().catch(() => null);
+            const trsRaw = (tj?.data || []) as unknown[];
+            const trs = trsRaw.map((r: unknown) => {
+              const rec = r as Record<string, unknown>;
+              return {
+                id: String(rec.id ?? ''),
+                created_at: String(rec.created_at ?? ''),
+                type: String(rec.type ?? ''),
+                description: String(rec.description ?? ''),
+                amount: Number(rec.amount ?? 0),
+                payment_status: String(rec.payment_status ?? rec.status ?? ''),
+                receipt_url: (rec.receipt_url as string) ?? null,
+              } as Transaction;
+            });
+            setTransactions(trs);
+            const pending = trs
+              .filter((t: unknown) => {
+                const row = t as Record<string, unknown>;
+                const status = String(row.payment_status ?? row.status ?? '');
+                return (status === 'pending' || status === 'Chưa nộp' || status === 'submitted');
+              })
+              .reduce((s: number, t: unknown) => s + Number((t as Record<string, unknown>).amount ?? 0), 0);
+            setPendingTotal(pending);
+          }
+        } catch (e) {
+          console.warn('Failed to fetch transactions via server endpoint', e);
+        }
       }
-      const stats = await fetchPublicFundStatsClient(supabase);
-      // generate QR for payment using default account string
-      try {
-        const accountString = `HLR|Vietcombank|0123456789|HLR Running Club`;
-        const qr = await QRCode.toDataURL(accountString);
-        setPaymentQrUrl(qr);
-      } catch (e) {
-        console.warn('Failed to generate QR', e);
-      }
+
+      // Public fund stats via server endpoint
+      const statsRes = await fetch('/api/public-fund-stats', { credentials: 'same-origin' }).catch(() => null);
+      const stats = statsRes && statsRes.ok ? await statsRes.json().catch(() => null) : null;
+      // QR generation intentionally removed (unused)
       setPublicFund(stats);
       setLoading(false);
     })();
-  }, [user, authLoading]);
+  }, [user, authLoading, sessionChecked]);
 
   // Note: data access uses client-friendly functions from lib/services/financeService
 
@@ -83,21 +119,55 @@ export default function FinancePage() {
   async function handleUploadReceipt() {
     if (!selectedTransactionId || !receiptFile || !user) return;
     setUploadingReceipt(true);
-    const res = await uploadReceiptForTransactionClient(supabase, selectedTransactionId, receiptFile, user.id);
-    setUploadingReceipt(false);
-    if (res?.ok) {
-      // refresh
-      const trs = await fetchUserTransactionsClient(supabase, user.id);
-      setTransactions(trs);
-      const pending = trs
-        .filter((t: any) => (t.payment_status === 'pending' || t.payment_status === 'Chưa nộp' || t.payment_status === 'pending' || t.payment_status === 'submitted'))
-        .reduce((s: number, t: any) => s + Number(t.amount || 0), 0);
-      setPendingTotal(pending);
+    try {
+      const form = new FormData();
+      form.append('file', receiptFile as File);
+      const up = await fetch(`/api/profile/transactions/${selectedTransactionId}/upload`, { method: 'POST', body: form, credentials: 'same-origin' });
+      setUploadingReceipt(false);
+      if (!up.ok) {
+        const j = await up.json().catch(() => null);
+        alert(j?.error || 'Có lỗi khi tải biên lai. Vui lòng thử lại.');
+        return;
+      }
+
+      // refresh transactions
+      try {
+          const trsRes2 = await fetch('/api/profile/transactions', { credentials: 'same-origin' });
+        if (trsRes2.ok) {
+          const tj2 = await trsRes2.json().catch(() => null);
+          const trs2Raw = (tj2?.data || []) as unknown[];
+          const trs2 = trs2Raw.map((r: unknown) => {
+            const rec = r as Record<string, unknown>;
+            return {
+              id: String(rec.id ?? ''),
+              created_at: String(rec.created_at ?? ''),
+              type: String(rec.type ?? ''),
+              description: String(rec.description ?? ''),
+              amount: Number(rec.amount ?? 0),
+              payment_status: String(rec.payment_status ?? rec.status ?? ''),
+              receipt_url: (rec.receipt_url as string) ?? null,
+            } as Transaction;
+          });
+          setTransactions(trs2);
+          const pending2 = trs2
+            .filter((t: unknown) => {
+              const row = t as Record<string, unknown>;
+              const status = String(row.payment_status ?? row.status ?? '');
+              return (status === 'pending' || status === 'Chưa nộp' || status === 'submitted');
+            })
+            .reduce((s: number, t: unknown) => s + Number((t as Record<string, unknown>).amount ?? 0), 0);
+          setPendingTotal(pending2);
+        }
+      } catch (e) {
+        console.warn('Failed to refresh transactions after upload', e);
+      }
+
       setShowUploadModal(false);
       alert('Biên lai đã được gửi. Đang chờ thủ quỹ xác nhận.');
-    } else {
+    } catch (err) {
+      setUploadingReceipt(false);
+      console.error(err);
       alert('Có lỗi khi tải biên lai. Vui lòng thử lại.');
-      console.error(res?.error);
     }
   }
 
@@ -157,7 +227,7 @@ export default function FinancePage() {
               </div>
             )}
           </div>
-          <div className="mt-3 text-xs text-gray-500">Số dư hiển thị tính theo các khoản có trạng thái "Chưa nộp".</div>
+          <div className="mt-3 text-xs text-gray-500">Số dư hiển thị tính theo các khoản có trạng thái &quot;Chưa nộp&quot;.</div>
         </div>
       </section>
 
@@ -268,7 +338,7 @@ export default function FinancePage() {
                     <div className="text-xs text-gray-500">{new Date(r.created_at).toLocaleDateString('vi-VN')}</div>
                   </div>
                   <div className="text-sm text-right">
-                    <div className="font-medium">{formatCurrency(r.amount)}</div>
+                    <div className="font-medium">{formatCurrency(Number(r.amount ?? 0))}</div>
                     <div className="text-xs text-gray-500">{r.type}</div>
                   </div>
                 </li>
@@ -313,7 +383,7 @@ export default function FinancePage() {
               <div className="bg-gray-50 rounded p-3 text-sm">
                 <div className="text-xs text-gray-500">Cú pháp chuyển khoản (ghi rõ để đối soát):</div>
                 <div className="mt-2 font-medium p-2 rounded" style={{ background: "var(--color-bg-tertiary)" }}>
-                  HLR {profile?.full_name || user?.email || 'Tên'} [Nội dung]
+                  {`HLR ${String(profile?.full_name ?? user?.email ?? 'Tên')} [Nội dung]`}
                 </div>
                 <div className="mt-2 text-xs text-gray-500">Ví dụ: HLR Nguyễn Văn A Quỹ tháng 11/2025</div>
               </div>
@@ -348,7 +418,7 @@ export default function FinancePage() {
               <input type="file" accept="image/*,application/pdf" onChange={(e) => handleFileChange(e.target.files?.[0] ?? null)} />
               {receiptPreviewUrl && (
                 <div className="mt-2">
-                  <img src={receiptPreviewUrl} alt="preview" className="max-h-40 rounded" />
+                  <Image src={receiptPreviewUrl} alt="preview" width={600} height={240} className="max-h-40 rounded object-contain" />
                 </div>
               )}
 

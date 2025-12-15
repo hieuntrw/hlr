@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 interface PBRecord {
   id: string;
@@ -45,78 +45,80 @@ function formatPace(seconds: number, distance: string): string {
 }
 
 export default function PBApprovalPage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [pendingPBs, setPendingPBs] = useState<PBRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (authLoading) return;
-    checkRole();
-    fetchPendingPBs();
-  }, [user, authLoading]);
-
-  async function checkRole() {
-    // user from AuthContext
-    if (!user) {
-      router.push("/debug-login");
-      return;
-    }
-    const role = user.user_metadata?.role;
-    if (!role || !["admin", "mod_member"].includes(role)) {
-      router.push("/");
-    }
-  }
-
-  async function fetchPendingPBs() {
+  const fetchPendingPBs = useCallback(async () => {
     setLoading(true);
 
     try {
-      // Fetch PBs from pb_history where evidence_link is not null (pending approval)
-      const { data, error } = await supabase
-        .from("pb_history")
-        .select("id, user_id, distance, time_seconds, achieved_at, evidence_link, profiles(full_name)")
-        .not("evidence_link", "is", null)
-        .order("achieved_at", { ascending: false });
-
-      if (error) {
-        console.error("Error:", error);
-        return;
-      }
-
+      const res = await fetch('/api/admin/pb-approval', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load');
+      const j = await res.json().catch(() => ({ data: [] }));
+      const data = j.data || [];
       setPendingPBs(
-        data?.map((p: any) => ({
-          id: p.id,
-          user_id: p.user_id,
-          distance: p.distance,
-          time_seconds: p.time_seconds,
-          achieved_at: p.achieved_at,
-          evidence_link: p.evidence_link,
-          profile: p.profiles,
-        })) || []
+        data.map((p: unknown) => {
+          const item = p as {
+            id: string;
+            user_id: string;
+            distance: string;
+            time_seconds: number;
+            achieved_at: string;
+            evidence_link: string;
+            profiles?: { full_name?: string } | null;
+          };
+          return {
+            id: item.id,
+            user_id: item.user_id,
+            distance: item.distance,
+            time_seconds: item.time_seconds,
+            achieved_at: item.achieved_at,
+            evidence_link: item.evidence_link,
+            profile: item.profiles,
+          };
+        }) || []
       );
     } catch (err) {
-      console.error("Error:", err);
+      console.error('Error:', err);
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
-  async function handleApprove(pbId: string, distance: string) {
+  const checkRole = useCallback(async () => {
+    if (!user) {
+      router.push('/debug-login');
+      return;
+    }
+    const role = getEffectiveRole(user, profile);
+    if (!role || (!isAdminRole(role) && role !== 'mod_member')) {
+      router.push('/');
+    }
+  }, [user, profile, router]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkRole();
+    fetchPendingPBs();
+  }, [user, authLoading, sessionChecked, checkRole, fetchPendingPBs]);
+
+  
+
+  async function handleApprove(pbId: string) {
     try {
       const pbData = pendingPBs.find((p) => p.id === pbId);
 
       if (!pbData) return;
 
-      // Mark corresponding race_result as approved and is_pr to trigger auto-award
-      const { error: updateErr } = await supabase
-        .from("race_results")
-        .update({ approved: true, is_pr: true })
-        .eq("user_id", pbData.user_id)
-        .eq("race_id", (await supabase.from("pb_history").select("race_id").eq("id", pbId).single()).data?.race_id)
-        .eq("chip_time_seconds", pbData.time_seconds);
-
-      if (updateErr) throw updateErr;
+      const res = await fetch('/api/admin/pb-approval', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: pbId }),
+      });
+      if (!res.ok) throw new Error('Approve failed');
 
       alert("Đã duyệt thành tích!");
       fetchPendingPBs();
@@ -128,8 +130,8 @@ export default function PBApprovalPage() {
 
   async function handleReject(pbId: string) {
     try {
-      // Delete the record
-      await supabase.from("pb_history").delete().eq("id", pbId);
+      const res = await fetch(`/api/admin/pb-approval?id=${pbId}`, { method: 'DELETE', credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Delete failed');
 
       alert("Đã từ chối thành tích!");
       fetchPendingPBs();
@@ -205,7 +207,7 @@ export default function PBApprovalPage() {
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          onClick={() => handleApprove(pb.id, pb.distance)}
+                          onClick={() => handleApprove(pb.id)}
                           className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-colors"
                         >
                           ✓ Duyệt

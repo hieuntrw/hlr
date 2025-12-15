@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
+import { useSearchParams } from "next/navigation";
 
 function LoginForm() {
 	const searchParams = useSearchParams();
-	const router = useRouter();
+	// router removed — navigation uses window.location for login flow
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -17,79 +16,92 @@ function LoginForm() {
 		e.preventDefault();
 		setLoading(true);
 		setMessage(null);
-
-		const timeoutMs = 30000; // 30s to avoid false timeouts on slow networks
-		const startTime = Date.now();
-
 		try {
-			const result: any = await Promise.race([
-				supabase.auth.signInWithPassword({ email, password }),
-				new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeoutMs)),
-			]);
+			const res = await fetch(`/api/auth/email-login?redirect=${encodeURIComponent(redirectTo)}`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				credentials: 'same-origin',
+				body: JSON.stringify({ email, password }),
+			});
 
-			const endTime = Date.now();
-			console.log(`[Login] Supabase Auth response time: ${endTime - startTime}ms`);
-			console.log('[Login] Supabase Auth result:', result);
+			let json: unknown = null;
+			try { json = await res.json(); } catch { json = null; }
 
-			const { data, error } = result;
-			if (error) {
-				console.error('Login error:', error);
-				setMessage(error.message || 'Đăng nhập thất bại');
+			if (!res.ok) {
+				const jRec = json as Record<string, unknown> | null;
+				const errMsg = jRec && jRec.error ? String(jRec.error) : `Lỗi đăng nhập (${res.status})`;
+				setMessage(errMsg);
 				setLoading(false);
 				return;
 			}
 
-			if (!data || !data.session || !data.user) {
-				console.error('No session or user returned', result);
-				setMessage('Đăng nhập thất bại. Vui lòng thử lại.');
-				setLoading(false);
-				return;
+			// Success: server should set HttpOnly cookies on this response. Navigate to redirect.
+			// Wait for server-side session to be available (whoami) before navigating.
+
+			// Cache minimal profile in localStorage so AuthContext can detect
+			// a logged-in user immediately (helps when server-side whoami
+			// reconstruction is delayed or not available during SPA nav).
+			try {
+				const jRec = json as Record<string, unknown> | null;
+				if (jRec && (jRec as Record<string, unknown>)['ok'] && (jRec as Record<string, unknown>)['user']) {
+					const u = (jRec as Record<string, unknown>)['user'] as Record<string, unknown>;
+					const cached = {
+						profile: {
+							id: (u['id'] as string) || '',
+							full_name: (u['full_name'] as string) || ((u['user_metadata'] as Record<string, unknown> | undefined)?.['fullName'] as string) || null,
+							role: (u['role'] as string) || ((u['app_metadata'] as Record<string, unknown> | undefined)?.['role'] as string) || 'member'
+						},
+						expiresAt: Date.now() + 5 * 60 * 1000
+					};
+					try { localStorage.setItem('hlr_auth_cache_v1', JSON.stringify(cached)); } catch { }
+				}
+			} catch {
 			}
+			const waitForWhoami = async (timeoutMs = 2000, interval = 200) => {
+				const start = Date.now();
+				while (Date.now() - start < timeoutMs) {
+					try {
+						const who = await fetch('/api/auth/whoami', { credentials: 'same-origin' });
+						if (who.ok) {
+							const j = await who.json().catch(() => null);
+							if (j && (j as Record<string, unknown>).ok && (j as Record<string, unknown>).user) return true;
+						}
+					} catch {
+						// ignore
+					}
+					await new Promise(r => setTimeout(r, interval));
+				}
+				return false;
+			};
 
-			console.log('✓ Login successful! User:', data.user?.email);
-			// small delay for UX
-			await new Promise((r) => setTimeout(r, 100));
-			setLoading(false);
-			router.push(redirectTo);
-		} catch (err: any) {
-			console.error('Login exception:', err);
-
-			// If we hit the artificial timeout, attempt one retry without the timeout to distinguish
-			// between a temporary slow network and a hard failure.
-			if (err?.message === 'Request timed out') {
-				console.warn('[Login] Initial timed out. Retrying once without client timeout...');
+			const sessionReady = await waitForWhoami(2000, 200);
+			if (!sessionReady) {
+				// Fallback: submit a real form so the browser performs a navigation
+				// and applies any HttpOnly Set-Cookie headers the server returns.
 				try {
-					const retryStart = Date.now();
-					const retryResult: any = await supabase.auth.signInWithPassword({ email, password });
-					const retryEnd = Date.now();
-					console.log(`[Login] Retry Supabase Auth response time: ${retryEnd - retryStart}ms`);
-					console.log('[Login] Retry result:', retryResult);
-					const { data, error } = retryResult;
-					if (error) {
-						console.error('Login retry error:', error);
-						setMessage(error.message || 'Đăng nhập thất bại');
-						setLoading(false);
-						return;
-					}
-					if (!data || !data.session || !data.user) {
-						setMessage('Đăng nhập thất bại. Vui lòng thử lại.');
-						setLoading(false);
-						return;
-					}
-					console.log('✓ Login successful on retry! User:', data.user?.email);
-					await new Promise((r) => setTimeout(r, 100));
-					setLoading(false);
-					router.push(redirectTo);
+					const form = document.createElement('form');
+					form.method = 'POST';
+					form.action = `/api/auth/email-login?redirect=${encodeURIComponent(redirectTo)}`;
+					form.style.display = 'none';
+					const i1 = document.createElement('input');
+					i1.name = 'email';
+					i1.value = email;
+					form.appendChild(i1);
+					const i2 = document.createElement('input');
+					i2.name = 'password';
+					i2.value = password;
+					form.appendChild(i2);
+					document.body.appendChild(form);
+					form.submit();
 					return;
-				} catch (retryErr: any) {
-					console.error('[Login] Retry failed:', retryErr);
-					setMessage('Không thể kết nối tới dịch vụ xác thực. Vui lòng kiểm tra mạng hoặc cấu hình SUPABASE_URL.');
-					setLoading(false);
-					return;
+				} catch (e) {
+					console.warn('Form-submit fallback failed, navigating anyway', e);
 				}
 			}
-
-			setMessage(err?.message || String(err));
+			window.location.href = redirectTo;
+		} catch (err: unknown) {
+			console.error('Login request failed', err);
+			setMessage(err instanceof Error ? err.message : String(err));
 			setLoading(false);
 		}
 	};
@@ -122,6 +134,7 @@ function LoginForm() {
 							placeholder="••••••••"
 						/>
 					</div>
+					{message && <p className="text-red-600 text-sm mb-2">{message}</p>}
 					<button
 						type="submit"
 						className="w-full py-3 px-4 rounded-lg font-semibold transition disabled:opacity-50 hover:opacity-90 disabled:hover:opacity-50 focus:outline-none"
@@ -130,7 +143,6 @@ function LoginForm() {
 					>
 						{loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
 					</button>
-					{message && <p className="text-red-600 text-sm mt-2">{message}</p>}
 				</form>
 			</div>
 		</main>

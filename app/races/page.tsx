@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useState, useEffect, useRef } from "react";
+import { Activity, Calendar, MapPin, Medal, Star, Sparkles, User, Lightbulb } from "lucide-react";
+import Image from "next/image";
 import { supabase } from "@/lib/supabase-client";
-import { Activity, Calendar, MapPin, Trophy, Medal, Star, Sparkles, User, Lightbulb } from "lucide-react";
+
 
 interface Race {
   id: string;
@@ -75,11 +76,7 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
     >
       {race.image_url && (
         <div className="relative w-full h-40 overflow-hidden bg-gray-200">
-          <img
-            src={race.image_url}
-            alt={race.name}
-            className="w-full h-full object-cover hover:scale-105 transition-transform"
-          />
+          <Image src={race.image_url} alt={race.name} fill className="object-cover hover:scale-105 transition-transform" />
         </div>
       )}
 
@@ -111,31 +108,87 @@ export default function RacesPage() {
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
   const [rewards, setRewards] = useState<RewardDefinition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
 
   useEffect(() => {
     fetchRaces();
   }, []);
 
+  // Helper: wrap a promise with a timeout so UI doesn't hang indefinitely
+  function withTimeout<T = unknown>(p: Promise<T>, ms = 10000): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const timeout = new Promise<never>((_, rej) => {
+      timer = setTimeout(() => rej(new Error('Request timed out')), ms);
+    });
+    return Promise.race([p, timeout]).finally(() => { if (timer) clearTimeout(timer); });
+  }
+
+  const fetchTokenRef = useRef<number | null>(null);
+  const isFetchingRef = useRef(false);
+
   async function fetchRaces() {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) return;
+
     setLoading(true);
+    setFetchError(null);
+    const currentToken = (fetchTokenRef.current = (fetchTokenRef.current || 0) + 1);
+    isFetchingRef.current = true;
+
+    const maxAttempts = 2;
+    const baseTimeout = 15000;
+    let lastError: unknown = null;
 
     try {
-      const { data, error } = await supabase
-        .from("races")
-        .select("id, name, race_date, location, image_url")
-        .order("race_date", { ascending: false });
+      console.log('[Races] fetchRaces start token=', currentToken, 'time=', Date.now());
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const timeoutMs = baseTimeout * attempt; // increase on retry
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const res = await fetch('/api/races', { signal: controller.signal });
+          clearTimeout(timer);
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            lastError = new Error(txt || 'Failed to fetch races');
+            console.warn('[Races] fetch attempt error', { attempt, error: lastError });
+            if (attempt < maxAttempts) {
+              await new Promise((r) => setTimeout(r, 500 * attempt));
+              continue;
+            }
+            setFetchError(
+              (((lastError as unknown) as { message?: unknown }).message
+                ? String(((lastError as unknown) as { message?: unknown }).message)
+                : String(lastError))
+            );
+            return;
+          }
 
-      if (error) {
-        console.error("Error fetching races:", error);
-        return;
+          const data = await res.json().catch(() => []);
+          if (currentToken !== fetchTokenRef.current) {
+            console.warn('[Races] stale fetch result ignored token=', currentToken);
+            return; // ignore stale result
+          }
+
+          setRaces(data || []);
+          lastError = null;
+          return;
+        } catch (e) {
+          lastError = e;
+          console.warn('[Races] fetch attempt threw', { attempt, error: e });
+          if (attempt < maxAttempts) {
+            await new Promise((r) => setTimeout(r, 500 * attempt));
+            continue;
+          }
+          setFetchError(e instanceof Error ? e.message : String(e));
+          return;
+        }
       }
-
-      setRaces(data || []);
-    } catch (err) {
-      console.error("Unexpected error:", err);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
+      if (lastError) console.error('[Races] final fetch error', lastError);
     }
   }
 
@@ -145,7 +198,8 @@ export default function RacesPage() {
 
     try {
       // Fetch race results for this race
-      const { data: resultsData, error: resultsError } = await supabase
+      console.log('[Races] fetchResults start', race.id);
+      const q2 = supabase
         .from("race_results")
         .select(
           `
@@ -162,32 +216,40 @@ export default function RacesPage() {
         .eq("race_id", race.id)
         .order("chip_time_seconds", { ascending: true });
 
+      const { data: resultsData, error: resultsError } = await withTimeout(Promise.resolve(q2), 15000);
+      console.log('[Races] fetchResults returned', { resultsCount: Array.isArray(resultsData) ? resultsData.length : 0, resultsError });
+
       if (resultsError) {
         console.error("Error fetching results:", resultsError);
         return;
       }
 
-      const formatted = resultsData?.map((r: any) => ({
-        id: r.id,
-        user_id: r.user_id,
-        distance: r.distance,
-        chip_time_seconds: r.chip_time_seconds,
-        official_rank: r.official_rank,
-        age_group_rank: r.age_group_rank,
-        is_pr: r.is_pr,
-        profile: r.profiles,
-      })) || [];
+      const formatted = (Array.isArray(resultsData) ? resultsData : []).map((rec: unknown) => {
+        const r = (rec as Record<string, unknown>) || {};
+        return {
+          id: String(r.id ?? ''),
+          user_id: String(r.user_id ?? ''),
+          distance: String(r.distance ?? ''),
+          chip_time_seconds: Number(r.chip_time_seconds ?? 0),
+          official_rank: r.official_rank as number | undefined,
+          age_group_rank: r.age_group_rank as number | undefined,
+          is_pr: Boolean(r.is_pr),
+          profile: (r.profiles as RaceResult['profile']) ?? undefined,
+        } as RaceResult;
+      });
 
       setRaceResults(formatted);
 
       // Fetch reward definitions
-      const { data: rewardsData, error: rewardsError } = await supabase
+      const q3 = supabase
         .from("reward_definitions")
         .select(
           "id, category, type, condition_value, condition_label, prize_description, cash_amount"
         )
         .order("category", { ascending: true })
         .order("priority_level", { ascending: true });
+
+      const { data: rewardsData, error: rewardsError } = await withTimeout(Promise.resolve(q3), 10000);
 
       if (rewardsError) {
         console.error("Error fetching rewards:", rewardsError);
@@ -208,6 +270,17 @@ export default function RacesPage() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto mb-4" style={{ borderColor: "var(--color-primary)" }}></div>
           <p style={{ color: "var(--color-text-secondary)" }}>Đang tải dữ liệu...</p>
+          {fetchError && (
+            <div className="mt-4 text-sm text-red-600">
+              <p>{fetchError}</p>
+              <button
+                onClick={() => fetchRaces()}
+                className="mt-2 inline-block px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
         </div>
       </div>
     );
@@ -304,9 +377,11 @@ export default function RacesPage() {
                                   <td className="py-3 px-4">
                                     <div className="flex items-center gap-3">
                                       {result.profile?.avatar_url ? (
-                                        <img
+                                        <Image
                                           src={result.profile.avatar_url}
                                           alt={result.profile.full_name}
+                                          width={32}
+                                          height={32}
                                           className="w-8 h-8 rounded-full object-cover"
                                         />
                                       ) : (

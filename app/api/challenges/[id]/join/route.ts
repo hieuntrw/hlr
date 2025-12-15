@@ -1,11 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import serverDebug from '@/lib/server-debug'
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;
   try {
     // Create server supabase client to read session from cookies
-    const res = NextResponse.next();
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,14 +26,58 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     );
 
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+    // Diagnostic logging: capture incoming cookie names and raw header for debugging
+    try {
+      // Use getAll() to list cookie names in Next.js RequestCookies
+      const cookieNames = request.cookies.getAll ? request.cookies.getAll().map(c => c.name) : [];
+      serverDebug.debug('[join.route] incoming cookies:', cookieNames);
+    } catch (e) {
+      serverDebug.debug('[join.route] could not read request.cookies.getAll()', e);
+    }
+    try {
+      const rawCookie = request.headers.get('cookie');
+      serverDebug.debug('[join.route] raw Cookie header:', rawCookie ? rawCookie.slice(0, 500) : null);
+    } catch (e) {
+      serverDebug.debug('[join.route] could not read raw Cookie header', e);
     }
 
-    const body = await request.json();
-    const { target_km, password: providedPassword } = body;
-    if (!target_km) {
+    const firstGet = await supabaseAuth.auth.getUser();
+    let user = firstGet.data.user;
+    const initialError = firstGet.error;
+    serverDebug.debug('[join.route] supabaseAuth.auth.getUser result - user present:', !!user, 'error:', initialError?.message || null);
+
+    // If no user reconstructed but cookies are present, try to initialize session
+    if (!user) {
+      try {
+        const accPreview = request.cookies.get('sb-access-token')?.value?.substring(0, 120) || null;
+        const refPreview = request.cookies.get('sb-refresh-token')?.value?.substring(0, 120) || null;
+        serverDebug.debug('[join.route] attempt setSession from cookies previews:', { access: !!accPreview, refresh: !!refPreview });
+        const access = request.cookies.get('sb-access-token')?.value;
+        const refresh = request.cookies.get('sb-refresh-token')?.value;
+        if (access && refresh) {
+          const setResp = await supabaseAuth.auth.setSession({ access_token: access, refresh_token: refresh });
+          serverDebug.debug('[join.route] setSession result error:', setResp.error?.message || null);
+          const retry = await supabaseAuth.auth.getUser();
+          serverDebug.debug('[join.route] retry supabaseAuth.getUser result - user present:', !!retry.data.user, 'error:', retry.error?.message || null);
+          if (retry.data.user) {
+            // use reconstructed user
+            user = retry.data.user;
+          } else {
+            return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+          }
+        } else {
+          return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+        }
+      } catch (e: unknown) {
+        serverDebug.warn('[join.route] setSession attempt failed', String(e));
+        return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+      }
+    }
+
+    const rawBody = (await request.json()) as unknown;
+    const parsedBody = (typeof rawBody === 'object' && rawBody) ? rawBody as Record<string, unknown> : {};
+    const target_km = typeof parsedBody.target_km === 'number' || typeof parsedBody.target_km === 'string' ? parsedBody.target_km : undefined;
+    if (target_km === undefined || target_km === null || (typeof target_km === 'string' && target_km.trim() === '')) {
       return NextResponse.json({ error: 'target_km required' }, { status: 400 });
     }
 
@@ -43,7 +89,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle();
 
     if (challengeErr) {
-      console.error('POST /api/challenges/[id]/join fetch challenge error', challengeErr);
+      serverDebug.error('POST /api/challenges/[id]/join fetch challenge error', challengeErr);
       return NextResponse.json({ error: 'Không thể lấy thông tin thử thách' }, { status: 500 });
     }
 
@@ -67,8 +113,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .eq('user_id', user_id)
       .maybeSingle();
 
-    if (existingErr) {
-      console.error('POST /api/challenges/[id]/join existing check error', existingErr);
+      if (existingErr) {
+      serverDebug.error('POST /api/challenges/[id]/join existing check error', existingErr);
       return NextResponse.json({ error: existingErr.message }, { status: 500 });
     }
 
@@ -82,10 +128,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         .maybeSingle();
 
       if (updateErr) {
-        console.error('POST /api/challenges/[id]/join update error', updateErr);
+        serverDebug.error('POST /api/challenges/[id]/join update error', updateErr);
         return NextResponse.json({ error: updateErr.message }, { status: 500 });
       }
 
+      serverDebug.debug('[join.route] participant updated successfully', { id: updated?.id, user_id, challenge_id: id, target_km });
       return NextResponse.json({ participant: updated });
     }
 
@@ -98,13 +145,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       .maybeSingle();
 
     if (error) {
-      console.error('POST /api/challenges/[id]/join error', error);
+      serverDebug.error('POST /api/challenges/[id]/join error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
+    serverDebug.debug('[join.route] participant inserted successfully', { id: data?.id, user_id, challenge_id: id, target_km });
     return NextResponse.json({ participant: data });
-  } catch (err: any) {
-    console.error('POST /api/challenges/[id]/join exception', err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+    } catch (err: unknown) {
+      serverDebug.error('POST /api/challenges/[id]/join exception', err);
+      return NextResponse.json({ error: String(err) }, { status: 500 });
+    }
 }

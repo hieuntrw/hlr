@@ -2,11 +2,10 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export default function Home() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
 
   console.log('[Home] Render - authLoading:', authLoading, 'user:', user?.id);
@@ -14,14 +13,17 @@ export default function Home() {
   useEffect(() => {
     console.log('[Home] useEffect - authLoading:', authLoading, 'user:', user?.id);
     
-    // Wait for auth to finish loading
-    if (authLoading) {
-      console.log('[Home] Still loading auth, waiting...');
+    // Wait for auth verification to complete (including server whoami)
+    if (authLoading || !sessionChecked) {
+      console.log('[Home] Still loading auth or session check pending, waiting...', { authLoading, sessionChecked });
       return;
     }
     
-    // Check if user is logged in and redirect
-    if (user) {
+    // Check if user (or a cached profile) is present and redirect
+    // Use `profile` as an authoritative client-side indicator when the
+    // Supabase client hasn't yet reconstructed a full `user` object from
+    // HttpOnly cookies (whoami fallback / server session reconstruction).
+    if (user || profile) {
       // User is logged in, redirect to dashboard
       console.log('[Home] User found, redirecting to /dashboard');
       router.push("/dashboard");
@@ -30,7 +32,7 @@ export default function Home() {
       console.log('[Home] No user, redirecting to /login');
       router.push("/login");
     }
-  }, [user, authLoading]); // Remove router from dependencies to avoid re-runs
+  }, [user, profile, authLoading, sessionChecked, router]);
 
   // Show loading state while checking auth
   return (

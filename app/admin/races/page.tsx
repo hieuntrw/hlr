@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { Calendar, MapPin, Image as ImageIcon, Plus, Trophy, Loader2, Upload, CheckCircle } from "lucide-react";
+import Image from "next/image";
 
 interface Race {
   id: string;
@@ -17,7 +17,7 @@ export default function AdminRacesPage() {
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", race_date: "", location: "", image_url: "" });
+  const [form, setForm] = useState<{ name: string; race_date: string; location: string; image_url: string | null }>({ name: "", race_date: "", location: "", image_url: null });
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
@@ -28,11 +28,15 @@ export default function AdminRacesPage() {
 
   async function fetchRaces() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("races")
-      .select("id, name, race_date, location, image_url")
-      .order("race_date", { ascending: false });
-    if (!error && data) setRaces(data as Race[]);
+    try {
+      const res = await fetch('/api/admin/races', { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Failed to load races');
+      const j: unknown = await res.json().catch(() => ({ data: [] }));
+      const data = (j && typeof j === 'object' ? (j as Record<string, unknown>).data : null) || [];
+      setRaces(data as Race[]);
+    } catch (err) {
+      console.error('Failed to load races', err);
+    }
     setLoading(false);
   }
 
@@ -46,19 +50,23 @@ export default function AdminRacesPage() {
     setSaving(true);
     setError(null);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         name: form.name.trim(),
         race_date: form.race_date,
         location: form.location.trim(),
       };
       if (form.image_url) payload.image_url = form.image_url.trim();
-      const { error } = await supabase.from("races").insert(payload);
-      if (error) throw error;
-      setForm({ name: "", race_date: "", location: "", image_url: "" });
+      const res = await fetch('/api/admin/races', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Create failed');
+      }
+      setForm({ name: "", race_date: "", location: "", image_url: null });
       await fetchRaces();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Create race failed:", err);
-      setError(err.message || "Không thể tạo sự kiện");
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as {message: string}).message : String(err);
+      setError(msg || "Không thể tạo sự kiện");
     } finally {
       setSaving(false);
     }
@@ -70,25 +78,42 @@ export default function AdminRacesPage() {
     setUploading(true);
     setUploadMsg(null);
     try {
+      // Upload via server endpoint which uses the service role key.
       const bucket = "race-banners";
-      const ext = file.name.split(".").pop();
-      const path = `${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
-      if (upErr) throw upErr;
+      const form = new FormData();
+      form.append('file', file);
+      form.append('bucket', bucket);
 
-      const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path);
-      if (pub?.publicUrl) {
-        setForm((prev) => ({ ...prev, image_url: pub.publicUrl }));
-        setUploadMsg("Đã tải banner lên thành công.");
-      } else {
-        setUploadMsg("Không thể lấy URL công khai, vui lòng nhập thủ công.");
+      const res = await fetch('/api/admin/storage/upload', {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: form,
+      });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Upload failed');
       }
-    } catch (err: any) {
+
+      const body: unknown = await res.json().catch(() => ({}));
+      const publicUrl = ((body && typeof body === 'object' ? (body as Record<string, unknown>).publicUrl : null) || null) as string | null;
+      if (publicUrl) {
+        setForm((prev) => ({ ...prev, image_url: publicUrl }));
+        setUploadMsg('Đã tải banner lên thành công.');
+      } else {
+        // fallback to local preview
+        try {
+          const tmpUrl = URL.createObjectURL(file);
+          setForm((prev) => ({ ...prev, image_url: tmpUrl }));
+          setUploadMsg('Đã tải banner lên server nhưng không thể lấy URL công khai. Vui lòng kiểm tra quyền bucket hoặc dùng URL thủ công.');
+        } catch {
+          setUploadMsg('Không thể lấy URL công khai, vui lòng nhập thủ công.');
+        }
+      }
+    } catch (err: unknown) {
       console.error("Banner upload failed:", err);
-      setUploadMsg(err.message || "Tải banner thất bại. Hãy kiểm tra quyền Storage/bucket.");
+      const msg = err && typeof err === 'object' && 'message' in err ? (err as {message: string}).message : String(err);
+      setUploadMsg(msg || "Tải banner thất bại. Hãy kiểm tra quyền Storage/bucket.");
     } finally {
       setUploading(false);
     }
@@ -115,7 +140,7 @@ export default function AdminRacesPage() {
                 <input
                   type="text"
                   className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2"
-                  style={{ "--tw-ring-color": "var(--color-primary)" } as any}
+                  style={{ "--tw-ring-color": "var(--color-primary)" } as React.CSSProperties}
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="VD: HCMC Marathon 2026"
@@ -128,7 +153,7 @@ export default function AdminRacesPage() {
                   <input
                     type="date"
                     className="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2"
-                    style={{ "--tw-ring-color": "var(--color-primary)" } as any}
+                    style={{ "--tw-ring-color": "var(--color-primary)" } as React.CSSProperties}
                     value={form.race_date}
                     onChange={(e) => setForm({ ...form, race_date: e.target.value })}
                   />
@@ -141,10 +166,10 @@ export default function AdminRacesPage() {
                   <input
                     type="text"
                     className="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2"
-                    style={{ "--tw-ring-color": "var(--color-primary)" } as any}
+                    style={{ "--tw-ring-color": "var(--color-primary)" } as React.CSSProperties}
                     value={form.location}
                     onChange={(e) => setForm({ ...form, location: e.target.value })}
-                    placeholder="VD: TP. Hồ Chí Minh"
+                    placeholder="VD: Vo Van Kiet Stadium"
                   />
                 </div>
               </div>
@@ -155,8 +180,8 @@ export default function AdminRacesPage() {
                   <input
                     type="url"
                     className="flex-1 border rounded-lg px-3 py-2 focus:outline-none focus:ring-2"
-                    style={{ "--tw-ring-color": "var(--color-primary)" } as any}
-                    value={form.image_url}
+                    style={{ "--tw-ring-color": "var(--color-primary)" } as React.CSSProperties}
+                    value={form.image_url ?? ""}
                     onChange={(e) => setForm({ ...form, image_url: e.target.value })}
                     placeholder="https://..."
                   />
@@ -177,7 +202,7 @@ export default function AdminRacesPage() {
                   </div>
                   {form.image_url && (
                     <div className="mt-3">
-                      <img src={form.image_url} alt="Race banner preview" className="w-full max-h-40 object-cover rounded" />
+                      <Image src={form.image_url} alt="Race banner preview" width={1200} height={300} className="w-full max-h-40 object-cover rounded" />
                     </div>
                   )}
                 </div>
@@ -214,11 +239,9 @@ export default function AdminRacesPage() {
                   <Link key={race.id} href={`/admin/races/${race.id}`} className="block">
                     <div className="p-4 rounded-lg border hover:shadow-md transition flex items-center gap-4">
                       {race.image_url ? (
-                        <img
-                          src={race.image_url}
-                          alt={race.name}
-                          className="w-20 h-14 rounded object-cover border"
-                        />
+                        <div className="w-20 h-14 rounded overflow-hidden border">
+                          <Image src={race.image_url} alt={race.name} width={160} height={112} className="object-cover" />
+                        </div>
                       ) : (
                         <div className="w-20 h-14 rounded bg-gray-100 border flex items-center justify-center text-gray-500 text-xs">
                           No Banner

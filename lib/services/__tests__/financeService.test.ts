@@ -34,7 +34,6 @@ describe('financeService', () => {
       { id: '2', created_at: '2025-11-30T10:00:00Z' },
       { id: '1', created_at: '2025-11-29T10:00:00Z' },
     ], error: null });
-    // @ts-ignore
     const result = await getUserTransactions.call({ supabase: mockSupabase }, 'user1');
     expect(result[0].id).toBe('2');
     expect(result.length).toBe(2);
@@ -49,7 +48,6 @@ describe('financeService', () => {
     mockSupabase.from.mockReturnValueOnce({ data: [{ amount: 100000, type: 'fund_collection' }], error: null });
     mockSupabase.from.mockReturnValueOnce({ data: [{ amount: 50000, type: 'expense' }], error: null });
     mockSupabase.from.mockReturnValueOnce({ data: [{ created_at: '2025-11-30', description: 'Chi nước', amount: 50000 }], error: null });
-    // @ts-ignore
     const result = await getPublicFundStats.call({ supabase: mockSupabase });
     expect(result.totalBalance).toBe(50000);
     expect(result.latestExpenses[0].description).toBe('Chi nước');

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { useEffect, useState, useCallback } from "react";
+// Use server endpoint to fetch rewards data to avoid client direct DB calls
 import { useAuth } from "@/lib/auth/AuthContext";
-import { Gift, Trophy, Star, Calendar, CheckCircle, Clock } from "lucide-react";
+import { Gift, Trophy, Star, Calendar, CheckCircle } from "lucide-react";
 
 interface MilestoneReward {
   id: string;
@@ -61,8 +61,7 @@ interface LuckyDrawWin {
 }
 
 export default function RewardsPage() {
-  const { user, isLoading: authLoading } = useAuth();
-  const [profile, setProfile] = useState<any>(null);
+  const { user, isLoading: authLoading, profile: authProfile, sessionChecked } = useAuth();
   const [loading, setLoading] = useState(true);
   
   // Milestones data
@@ -76,91 +75,52 @@ export default function RewardsPage() {
   
   const [activeTab, setActiveTab] = useState<"fm" | "hm" | "podium" | "lucky">("fm");
 
-  useEffect(() => {
-    loadData();
-  }, [user, authLoading]);
+  const loadData = useCallback(async () => {
+    // Wait for auth to finish loading and sessionChecked (whoami) to complete
+    if (authLoading || !sessionChecked) return;
 
-  const loadData = async () => {
-    // Wait for auth to finish loading
-    if (authLoading) return;
-    
     try {
-      // user from AuthContext
-      if (!user) {
+      if (!user && !authProfile) {
         window.location.href = "/login";
         return;
       }
-      // user already from AuthContext
 
-      // Get profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      setProfile(profileData);
-
-      // Load all milestones
-      const { data: milestonesData } = await supabase
-        .from("reward_milestones")
-        .select("*")
-        .eq("is_active", true)
-        .order("priority", { ascending: true });
-
-      if (milestonesData) {
-        setFmMilestones(milestonesData.filter((m: MilestoneReward) => m.race_type === "FM" && m.gender === profileData?.gender));
-        setHmMilestones(milestonesData.filter((m: MilestoneReward) => m.race_type === "HM" && m.gender === profileData?.gender));
+      // Call server endpoint that aggregates rewards-related data for the authenticated user
+      const resp = await fetch('/api/profile/rewards-summary', { credentials: 'same-origin' });
+      const j = await resp.json().catch(() => null);
+      if (!resp.ok || !j?.ok) {
+        console.error('[Rewards] rewards-summary API failed', j);
+        // keep authProfile from AuthContext; no local profile state needed
+        setFmMilestones([]);
+        setHmMilestones([]);
+        setAchievedMilestones([]);
+        setPodiumRewards([]);
+        setLuckyDrawWins([]);
+      } else {
+        const profileRow = j.profile || authProfile || null;
+        const allMilestones = Array.isArray(j.milestones) ? j.milestones : [];
+        setFmMilestones((allMilestones as unknown[]).filter((m: unknown) => {
+          const rec = (m as Record<string, unknown>) || {};
+          return String(rec.race_type ?? '') === 'FM' && String(rec.gender ?? '') === String(profileRow?.gender ?? '');
+        }) as MilestoneReward[]);
+        setHmMilestones((allMilestones as unknown[]).filter((m: unknown) => {
+          const rec = (m as Record<string, unknown>) || {};
+          return String(rec.race_type ?? '') === 'HM' && String(rec.gender ?? '') === String(profileRow?.gender ?? '');
+        }) as MilestoneReward[]);
+        setAchievedMilestones(Array.isArray(j.achieved) ? (j.achieved as MemberMilestone[]) : []);
+        setPodiumRewards(Array.isArray(j.podium) ? (j.podium as PodiumReward[]) : []);
+        setLuckyDrawWins(Array.isArray(j.lucky) ? (j.lucky as LuckyDrawWin[]) : []);
       }
-
-      // Load achieved milestones
-      const { data: achievedData } = await supabase
-        .from("member_milestone_rewards")
-        .select(`
-          *,
-          race:races(name, date),
-          milestone:reward_milestones(*)
-        `)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (achievedData) {
-        setAchievedMilestones(achievedData);
-      }
-
-      // Load podium rewards
-      const { data: podiumData } = await supabase
-        .from("member_podium_rewards")
-        .select(`
-          *,
-          race:races(name, date)
-        `)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (podiumData) {
-        setPodiumRewards(podiumData);
-      }
-
-      // Load lucky draw wins
-      const { data: luckyData } = await supabase
-        .from("lucky_draw_winners")
-        .select(`
-          *,
-          challenge:challenges(name, month, year)
-        `)
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
-
-      if (luckyData) {
-        setLuckyDrawWins(luckyData);
-      }
-
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("Error loading rewards data:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user, authLoading, sessionChecked, authProfile]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const formatTime = (seconds: number) => {
     if (seconds >= 999999) return "Hoàn thành";

@@ -13,12 +13,12 @@
 
 ### 1. **Authentication & OAuth Flow**
 - **OAuth Provider**: Strava (not built-in Supabase auth, uses custom implementation)
-- **Flow**: User → `/api/auth/strava/login` → Strava consent → `/api/auth/strava/callback` → token storage
+-- **Flow**: User → `/api/strava/connect/login` → Strava consent → `/api/strava/connect/callback` → token storage
 - **Token Storage**: Stored in `profiles` table (`strava_access_token`, `strava_refresh_token`, `strava_token_expires_at`)
 - **Key Files**:
   - `lib/strava-oauth.ts` - OAuth utility functions (getStravaAuthUrl, exchangeCodeForToken, refreshStravaToken)
-  - `app/api/auth/strava/login/route.ts` - Initiates OAuth flow
-  - `app/api/auth/strava/callback/route.ts` - Handles callback and token storage
+  - `app/api/strava/connect/login/route.ts` - Initiates Strava connect flow (requires Supabase auth)
+  - `app/api/strava/connect/callback/route.ts` - Handles callback and token storage (requires Supabase auth)
 
 **Critical Pattern**: Uses dynamic URL building based on `NODE_ENV` to determine protocol (https for prod, http for local).
 
@@ -26,10 +26,10 @@
 
 #### Core Tables:
 - **profiles** - User profiles with Strava credentials and personal bests (PBs)
-- **challenges** - Monthly challenges (auto-created monthly, locked after 10 days)
+- **challenges** - Monthly challenges (created monthly, locked after 10 days)
 - **challenge_participants** - Tracks participant progress (target_km, actual_km from Strava sync)
 - **races** - Race events (date, location)
-- **race_results** - Individual results (chip time, rank, PR flag)
+- **race_results** - Individual results (chip time, PR flag)
 - **transactions** - Financial tracking (collection, fines, donations, expenses, rewards)
 - **reward_definitions** - Milestones and podium criteria
 - **member_rewards** - Reward distribution tracking
@@ -45,7 +45,7 @@
 ### 3. **Row Level Security (RLS) Model**
 - **profiles**: Users read/update own only
 - **challenges**: Public read, admin-only write
-- **challenge_participants**: Users see own participations, admins see all
+- **challenge_participants**: Users see participations, admins see all
 - **race_results**: Users see own + public, admins manage all
 - **transactions**: Users see own, admins see all
 - **system_settings**: Public read-only
@@ -89,12 +89,12 @@ Always build redirect URIs using the pattern in `lib/strava-oauth.ts` and callba
 ```typescript
 const protocol = process.env.NODE_ENV === "production" ? "https" : "http";
 const host = request.headers.get("host") || "localhost:3000";
-const redirectUri = `${protocol}://${host}/api/auth/strava/callback`;
+const redirectUri = `${protocol}://${host}/api/strava/connect/callback`;
 ```
 Never hardcode URLs - this ensures localhost dev and production both work.
 
 ### 2. **Error Handling in OAuth Routes**
-Routes like `/api/auth/strava/callback` catch errors and redirect back to home with `?error=` query params instead of throwing. Follow this pattern for user-facing OAuth operations.
+Routes like `/api/strava/connect/callback` catch errors and redirect back to home with `?error=` query params instead of throwing. Follow this pattern for user-facing OAuth operations.
 
 ### 3. **Token Management Pattern**
 When fetching Strava data, check token expiry before API calls. The `refreshStravaToken` function is available but currently manual - future edge functions should call it automatically.
@@ -119,7 +119,7 @@ Always verify RLS policies are in place before querying tables from client. Test
 4. Frontend: Query via Supabase client with proper error handling
 
 ### Creating a New API Route
-Use `export const dynamic = "force-dynamic";` in callback/auth routes to prevent caching. Example: `app/api/auth/strava/callback/route.ts`
+Use `export const dynamic = "force-dynamic";` in callback/auth routes to prevent caching. Example: `app/api/strava/connect/callback/route.ts`
 
 ### Handling User Authentication State
 Currently uses implicit Supabase auth (`supabase.auth.getUser()`). Check `/app/dashboard/page.tsx` for usage patterns.
@@ -130,8 +130,8 @@ Currently uses implicit Supabase auth (`supabase.auth.getUser()`). Check `/app/d
 |------|---------|
 | `lib/strava-oauth.ts` | Strava OAuth utilities |
 | `lib/supabase-client.ts` | Supabase client initialization |
-| `app/api/auth/strava/login/route.ts` | OAuth login initiator |
-| `app/api/auth/strava/callback/route.ts` | OAuth token handler |
+| `app/api/strava/connect/login/route.ts` | Strava connect initiator (non-auth) |
+| `app/api/strava/connect/callback/route.ts` | Strava token handler (non-auth) |
 | `supabase/migrations/20251129032756_initial_hlr_schema.sql` | Core schema |
 | `supabase/migrations/20251129033549_add_rls_policies.sql` | RLS policies |
 

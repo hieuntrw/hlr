@@ -1,11 +1,14 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import serverDebug from '@/lib/server-debug';
 
-async function ensureAdmin(supabaseAuth: any) {
+async function ensureAdmin(supabaseAuth: SupabaseClient) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
-  const role = (user as any).user_metadata?.role as string | undefined;
+  // Prefer server-controlled app_metadata for role checks
+  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
   if (!role || !['admin', 'mod_challenge'].includes(role)) throw { status: 403, message: 'Không có quyền' };
 
   return user;
@@ -29,15 +32,15 @@ export async function POST(request: NextRequest) {
 
     const user = await ensureAdmin(supabaseAuth);
 
-    const body = await request.json();
+    const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, registration_deadline, min_pace_seconds, max_pace_seconds, min_km, description, require_map } = body;
     if (!title || !start_date || !end_date) {
       return NextResponse.json({ error: 'Thiếu trường bắt buộc' }, { status: 400 });
     }
 
-    const insertPayload: any = { title, start_date, end_date };
+    const insertPayload: Record<string, unknown> = { title, start_date, end_date };
     // set creator
-    if (user && (user as any).id) insertPayload.created_by = (user as any).id;
+    if (user?.id) insertPayload.created_by = user.id;
     if (registration_deadline) insertPayload.registration_deadline = registration_deadline;
     // Persist pace and description when provided. `require_map` is kept for API compatibility but not persisted (no migration).
     if (min_pace_seconds !== undefined && min_pace_seconds !== null) insertPayload.min_pace_seconds = Number(min_pace_seconds);
@@ -58,14 +61,14 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (error) {
-      console.error('POST /api/admin/challenges error', error);
+      serverDebug.error('POST /api/admin/challenges error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ challenge: data });
-  } catch (err: any) {
-    console.error('POST /api/admin/challenges exception', err);
-    const status = err?.status || 500;
-    return NextResponse.json({ error: err?.message || String(err) }, { status });
+  } catch (err: unknown) {
+    serverDebug.error('POST /api/admin/challenges exception', err);
+    const status = (err as Record<string, unknown>)?.status || 500;
+    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }

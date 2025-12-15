@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase-client";
-import { Activity, User, Users, Crown, Medal, Trophy } from "lucide-react";
+// Use server endpoint for leaderboard data
+import { Activity, Crown } from "lucide-react";
 
 interface ProfilePB {
   id: string;
@@ -35,10 +35,7 @@ function formatTime(seconds: number): string {
 }
 
 // Medal component for top 3
-function getMedalIcon(rank: number) {
-  const colors = ["text-yellow-400", "text-gray-400", "text-[var(--color-primary)]"];
-  return <Medal size={32} className={colors[rank - 1] || "text-gray-300"} />;
-}
+// getMedalIcon removed (unused)
 
 // Podium component for Top 3
 function Podium({ data, pbField }: { data: ProfilePB[]; pbField: string }) {
@@ -140,61 +137,26 @@ export default function HallOfFamePage() {
     setLoading(true);
 
     try {
-      const { data: profiles, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, gender, pb_fm_seconds, pb_fm_approved, pb_hm_seconds, pb_hm_approved")
-        .not("gender", "is", null);
-
-      if (error) {
-        console.error("Error fetching profiles:", error);
-        setLeaderboard([]);
-        return;
-      }
-
-      if (!profiles) {
-        setLeaderboard([]);
-        return;
-      }
-
-      // Determine which PB field and approval flag to use
-      let pbField: "pb_fm_seconds" | "pb_hm_seconds";
-      let approvalField: "pb_fm_approved" | "pb_hm_approved";
-      let targetGender: "Male" | "Female";
-
-      if (activeTab === "fm_male") {
-        pbField = "pb_fm_seconds";
-        approvalField = "pb_fm_approved";
-        targetGender = "Male";
-      } else if (activeTab === "fm_female") {
-        pbField = "pb_fm_seconds";
-        approvalField = "pb_fm_approved";
-        targetGender = "Female";
-      } else if (activeTab === "hm_male") {
-        pbField = "pb_hm_seconds";
-        approvalField = "pb_hm_approved";
-        targetGender = "Male";
-      } else {
-        // hm_female
-        pbField = "pb_hm_seconds";
-        approvalField = "pb_hm_approved";
-        targetGender = "Female";
-      }
-
-      // Filter and sort
-      const filtered = profiles
-        .filter((p) => {
-          const hasPB = p[pbField] !== null && p[pbField] !== undefined && p[pbField] > 0;
-          const isApproved = p[approvalField] === true;
-          const matchesGender = p.gender === targetGender;
-          return hasPB && isApproved && matchesGender;
-        })
-        .sort((a, b) => {
-          const aTime = a[pbField] || Infinity;
-          const bTime = b[pbField] || Infinity;
-          return aTime - bTime;
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin' });
+      const j = await resp.json().catch(() => null);
+      if (resp.ok && j?.ok && Array.isArray(j.data)) {
+        // j.data is expected to be ordered top->best (time ascending) and include rank,name,time_seconds,distance
+        // Map incoming minimal data to ProfilePB shape used by UI
+        const mapped = (Array.isArray(j.data) ? j.data : []).map((p: unknown) => {
+          const rec = (p as Record<string, unknown>) || {};
+          return {
+            id: String(rec.id ?? rec.name ?? ''),
+            full_name: String(rec.name ?? ''),
+            pb_fm_seconds: Number(rec.time_seconds ?? 0),
+            gender: undefined,
+          } as ProfilePB;
         });
-
-      setLeaderboard(filtered);
+        setLeaderboard(mapped);
+      } else {
+        console.warn('[HallOfFame] /api/hall-of-fame failed', j);
+        setLeaderboard([]);
+      }
     } catch (err) {
       console.error("Unexpected error:", err);
       setLeaderboard([]);

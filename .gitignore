@@ -27,3 +27,4 @@ pnpm-debug.log*
 .vscode/
 .idea/
 *.sublime-workspace
+backups/*.tar.gz

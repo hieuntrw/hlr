@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import RejectModal from "./RejectModal";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase-client";
 import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 interface Transaction {
   id: string;
@@ -62,100 +62,69 @@ function getTypeLabel(type: string): string {
 }
 
 export default function FinancePage() {
-  const { user, isAdmin, isLoading: authLoading } = useAuth();
+  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
-  const [adminUserId, setAdminUserId] = useState<string | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (authLoading) return;
-    checkRole();
-    fetchTransactions();
-  }, [user, authLoading]);
-
-  async function checkRole() {
-    // user from AuthContext
-
-    console.log('[Finance Page] Checking role for user:', user?.email, 'Role:', user?.user_metadata?.role);
-
+  const checkRole = useCallback(async () => {
     if (!user) {
       router.push("/debug-login");
       return;
     }
+    const detectedRole = getEffectiveRole(user, profile);
+    console.log('[Finance Page] Checking role for user:', user?.email, 'Role:', detectedRole);
 
-    setAdminUserId(user.id);
-
-    // Get role from Auth metadata
-    const userRole = user.user_metadata?.role;
-
-    if (userRole && ["admin", "mod_finance"].includes(userRole)) {
-      setRole(userRole);
-      console.log('[Finance Page] Role authorized:', userRole);
+    if (detectedRole && (isAdminRole(detectedRole) || detectedRole === 'mod_finance')) {
+      setRole(detectedRole);
+      console.log('[Finance Page] Role authorized:', detectedRole);
     } else {
-      console.log('[Finance Page] Unauthorized role:', userRole);
+      console.log('[Finance Page] Unauthorized role:', detectedRole);
       router.push("/");
     }
-  }
+  }, [user, profile, router]);
 
-  async function fetchTransactions() {
+  const fetchTransactions = useCallback(async () => {
     setLoading(true);
 
     try {
-      let query = supabase
-        .from("transactions")
-        .select("id, user_id, type, amount, description, transaction_date, payment_status, profiles(full_name), receipt_url, paid_by, paid_at, rejected_by, rejected_at, rejection_reason")
-        .order("transaction_date", { ascending: false });
-
-      if (filterType) {
-        query = query.eq("type", filterType);
+      const q = filterType ? `?type=${encodeURIComponent(filterType)}` : '';
+      const res = await fetch(`/api/admin/transactions${q}`, { credentials: 'same-origin' });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        throw new Error(txt || 'Failed to load transactions');
       }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Error fetching transactions:", error);
-        return;
-      }
-
-          setTransactions(
-            data?.map((t: any) => ({
-              id: t.id,
-              user_id: t.user_id,
-              type: t.type,
-              amount: t.amount,
-              description: t.description,
-              transaction_date: t.transaction_date,
-              payment_status: t.payment_status,
-              profile: t.profiles,
-              receipt_url: t.receipt_url,
-              paid_by: t.paid_by,
-              paid_at: t.paid_at,
-              rejected_by: t.rejected_by,
-              rejected_at: t.rejected_at,
-              rejection_reason: t.rejection_reason,
-            })) || []
-          );
+      const body = await res.json().catch(() => ({ transactions: [] }));
+      setTransactions(body.transactions || []);
     } catch (err) {
       console.error("Error:", err);
     } finally {
       setLoading(false);
     }
-  }
+  }, [filterType]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkRole();
+    fetchTransactions();
+  }, [user, authLoading, sessionChecked, checkRole, fetchTransactions]);
 
   async function approveTransaction(transactionId: string) {
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .update({ payment_status: 'paid', paid_by: adminUserId, paid_at: new Date().toISOString() })
-        .eq('id', transactionId)
-        .select()
-        .single();
-      if (error) throw error;
+      const res = await fetch('/api/admin/transactions', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: transactionId, action: 'approve' }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Approve failed');
+      }
       alert('Đã xác nhận thanh toán.');
       fetchTransactions();
     } catch (err) {
@@ -166,13 +135,16 @@ export default function FinancePage() {
 
   async function rejectTransaction(transactionId: string, reason: string) {
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .update({ payment_status: 'rejected', rejected_by: adminUserId, rejected_at: new Date().toISOString(), rejection_reason: reason })
-        .eq('id', transactionId)
-        .select()
-        .single();
-      if (error) throw error;
+      const res = await fetch('/api/admin/transactions', {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: transactionId, action: 'reject', reason }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || 'Reject failed');
+      }
       alert('Đã từ chối biên lai.');
       fetchTransactions();
     } catch (err) {
@@ -183,7 +155,7 @@ export default function FinancePage() {
 
   useEffect(() => {
     fetchTransactions();
-  }, [filterType]);
+  }, [filterType, fetchTransactions]);
 
   const totalIncome = transactions
     .filter((t) => ["fund_collection", "donation"].includes(t.type))
