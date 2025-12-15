@@ -3,23 +3,11 @@ import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug'
+import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  const { data: profile } = await supabaseAuth
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const role = profile?.role;
-  if (!role || !['admin', 'mod_finance', 'mod_member'].includes(role)) throw { status: 403, message: 'Không có quyền' };
-  return { user, role };
-}
+// Using shared `ensureAdmin` from `lib/server-auth`
 
 export async function GET(request: NextRequest) {
   try {
@@ -47,7 +35,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('member_rewards')
-      .select('id, status, user_id, race_result_id, reward_definition_id, related_transaction_id, profiles(full_name), reward_definitions(prize_description)')
+      .select('id, status, user_id, challenge_id, reward_definition_id, related_transaction_id')
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
 

@@ -14,8 +14,12 @@ interface RaceResult {
   race_id: string;
   distance: "5km" | "10km" | "21km" | "42km";
   chip_time_seconds: number;
-  official_rank: number;
-  age_group_rank: number;
+  // `official_rank` and `age_group_rank` were previously stored on
+  // `race_results` but the schema was changed to use `podium_config_id`.
+  // Keep these optional for backward compatibility where available.
+  official_rank?: number;
+  age_group_rank?: number;
+  podium_config_id?: string | null;
 }
 
 /**
@@ -228,35 +232,59 @@ export async function checkPodiumReward(
   serverDebug.debug(
     `[rewardService] Checking podium reward for user ${userId}, rank_type=${rankType}`
   );
+  // Prefer awarding based on a preselected `podium_config_id` stored on
+  // the race_result. If present, fetch that config and use it directly.
+  let podiumConfig: any = null;
+  let rank: number | null = null;
+  if (raceResult.podium_config_id) {
+    const { data: pcData, error: pcErr } = await supabase
+      .from('reward_podium_config')
+      .select('id, reward_description, cash_amount, podium_type, rank')
+      .eq('id', raceResult.podium_config_id)
+      .eq('is_active', true)
+      .limit(1);
 
-  const rank = rankType === "overall" ? raceResult.official_rank : raceResult.age_group_rank;
+    if (pcErr) {
+      serverDebug.error('[rewardService] Failed to fetch podium config by id:', pcErr);
+      return { awarded: false, reason: 'Could not fetch podium config' };
+    }
 
-  // Only ranks 1-3 eligible
-  if (!rank || rank < 1 || rank > 3) {
-    serverDebug.debug(`[rewardService] Rank ${rank} not in podium (1-3)`);
-    return { awarded: false, reason: "Rank not in top 3" };
-  }
+    if (!pcData || pcData.length === 0) {
+      serverDebug.debug('[rewardService] Podium config referenced by race_result not found or inactive');
+      return { awarded: false, reason: 'Podium config not found' };
+    }
+    podiumConfig = pcData[0];
+    rank = typeof podiumConfig.rank === 'number' ? podiumConfig.rank : (podiumConfig.rank ? Number(podiumConfig.rank) : null);
+  } else {
+    // Fallback to rank-based awarding when rank fields are available (back-compat).
+    rank = rankType === "overall" ? raceResult.official_rank ?? null : raceResult.age_group_rank ?? null;
 
-  // 2) Fetch podium config from reward_podium_config
-  const { data: podiumConfigs, error: podiumErr } = await supabase
-    .from('reward_podium_config')
-    .select('id, reward_description, cash_amount')
-    .eq('podium_type', rankType)
-    .eq('rank', rank)
-    .eq('is_active', true)
-    .limit(1);
+    // Only ranks 1-3 eligible
+    if (!rank || rank < 1 || rank > 3) {
+      serverDebug.debug(`[rewardService] Rank ${rank} not in podium (1-3) and no podium_config_id present`);
+      return { awarded: false, reason: "Rank not in top 3 or podium_config_id missing" };
+    }
+
+    const { data: podiumConfigs, error: podiumErr } = await supabase
+      .from('reward_podium_config')
+      .select('id, reward_description, cash_amount, podium_type, rank')
+      .eq('podium_type', rankType)
+      .eq('rank', rank)
+      .eq('is_active', true)
+      .limit(1);
 
     if (podiumErr) {
-    serverDebug.error('[rewardService] Failed to fetch podium config:', podiumErr);
-    return { awarded: false, reason: 'Could not fetch podium config' };
-  }
+      serverDebug.error('[rewardService] Failed to fetch podium config:', podiumErr);
+      return { awarded: false, reason: 'Could not fetch podium config' };
+    }
 
-  if (!podiumConfigs || podiumConfigs.length === 0) {
-    serverDebug.debug('[rewardService] No podium reward configured for this rank');
-    return { awarded: false, reason: 'No reward configured for this rank' };
-  }
+    if (!podiumConfigs || podiumConfigs.length === 0) {
+      serverDebug.debug('[rewardService] No podium reward configured for this rank');
+      return { awarded: false, reason: 'No reward configured for this rank' };
+    }
 
-  const podiumConfig = podiumConfigs[0];
+    podiumConfig = podiumConfigs[0];
+  }
 
   // Check existing podium award for same race result
   const alreadyPod = await isPodiumAlreadyAwarded(userId, podiumConfig.id, raceResult.id);

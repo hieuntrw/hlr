@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import ensureAdmin from '@/lib/server-auth';
 
 
 export const dynamic = 'force-dynamic';
@@ -11,13 +12,7 @@ async function getServiceClient() {
   return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 }
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error } = await supabaseAuth.auth.getUser();
-  if (error || !user) throw { status: 401, message: 'Không xác thực' };
-  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-  if (!role || !['admin','mod_finance','mod_challenge','mod_member'].includes(role)) throw { status: 403, message: 'Không có quyền' };
-  return user;
-}
+// use shared `ensureAdmin` helper
 
 export async function GET(request: NextRequest) {
   try {

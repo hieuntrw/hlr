@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const { data, error } = await client
       .from('race_results')
-      .select('id, user_id, distance, chip_time_seconds, official_rank, age_group_rank, evidence_link, is_pr, approved, category, milestone_name, profiles(full_name)')
+      .select('id, user_id, distance, chip_time_seconds, evidence_link, is_pr, approved, podium_config_id, profiles(full_name, gender)')
       .eq('race_id', raceId)
       .order('chip_time_seconds', { ascending: true });
 
@@ -97,8 +97,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const userId = typeof body.user_id === 'string' ? body.user_id : String(body.user_id || '');
     const distance = typeof body.distance === 'string' ? body.distance : String(body.distance || '');
     const chipSeconds = typeof body.chip_time_seconds === 'number' ? body.chip_time_seconds : timeToSeconds(String(body.chip_time || ''));
-    const officialRank = typeof body.official_rank === 'number' ? body.official_rank : (typeof body.official_rank === 'string' ? parseInt(body.official_rank, 10) : null);
-    const ageGroupRank = typeof body.age_group_rank === 'number' ? body.age_group_rank : (typeof body.age_group_rank === 'string' ? parseInt(body.age_group_rank, 10) : null);
+  
     const evidenceLink = typeof body.evidence_link === 'string' ? body.evidence_link : null;
 
     const payload: Record<string, unknown> = {
@@ -106,10 +105,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       user_id: userId,
       distance: distance,
       chip_time_seconds: chipSeconds,
-      official_rank: officialRank ?? null,
-      age_group_rank: ageGroupRank ?? null,
+  
       evidence_link: evidenceLink,
     };
+
+    // Accept optional `podium_config_id` (admin-selected podium config)
+    if (body.podium_config_id) {
+      payload.podium_config_id = String(body.podium_config_id);
+    }
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       // fallback to auth client
@@ -129,6 +132,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       // Optionally create a manual member_rewards if provided
+      // Legacy/manual reward insertion (member_rewards) kept for backwards compatibility
       if (body.reward_definition_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
         const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
         await service.from('member_rewards').insert({ user_id: body.user_id, race_result_id: raceResultId, reward_definition_id: body.reward_definition_id, status: 'pending' });

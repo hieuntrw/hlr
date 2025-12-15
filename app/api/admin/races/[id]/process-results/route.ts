@@ -1,20 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-
 export const dynamic = 'force-dynamic';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-
-
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-  if (!role || role !== 'admin') throw { status: 403, message: 'Không có quyền' };
-
-  return user;
-}
+import ensureAdmin from '@/lib/server-auth';
 
 function getRaceCategory(distance: string): 'HM' | 'FM' | null {
   const d = (distance || '').toLowerCase();
@@ -61,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Fetch race results for this race
     const { data: results, error: resErr } = await service
       .from('race_results')
-      .select('id, user_id, distance, chip_time_seconds, official_rank, age_group_rank')
+      .select('id, user_id, distance, chip_time_seconds, podium_config_id')
       .eq('race_id', raceId);
 
     if (resErr) {
@@ -138,60 +127,54 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 2) Podium rewards: overall and age_group
-      const rankTypes: Array<{ key: 'overall' | 'age_group'; rank: number | null }> = [
-        { key: 'overall', rank: rRec.official_rank as number ?? null },
-        { key: 'age_group', rank: rRec.age_group_rank as number ?? null },
-      ];
+      // 2) Podium rewards: overall an/d age_group
+        // 2) Podium rewards
+        // If admin pre-selected a podium config on the race_result, honor it first.
+        if (rRec.podium_config_id) {
+          const podId = String(rRec.podium_config_id);
+          const { data: podCfg, error: podErr } = await service
+            .from('reward_podium_config')
+            .select('id, reward_description, cash_amount, podium_type, rank')
+            .eq('id', podId)
+            .maybeSingle();
 
-      for (const rt of rankTypes) {
-        if (!rt.rank || rt.rank < 1 || rt.rank > 3) continue;
+          if (podErr) {
+            serverDebug.warn('Failed to fetch podium config', podErr);
+          } else if (podCfg) {
+            let relatedPodTxnId: string | null = null;
+            if ((podCfg as Record<string, unknown>).cash_amount && Number((podCfg as any).cash_amount) > 0) {
+              const { data: txnIns, error: txnErr } = await service.from('transactions').insert({
+                user_id: rRec.user_id as string,
+                type: 'reward_payout',
+                amount: (podCfg as Record<string, unknown>).cash_amount,
+                description: `Podium reward (preselected): ${(podCfg as Record<string, unknown>).reward_description as string}`,
+                transaction_date: new Date().toISOString().slice(0,10),
+                payment_status: 'pending'
+              }).select('id').maybeSingle();
+              if (txnErr) serverDebug.warn('Failed to create transaction for podium', txnErr);
+              else relatedPodTxnId = (txnIns as Record<string, unknown> | null)?.id as string ?? null;
+            }
 
-        const { data: podiums } = await service
-          .from('reward_podium_config')
-          .select('id, reward_description, cash_amount')
-          .eq('podium_type', rt.key)
-          .eq('rank', rt.rank)
-          .eq('is_active', true)
-          .limit(1);
-
-        if (podiums && podiums.length > 0) {
-          const pod = podiums[0] as Record<string, unknown>;
-          // create transaction first if needed
-          let relatedPodTxnId: string | null = null;
-          if (pod.cash_amount && Number(pod.cash_amount) > 0) {
-            const { data: txnIns, error: txnErr } = await service.from('transactions').insert({
-              user_id: rRec.user_id as string,
-              type: 'reward_payout',
-              amount: pod.cash_amount,
-              description: `Podium reward (${rt.key} - rank ${rt.rank}): ${pod.reward_description as string}`,
-              transaction_date: new Date().toISOString().slice(0,10),
-              payment_status: 'pending'
+            const ins = await service.from('member_podium_rewards').insert({
+              member_id: rRec.user_id as string,
+              race_id: raceId,
+              race_result_id: rRec.id as string,
+              podium_config_id: (podCfg as Record<string, unknown>).id,
+              podium_type: (podCfg as Record<string, unknown>).podium_type,
+              rank: (podCfg as Record<string, unknown>).rank,
+              reward_description: (podCfg as Record<string, unknown>).reward_description,
+              cash_amount: (podCfg as Record<string, unknown>).cash_amount,
+              status: 'pending',
+              related_transaction_id: relatedPodTxnId,
             }).select('id').maybeSingle();
-            if (txnErr) serverDebug.warn('Failed to create transaction for podium', txnErr);
-            else relatedPodTxnId = (txnIns as Record<string, unknown> | null)?.id as string ?? null;
-          }
 
-          const ins = await service.from('member_podium_rewards').insert({
-            member_id: rRec.user_id as string,
-            race_id: raceId,
-            race_result_id: rRec.id as string,
-            podium_config_id: pod.id,
-            podium_type: rt.key,
-            rank: rt.rank,
-            reward_description: pod.reward_description,
-            cash_amount: pod.cash_amount,
-            status: 'pending',
-            related_transaction_id: relatedPodTxnId,
-          }).select('id').maybeSingle();
-
-          if (ins.error) {
-            serverDebug.warn('Could not insert member_podium_rewards', ins.error);
-          } else {
-            summary.push({ race_result_id: rRec.id, podium_awarded: pod.id, podium_type: rt.key, rank: rt.rank, related_transaction_id: relatedPodTxnId });
+            if (ins.error) {
+              serverDebug.warn('Could not insert member_podium_rewards (preselected)', ins.error);
+            } else {
+              summary.push({ race_result_id: rRec.id, podium_awarded: (podCfg as Record<string, unknown>).id, podium_type: (podCfg as Record<string, unknown>).podium_type, rank: (podCfg as Record<string, unknown>).rank, related_transaction_id: relatedPodTxnId });
+            }
           }
         }
-      }
     }
 
     return NextResponse.json({ ok: true, processed: summary });

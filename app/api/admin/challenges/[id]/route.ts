@@ -2,23 +2,11 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  const { data: profile } = await supabaseAuth
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const role = profile?.role;
-  if (!role || !['admin', 'mod_challenge'].includes(role)) throw { status: 403, message: 'Không có quyền' };
-  return { user, role };
-}
+// use shared `ensureAdmin` helper
 
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   const { id } = params;

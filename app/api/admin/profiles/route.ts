@@ -3,18 +3,11 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug'
+import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  const role = (user.app_metadata as Record<string, unknown> | undefined)?.role as string | undefined;
-  if (!role || role !== 'admin') throw { status: 403, message: 'Không có quyền' };
-
-  return user;
-}
+// use shared `ensureAdmin` helper
 
 export async function GET(request: NextRequest) {
   const start = Date.now();

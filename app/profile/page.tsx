@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { User, Phone, Cake, Calendar, Watch, Activity, Target, Star } from "lucide-react";
+import PRIcon from '@/components/PRIcon';
 
 import { useAuth } from "@/lib/auth/AuthContext";
 interface Profile {
@@ -772,10 +773,7 @@ export default function ProfilePage() {
                   </div>
                   <div className="flex-1">
                     <h1 className="text-2xl font-bold mb-3 text-gray-900">{localProfile.full_name}</h1>
-                    <div className="flex items-center gap-3 mb-2">
-                      <Star size={16} className="text-yellow-500" fill="currentColor" />
-                      <div className="text-sm font-semibold text-gray-900">{(localProfile.total_stars ?? 0)} sao</div>
-                    </div>
+                    {/* total_stars moved to Personal Records (column 2) */}
                     <div className="space-y-1.5 text-base text-gray-700">
                       <p className="flex items-center gap-2"><Cake size={16} /> {formatDate(localProfile.dob)}</p>
                       <p className="flex items-center gap-2"><Watch size={16} /> {localProfile.device_name || "Chưa cập nhật"}</p>
@@ -798,7 +796,7 @@ export default function ProfilePage() {
               {/* Column 2: Personal Records */}
               <div className="rounded-lg border p-4" style={{ background: "rgba(var(--color-bg-secondary-rgb, 255, 255, 255), 0.6)", borderColor: 'var(--color-accent)', backdropFilter: 'blur(10px)' }}>
                 <div className="flex items-center gap-2 mb-3">
-                  <Star size={18} className="text-yellow-600" fill="currentColor" />
+                  <PRIcon className="text-yellow-600" size={18} />
                   <span className="font-bold text-sm text-gray-900">Personal Records</span>
                 </div>
                 <div className="flex items-center gap-3 mb-4">
@@ -824,6 +822,12 @@ export default function ProfilePage() {
                       <span className="text-xs text-yellow-600">⏳</span>
                     ) : null}
                   </div>
+                </div>
+
+                {/* Tổng số sao: chuyển từ cột 1 vào đây (dòng 2, sau PR) */}
+                <div className="pt-4 border-t flex items-center gap-3" style={{ borderColor: 'var(--color-accent)' }}>
+                  <Star size={16} className="text-yellow-500" fill="currentColor" />
+                  <div className="text-sm font-semibold text-gray-900">Tổng sao: {(localProfile.total_stars ?? 0)}</div>
                 </div>
 
                 {/* Milestone Rewards */}
@@ -1212,7 +1216,7 @@ export default function ProfilePage() {
 
                 <div>
                   <h4 className="text-sm font-bold mb-1.5 flex items-center gap-2" style={{ color: 'var(--color-primary)', marginLeft: '112px' }}>
-                    <Star size={14} className="text-yellow-500" fill="currentColor" />
+                    <PRIcon className="text-yellow-500" size={14} />
                     Personal Records
                   </h4>
                   <div className="space-y-1.5">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Activity, Calendar, MapPin, Medal, Star, Sparkles, User, Lightbulb } from "lucide-react";
+import PRIcon from '@/components/PRIcon';
 import Image from "next/image";
 import { supabase } from "@/lib/supabase-client";
 
@@ -19,8 +20,7 @@ interface RaceResult {
   user_id: string;
   distance: string;
   chip_time_seconds: number;
-  official_rank?: number;
-  age_group_rank?: number;
+  podium_config_id?: string | null;
   is_pr: boolean;
   profile?: {
     full_name: string;
@@ -75,8 +75,15 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
       style={{ background: "var(--color-bg-secondary)", boxShadow: "var(--shadow-md)" }}
     >
       {race.image_url && (
-        <div className="relative w-full h-40 overflow-hidden bg-gray-200">
-          <Image src={race.image_url} alt={race.name} fill className="object-cover hover:scale-105 transition-transform" />
+        <div className="w-full h-40 overflow-hidden bg-gray-200 flex items-center justify-center">
+          <Image
+            src={race.image_url}
+            alt={race.name}
+            width={1200}
+            height={160}
+            className="object-cover hover:scale-105 transition-transform"
+            style={{ width: 'auto', height: '160px', display: 'block' }}
+          />
         </div>
       )}
 
@@ -207,8 +214,7 @@ export default function RacesPage() {
           user_id,
           distance,
           chip_time_seconds,
-          official_rank,
-          age_group_rank,
+          podium_config_id,
           is_pr,
           profiles(full_name, avatar_url)
         `
@@ -231,8 +237,7 @@ export default function RacesPage() {
           user_id: String(r.user_id ?? ''),
           distance: String(r.distance ?? ''),
           chip_time_seconds: Number(r.chip_time_seconds ?? 0),
-          official_rank: r.official_rank as number | undefined,
-          age_group_rank: r.age_group_rank as number | undefined,
+          podium_config_id: (r.podium_config_id as string) ?? undefined,
           is_pr: Boolean(r.is_pr),
           profile: (r.profiles as RaceResult['profile']) ?? undefined,
         } as RaceResult;
@@ -304,11 +309,11 @@ export default function RacesPage() {
               ← Quay lại
             </button>
             <h1 className="text-4xl md:text-5xl font-bold mb-2">{selectedRace.name}</h1>
-            <p className="text-blue-100">
+            <div className="text-blue-100">
               <div className="flex items-center gap-3 text-gray-600">
                 <Calendar size={18} /> {formatDate(selectedRace.race_date)} • <MapPin size={18} /> {selectedRace.location}
               </div>
-            </p>
+            </div>
           </div>
         </div>
 
@@ -393,7 +398,7 @@ export default function RacesPage() {
                                         {result.profile?.full_name}
                                       </span>
                                       {result.is_pr && (
-                                        <Star size={20} className="text-yellow-400 fill-yellow-400 animate-pulse" />
+                                         <PRIcon className="text-yellow-400 fill-yellow-400 animate-pulse" />
                                       )}
                                     </div>
                                   </td>
@@ -403,11 +408,11 @@ export default function RacesPage() {
                                     </span>
                                   </td>
                                   <td className="py-3 px-4 text-right text-gray-600">
-                                    {result.age_group_rank ? `#${result.age_group_rank}` : "N/A"}
+                                    -
                                   </td>
                                   <td className="py-3 px-4 text-center">
                                     {result.is_pr ? (
-                                      <Sparkles size={24} className="text-yellow-400 mx-auto" />
+                                        <PRIcon className="text-yellow-400 mx-auto" size={24} />
                                     ) : (
                                       <span className="text-gray-300">-</span>
                                     )}

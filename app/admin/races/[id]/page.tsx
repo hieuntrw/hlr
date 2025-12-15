@@ -26,14 +26,11 @@ interface RaceResultRow {
   user_id: string;
   distance: "5km" | "10km" | "21km" | "42km";
   chip_time_seconds: number;
-  official_rank?: number;
-  age_group_rank?: number;
   evidence_link?: string;
   is_pr?: boolean;
   approved?: boolean;
-  category?: string;
-  milestone_name?: string;
-  profile?: { full_name: string };
+  podium_config_id?: string | null;
+  profile?: { full_name: string; gender?: string };
 }
 
 function timeToSeconds(t: string): number {
@@ -58,16 +55,15 @@ export default function AdminRaceDetailPage() {
   const [race, setRace] = useState<Race | null>(null);
   const [members, setMembers] = useState<ProfileOption[]>([]);
   const [results, setResults] = useState<RaceResultRow[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     user_id: "",
-    distance: "21km" as "5km" | "10km" | "21km" | "42km",
+    distance: "5km" as "5km" | "10km" | "21km" | "42km",
     chip_time: "",
-    official_rank: "",
-    age_group_rank: "",
     evidence_link: "",
-    reward_definition_id: "",
+    podium_config_id: "",
     gender: "",
   });
   const [message, setMessage] = useState<string | null>(null);
@@ -100,47 +96,60 @@ export default function AdminRaceDetailPage() {
     }
   }
 
-  // Try to get gender from profiles table; fallback to name-based inference
-  function inferGenderFromName(name = "") {
-    const n = name.toLowerCase();
-    // simple heuristic: look for common tokens that often indicate female names in VN
-    const femaleTokens = ["thị", "ngọc", "lan", "hoa", "mai", "thảo", "huệ", "hương", "trang", "anh", "ngân", "thùy", "thi"];
-    for (const t of femaleTokens) {
-      if (n.includes(t)) return "female";
-    }
-    // fallback: common male tokens
-    const maleTokens = ["anh", "hieu", "minh", "quan", "huy", "duc", "son", "tuan"];
-    for (const t of maleTokens) {
-      if (n.includes(t)) return "male";
-    }
-    return "";
-  }
+  // Gender resolution: only use `profiles.full_name` -> `gender` mapping.
 
   async function handleMemberChange(selectedId: string) {
     setForm({ ...form, user_id: selectedId });
+
+    // If no selection, clear gender
     if (!selectedId) {
       setForm((f) => ({ ...f, gender: "" }));
-      try {
-        const res = await fetch(`/api/admin/profiles/${selectedId}`);
-        const body: unknown = await res.json().catch(() => ({}));
-        const data = body && typeof body === 'object' && 'data' in body ? (body as Record<string, unknown>)['data'] as Record<string, unknown> : undefined;
-        if (res.ok && data) {
-          const g = data && 'gender' in data ? data['gender'] as string | null : null;
-          if (g) {
-            setForm((f) => ({ ...f, gender: g }));
-            return;
-          }
-          // no stored gender -> infer from name
-          const fullName = data && 'full_name' in data ? String(data['full_name'] ?? '') : '';
-          const inferred = inferGenderFromName(fullName);
-          if (inferred) setForm((f) => ({ ...f, gender: inferred }));
-          else setForm((f) => ({ ...f, gender: "" }));
+      return;
+    }
+
+    // 1) Try direct profile lookup by id
+    try {
+      const res = await fetch(`/api/admin/profiles/${selectedId}`, { credentials: 'same-origin' });
+      const body: unknown = await res.json().catch(() => null);
+      const data = body && typeof body === 'object' && 'data' in (body as Record<string, unknown>) ? (body as Record<string, unknown>)['data'] as Record<string, unknown> : (body as Record<string, unknown> | null);
+      if (res.ok && data) {
+        const g = data && 'gender' in data ? (data['gender'] as string | null) : null;
+        if (g) {
+          setForm((f) => ({ ...f, gender: String(g) }));
           return;
         }
-      } catch (e: unknown) {
-        console.warn("Failed to fetch profile gender", e);
-      }
 
+        // 2) Try to find other profiles with same full_name that may have gender
+        const fullName = data && 'full_name' in data ? String(data['full_name'] ?? '') : '';
+        if (fullName) {
+          try {
+            const byNameRes = await fetch(`/api/admin/profiles?full_name=${encodeURIComponent(fullName)}`, { credentials: 'same-origin' });
+            if (byNameRes.ok) {
+              const byNameJson = await byNameRes.json().catch(() => null) as any;
+              const list = byNameJson?.data || byNameJson?.profiles || byNameJson || [];
+              if (Array.isArray(list) && list.length > 0) {
+                const foundWithGender = list.find((p: any) => p && p.gender);
+                if (foundWithGender && foundWithGender.gender) {
+                  setForm((f) => ({ ...f, gender: String(foundWithGender.gender) }));
+                  return;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('profile lookup by full_name failed', e);
+          }
+        }
+      }
+    } catch (e: unknown) {
+      console.warn("Failed to fetch profile gender", e);
+    }
+
+    // 3) Final fallback: use gender from already-loaded members list if present
+    try {
+      const m = members.find((m) => m.id === selectedId);
+      const memberGender = m && m.gender ? String(m.gender) : "";
+      setForm((f) => ({ ...f, gender: memberGender || "" }));
+    } catch (e) {
       setForm((f) => ({ ...f, gender: "" }));
     }
   }
@@ -151,7 +160,14 @@ export default function AdminRaceDetailPage() {
       if (!res.ok) throw new Error('Failed to load results');
       const j = await res.json().catch(() => ({ data: [] }));
       const data = j.data || [];
-      const mapped = (data as Array<Record<string, unknown>>).map((r) => ({ ...r, profile: { full_name: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.full_name || '' } })) as RaceResultRow[];
+      const mapped = (data as Array<Record<string, unknown>>).map((r) => ({
+        ...r,
+        podium_config_id: (r as Record<string, unknown>).podium_config_id ?? null,
+        profile: {
+          full_name: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.full_name || '',
+          gender: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.gender || undefined,
+        },
+      })) as RaceResultRow[];
       setResults(mapped);
     } catch (e: unknown) {
       console.error('Failed to load results', e);
@@ -198,8 +214,6 @@ export default function AdminRaceDetailPage() {
         user_id: form.user_id,
         distance: form.distance,
         chip_time_seconds: chipSeconds,
-        official_rank: form.official_rank ? parseInt(form.official_rank, 10) : null,
-        age_group_rank: form.age_group_rank ? parseInt(form.age_group_rank, 10) : null,
         evidence_link: form.evidence_link || null,
       };
 
@@ -211,10 +225,8 @@ export default function AdminRaceDetailPage() {
           user_id: form.user_id,
           distance: form.distance,
           chip_time_seconds: chipSeconds,
-          official_rank: insertPayload.official_rank as number | null,
-          age_group_rank: insertPayload.age_group_rank as number | null,
           evidence_link: insertPayload.evidence_link as string | null,
-          reward_definition_id: (form as Record<string, string>).reward_definition_id,
+          podium_config_id: (form as Record<string, string>).podium_config_id || null,
         }),
       });
 
@@ -224,7 +236,7 @@ export default function AdminRaceDetailPage() {
       }
 
       setMessage("Lưu kết quả thành công. Đã kiểm tra PB và phần thưởng.");
-      setForm({ ...form, user_id: "", chip_time: "", official_rank: "", age_group_rank: "", evidence_link: "", gender: "" });
+      setForm({ ...form, user_id: "", chip_time: "", evidence_link: "", gender: "" });
       await fetchResults();
     } catch (err: unknown) {
       console.error("Save result error:", err);
@@ -384,8 +396,8 @@ export default function AdminRaceDetailPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Giải thưởng (nếu có)</label>
                 <select
                   className="w-full border rounded-lg px-3 py-2"
-                  value={(form as Record<string, string>).reward_definition_id || ""}
-                  onChange={(e) => setForm({ ...form, reward_definition_id: e.target.value })}
+                  value={(form as Record<string, string>).podium_config_id || ""}
+                  onChange={(e) => setForm({ ...form, podium_config_id: e.target.value })}
                 >
                   <option value="">-- Không chọn --</option>
                   {rewardDefs.map((rd) => {
@@ -399,10 +411,10 @@ export default function AdminRaceDetailPage() {
                     );
                   })}
                 </select>
-                {(form as Record<string, string>).reward_definition_id && (
+                {(form as Record<string, string>).podium_config_id && (
                   <p className="text-sm text-gray-600 mt-2">
                     {(() => {
-                      const sel = rewardDefs.find((r) => (r as Record<string, unknown>).id === (form as Record<string, string>).reward_definition_id);
+                      const sel = rewardDefs.find((r) => (r as Record<string, unknown>).id === (form as Record<string, string>).podium_config_id);
                       return sel ? ((sel as Record<string, unknown>).reward_description as string) || 'Không có mô tả' : '';
                     })()}
                   </p>
@@ -445,54 +457,105 @@ export default function AdminRaceDetailPage() {
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="text-left text-gray-600 border-b">
-                      <th className="py-2 px-3">Thành viên</th>
-                      <th className="py-2 px-3">Cự ly</th>
-                      <th className="py-2 px-3">Chip Time</th>
-                      <th className="py-2 px-3">PR</th>
-                      <th className="py-2 px-3">Duyệt PB</th>
-                      <th className="py-2 px-3">Mốc thưởng</th>
-                      <th className="py-2 px-3 text-right">Hành động</th>
-                      <th className="py-2 px-3">Link</th>
-                    </tr>
+                        <tr className="text-left text-gray-600 border-b">
+                          <th className="py-2 px-3">Thành viên</th>
+                          <th className="py-2 px-3">Giới tính</th>
+                          <th className="py-2 px-3">Cự ly</th>
+                          <th className="py-2 px-3">Chip Time</th>
+                          <th className="py-2 px-3">PR</th>
+                          <th className="py-2 px-3">Podium</th>
+                          <th className="py-2 px-3 text-right">Hành động</th>
+                          <th className="py-2 px-3">Link</th>
+                        </tr>
                   </thead>
                   <tbody>
                     {results.map((r) => (
                       <tr key={r.id} className="border-b">
                         <td className="py-2 px-3">{String(r.profile?.full_name ?? '')}</td>
+                        <td className="py-2 px-3">{r.profile?.gender === 'male' ? 'Nam' : r.profile?.gender === 'female' ? 'Nữ' : r.profile?.gender === 'other' ? 'Khác' : '—'}</td>
                         <td className="py-2 px-3">{r.distance}</td>
                         <td className="py-2 px-3">{secondsToTime(r.chip_time_seconds)}</td>
                           {/* official_rank and age_group_rank intentionally not shown here */}
                         <td className="py-2 px-3">{r.is_pr ? <CheckCircle className="text-green-600" size={18} /> : "-"}</td>
-                        <td className="py-2 px-3">{r.approved ? <CheckCircle size={18} style={{ color: "var(--color-primary)" }} /> : "-"}</td>
-                        <td className="py-2 px-3">{r.milestone_name || "-"}</td>
+
+                        <td className="py-2 px-3">{
+                          r.podium_config_id ? (
+                            (() => {
+                              const found = rewardDefs.find((d) => (d as Record<string, unknown>).id === r.podium_config_id);
+                              if (found) {
+                                const rec = asRecord(found);
+                                const typeLabel = rec.podium_type === 'overall' ? 'Chung cuộc' : rec.podium_type === 'age_group' ? 'Lứa tuổi' : String(rec.podium_type ?? '');
+                                return `${typeLabel} - Hạng ${String(rec.rank ?? '')}`;
+                              }
+                              return String(r.podium_config_id);
+                            })()
+                          ) : '-'}
+                        </td>
+
                         <td className="py-2 px-3 text-right">
-                          {(!r.approved) ? (
+                          <div className="inline-flex items-center gap-2">
                             <button
-                              className="px-3 py-1.5 text-white rounded text-xs"
-                              style={{ background: "var(--color-primary)" }}
-                              onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                              onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                              className="px-3 py-1.5 text-sm rounded border"
                               onClick={async () => {
+                                // populate form for edit
+                                setEditingId(r.id);
+                                setForm((f) => ({
+                                  ...f,
+                                  user_id: r.user_id,
+                                  distance: r.distance as any,
+                                  chip_time: secondsToTime(r.chip_time_seconds),
+                                  evidence_link: r.evidence_link || '',
+                                  podium_config_id: r.podium_config_id || '',
+                                }));
+                                await handleMemberChange(r.user_id);
+                              }}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              className="px-3 py-1.5 text-sm rounded text-white bg-red-600"
+                              onClick={async () => {
+                                if (!confirm('Xóa kết quả này?')) return;
                                 try {
-                                  const res = await fetch('/api/admin/race-results', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id, updates: { approved: true, is_pr: true } }) });
-                                  if (!res.ok) throw new Error('Approve failed');
-                                  const j = await res.json().catch(() => ({}));
-                                  const updated = j.updated;
-                                  if (updated?.milestone_name) setMessage(`Đã duyệt PB. Mốc thưởng: ${String(updated.milestone_name)}`);
-                                  else setMessage('Đã duyệt PB.');
+                                  const res = await fetch('/api/admin/race-results', { method: 'DELETE', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: r.id }) });
+                                  if (!res.ok) throw new Error('Delete failed');
+                                  setMessage('Đã xóa kết quả');
                                   await fetchResults();
                                 } catch (e) {
-                                  console.error('Approve PB error:', e);
-                                  alert('Không thể duyệt PB');
+                                  console.error('Delete error', e);
+                                  alert('Không thể xóa');
                                 }
                               }}
                             >
-                              Duyệt PB
+                              Xóa
                             </button>
-                          ) : (
-                            <span className="text-gray-400 text-xs">—</span>
-                          )}
+                            {editingId === r.id && (
+                              <button
+                                className="px-3 py-1.5 text-sm rounded text-white bg-green-600"
+                                onClick={async () => {
+                                  try {
+                                    const updates: Record<string, unknown> = {
+                                      distance: form.distance,
+                                      chip_time_seconds: timeToSeconds(form.chip_time || ''),
+                                      evidence_link: form.evidence_link || null,
+                                      podium_config_id: (form as Record<string, string>).podium_config_id || null,
+                                    };
+                                    const res = await fetch('/api/admin/race-results', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingId, updates }) });
+                                    if (!res.ok) throw new Error('Update failed');
+                                    setMessage('Cập nhật thành công');
+                                    setEditingId(null);
+                                    setForm({ ...form, user_id: '', chip_time: '', evidence_link: '', gender: '' });
+                                    await fetchResults();
+                                  } catch (e) {
+                                    console.error('Update error', e);
+                                    alert('Không thể cập nhật');
+                                  }
+                                }}
+                              >
+                                Lưu
+                              </button>
+                            )}
+                          </div>
                         </td>
                         <td className="py-2 px-3">
                           {r.evidence_link ? (

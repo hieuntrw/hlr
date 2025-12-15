@@ -1,20 +1,12 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug'
+import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  // Prefer server-controlled app_metadata for role
-  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-  if (!role || role !== 'admin') throw { status: 403, message: 'Không có quyền' };
-
-  return user;
-}
+// use shared `ensureAdmin` helper
 
 export async function GET(request: NextRequest) {
   try {

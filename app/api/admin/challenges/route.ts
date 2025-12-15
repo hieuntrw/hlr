@@ -2,17 +2,9 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import ensureAdmin from '@/lib/server-auth';
 
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  // Prefer server-controlled app_metadata for role checks
-  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-  if (!role || !['admin', 'mod_challenge'].includes(role)) throw { status: 403, message: 'Không có quyền' };
-
-  return user;
-}
+// use shared `ensureAdmin` helper
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +22,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const user = await ensureAdmin(supabaseAuth);
+    const { user } = await ensureAdmin(supabaseAuth);
 
     const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, registration_deadline, min_pace_seconds, max_pace_seconds, min_km, description, require_map } = body;

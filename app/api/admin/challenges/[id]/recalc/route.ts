@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  const role = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-  if (!role || role !== 'admin') throw { status: 403, message: 'Không có quyền' };
-
-  return user;
-}
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -69,7 +60,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Fetch participants for the challenge (or single participant if provided)
     // include `completed` so we can detect newly completed participants
     let partsQuery = service.from('challenge_participants').select('id,user_id,target_km,completed').eq('challenge_id', challengeId);
-    if (participantId) partsQuery = service.from('challenge_participants').select('id,user_id,target_km').eq('id', participantId).eq('challenge_id', challengeId);
+    if (participantId) partsQuery = service.from('challenge_participants').select('id,user_id,target_km,completed').eq('id', participantId).eq('challenge_id', challengeId);
 
     const { data: parts, error: partErr } = await partsQuery;
     if (partErr) {
