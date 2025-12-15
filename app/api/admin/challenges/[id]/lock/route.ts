@@ -1,6 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
 

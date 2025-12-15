@@ -6,7 +6,6 @@ import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 
 // use shared `ensureAdmin` helper
 
@@ -33,6 +32,14 @@ export async function PUT(request: NextRequest) {
 
     const id = String(body.id);
     const updates = body.updates as Record<string, unknown> | undefined;
+    // Sanitize updates: allow only known race_results columns
+    const allowedUpdateKeys = ['distance', 'chip_time_seconds', 'podium_config_id', 'is_pr', 'approved'];
+    const cleanUpdates: Record<string, unknown> = {};
+    if (updates) {
+      for (const k of allowedUpdateKeys) {
+        if (k in updates) cleanUpdates[k] = updates[k as keyof typeof updates];
+      }
+    }
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -40,7 +47,7 @@ export async function PUT(request: NextRequest) {
 
     const client = service || supabaseAuth;
 
-    const { data, error } = await client.from('race_results').update(updates).eq('id', id).select().maybeSingle();
+    const { data, error } = await client.from('race_results').update(cleanUpdates).eq('id', id).select().maybeSingle();
     if (error) {
       serverDebug.error('PUT /api/admin/race-results update error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });

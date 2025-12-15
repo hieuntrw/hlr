@@ -234,7 +234,7 @@ export async function checkPodiumReward(
   );
   // Prefer awarding based on a preselected `podium_config_id` stored on
   // the race_result. If present, fetch that config and use it directly.
-  let podiumConfig: any = null;
+  let podiumConfig: Record<string, unknown> | null = null;
   let rank: number | null = null;
   if (raceResult.podium_config_id) {
     const { data: pcData, error: pcErr } = await supabase
@@ -287,7 +287,8 @@ export async function checkPodiumReward(
   }
 
   // Check existing podium award for same race result
-  const alreadyPod = await isPodiumAlreadyAwarded(userId, podiumConfig.id, raceResult.id);
+  const podiumIdStr = String((podiumConfig as Record<string, unknown>)['id']);
+  const alreadyPod = await isPodiumAlreadyAwarded(userId, podiumIdStr, raceResult.id);
   if (alreadyPod) {
     serverDebug.debug('[rewardService] Podium reward already awarded for this race result');
     return { awarded: false, reason: 'Podium already awarded for this race' };
@@ -295,14 +296,15 @@ export async function checkPodiumReward(
 
   // Create transaction first if needed
   let relatedTxnId: string | null = null;
-  if (podiumConfig.cash_amount && podiumConfig.cash_amount > 0) {
+  const cashAmount = Number((podiumConfig as Record<string, unknown>)['cash_amount'] ?? 0);
+  if (cashAmount > 0) {
     const { data: txnIns, error: txnErr } = await supabase
       .from('transactions')
       .insert({
         user_id: userId,
         type: 'reward_payout',
-        amount: podiumConfig.cash_amount,
-        description: `Podium reward: ${rankType} rank ${rank} - ${podiumConfig.reward_description}`,
+        amount: cashAmount,
+        description: `Podium reward: ${rankType} rank ${rank} - ${String((podiumConfig as Record<string, unknown>)['reward_description'] ?? '')}`,
         transaction_date: new Date().toISOString().slice(0, 10),
         payment_status: 'pending'
       })

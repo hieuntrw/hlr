@@ -119,22 +119,20 @@ function PBModal({
 }: {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: { distance: string; time: string; evidence_link: string }) => void;
+  onSubmit: (data: { distance: string; time: string }) => void;
   isLoading: boolean;
 }) {
   const [distance, setDistance] = useState("21");
   const [time, setTime] = useState("01:30:00");
-  const [evidenceLink, setEvidenceLink] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!time || !evidenceLink) {
+    if (!time) {
       alert("Vui lòng điền đầy đủ thông tin");
       return;
     }
-    onSubmit({ distance, time, evidence_link: evidenceLink });
+    onSubmit({ distance, time });
     setTime("01:30:00");
-    setEvidenceLink("");
   };
 
   if (!isOpen) return null;
@@ -172,18 +170,7 @@ function PBModal({
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Link Bằng Chứng (Result Page)
-            </label>
-            <input
-              type="url"
-              value={evidenceLink}
-              onChange={(e) => setEvidenceLink(e.target.value)}
-              placeholder="https://example.com/results"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2"
-            />
-          </div>
+          
 
           <p className="text-sm text-gray-500 p-3 rounded" style={{ backgroundColor: 'var(--color-bg-tertiary)' }}>
             ℹ️ Thành tích này sẽ được gửi cho Admin duyệt trước khi cập nhật
@@ -584,7 +571,7 @@ export default function ProfilePage() {
     }
   }
 
-  async function handleSubmitPB(data: { distance: string; time: string; evidence_link: string }) {
+  async function handleSubmitPB(data: { distance: string; time: string }) {
     setSubmittingPB(true);
 
     try {
@@ -607,7 +594,6 @@ export default function ProfilePage() {
             distance: data.distance === '21' ? 'HM' : 'FM',
             time_seconds: totalSeconds,
             achieved_at: new Date().toISOString().split('T')[0],
-            evidence_link: data.evidence_link,
           }),
         });
 
@@ -678,7 +664,6 @@ export default function ProfilePage() {
             distance: "HM",
             time_seconds: totalSeconds,
             achieved_at: new Date().toISOString().split("T")[0],
-            evidence_link: "",
           });
         }
       }
@@ -694,7 +679,6 @@ export default function ProfilePage() {
             distance: "FM",
             time_seconds: totalSeconds,
             achieved_at: new Date().toISOString().split("T")[0],
-            evidence_link: "",
           });
         }
       }

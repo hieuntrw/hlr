@@ -143,12 +143,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
                   if (Number(p.target_km) >= nk) stars = Number(mapping[String(nk)] || 0);
                 }
               }
-            } catch (e) {
+            } catch {
               // invalid JSON — ignore
               stars = 0;
             }
           }
-        } catch (_) {
+        } catch {
           stars = 0;
         }
         if (!stars) {
@@ -177,15 +177,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // Award stars for newly completed participants: increment profiles.total_stars
     const awards: Array<Record<string, unknown>> = [];
     for (const a of starsToAward) {
-      try {
-        // Read current total
-        const { data: current, error: curErr } = await service.from('profiles').select('total_stars').eq('id', a.user_id).maybeSingle();
-        if (curErr) throw curErr;
-        const currentTotal = (current && (current as Record<string, unknown>).total_stars) ? Number((current as Record<string, unknown>).total_stars) : 0;
-        const newTotal = currentTotal + Number(a.stars);
-        const { data: pd, error: pdErr } = await service.from('profiles').update({ total_stars: newTotal }).eq('id', a.user_id).select().maybeSingle();
-        if (pdErr) throw pdErr;
-        awards.push({ user_id: a.user_id, participant_id: a.participant_id, stars: a.stars, new_total: newTotal });
+        try {
+          // Read current total
+          const { data: current, error: curErr } = await service.from('profiles').select('total_stars').eq('id', a.user_id).maybeSingle();
+          if (curErr) throw curErr;
+          const currentTotal = (current && (current as Record<string, unknown>).total_stars) ? Number((current as Record<string, unknown>).total_stars) : 0;
+          const newTotal = currentTotal + Number(a.stars);
+          const { error: pdErr } = await service.from('profiles').update({ total_stars: newTotal }).eq('id', a.user_id).select().maybeSingle();
+          if (pdErr) throw pdErr;
+          awards.push({ user_id: a.user_id, participant_id: a.participant_id, stars: a.stars, new_total: newTotal });
       } catch (errAward) {
         serverDebug.error('Failed to award stars', a, errAward);
         awards.push({ user_id: a.user_id, participant_id: a.participant_id, stars: a.stars, error: String(errAward) });

@@ -4,7 +4,7 @@ import serverDebug from '@/lib/server-debug'
 import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 // use shared `ensureAdmin` helper
 

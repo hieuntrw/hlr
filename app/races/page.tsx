@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Activity, Calendar, MapPin, Medal, Star, Sparkles, User, Lightbulb } from "lucide-react";
+import { Activity, Calendar, MapPin, Medal, Star, User, Lightbulb } from "lucide-react";
 import PRIcon from '@/components/PRIcon';
 import Image from "next/image";
 import { supabase } from "@/lib/supabase-client";

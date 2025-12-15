@@ -56,7 +56,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const { data, error } = await client
       .from('race_results')
-      .select('id, user_id, distance, chip_time_seconds, evidence_link, is_pr, approved, podium_config_id, profiles(full_name, gender)')
+      .select('id, user_id, distance, chip_time_seconds, is_pr, approved, podium_config_id, profiles(full_name, gender)')
       .eq('race_id', raceId)
       .order('chip_time_seconds', { ascending: true });
 
@@ -98,21 +98,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const distance = typeof body.distance === 'string' ? body.distance : String(body.distance || '');
     const chipSeconds = typeof body.chip_time_seconds === 'number' ? body.chip_time_seconds : timeToSeconds(String(body.chip_time || ''));
   
-    const evidenceLink = typeof body.evidence_link === 'string' ? body.evidence_link : null;
-
     const payload: Record<string, unknown> = {
       race_id: raceId,
       user_id: userId,
       distance: distance,
       chip_time_seconds: chipSeconds,
-  
-      evidence_link: evidenceLink,
     };
 
     // Accept optional `podium_config_id` (admin-selected podium config)
     if (body.podium_config_id) {
       payload.podium_config_id = String(body.podium_config_id);
     }
+
+    // Defensive: remove any accidental/legacy fields that don't exist in the new schema
+    delete (payload as Record<string, unknown>)['category'];
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       // fallback to auth client

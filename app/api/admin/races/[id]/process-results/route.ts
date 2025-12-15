@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
             serverDebug.warn('Failed to fetch podium config', podErr);
           } else if (podCfg) {
             let relatedPodTxnId: string | null = null;
-            if ((podCfg as Record<string, unknown>).cash_amount && Number((podCfg as any).cash_amount) > 0) {
+            if ((podCfg as Record<string, unknown>).cash_amount && Number((podCfg as Record<string, unknown>).cash_amount) > 0) {
               const { data: txnIns, error: txnErr } = await service.from('transactions').insert({
                 user_id: rRec.user_id as string,
                 type: 'reward_payout',

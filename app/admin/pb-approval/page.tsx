@@ -12,7 +12,6 @@ interface PBRecord {
   distance: string;
   time_seconds: number;
   achieved_at: string;
-  evidence_link: string;
   profile?: {
     full_name: string;
   };
@@ -66,7 +65,6 @@ export default function PBApprovalPage() {
             distance: string;
             time_seconds: number;
             achieved_at: string;
-            evidence_link: string;
             profiles?: { full_name?: string } | null;
           };
           return {
@@ -75,7 +73,6 @@ export default function PBApprovalPage() {
             distance: item.distance,
             time_seconds: item.time_seconds,
             achieved_at: item.achieved_at,
-            evidence_link: item.evidence_link,
             profile: item.profiles,
           };
         }) || []
@@ -171,7 +168,7 @@ export default function PBApprovalPage() {
                   <th className="text-right py-3 px-4 font-bold text-gray-700">Thời Gian</th>
                   <th className="text-right py-3 px-4 font-bold text-gray-700">Pace</th>
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày</th>
-                  <th className="text-center py-3 px-4 font-bold text-gray-700">Bằng Chứng</th>
+          
                   <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
                 </tr>
               </thead>
@@ -191,19 +188,7 @@ export default function PBApprovalPage() {
                       {formatPace(pb.time_seconds, pb.distance)}
                     </td>
                     <td className="py-3 px-4">{formatDate(pb.achieved_at)}</td>
-                    <td className="py-3 px-4 text-center">
-                      <a
-                        href={pb.evidence_link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-semibold"
-                        style={{ color: "var(--color-primary)" }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                      >
-                        🔗 Xem
-                      </a>
-                    </td>
+                    
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button

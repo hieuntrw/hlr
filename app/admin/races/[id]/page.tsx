@@ -26,7 +26,6 @@ interface RaceResultRow {
   user_id: string;
   distance: "5km" | "10km" | "21km" | "42km";
   chip_time_seconds: number;
-  evidence_link?: string;
   is_pr?: boolean;
   approved?: boolean;
   podium_config_id?: string | null;
@@ -55,14 +54,13 @@ export default function AdminRaceDetailPage() {
   const [race, setRace] = useState<Race | null>(null);
   const [members, setMembers] = useState<ProfileOption[]>([]);
   const [results, setResults] = useState<RaceResultRow[]>([]);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [, setEditingId] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     user_id: "",
-    distance: "5km" as "5km" | "10km" | "21km" | "42km",
+    distance: "21km" as "5km" | "10km" | "21km" | "42km",
     chip_time: "",
-    evidence_link: "",
     podium_config_id: "",
     gender: "",
   });
@@ -99,7 +97,7 @@ export default function AdminRaceDetailPage() {
   // Gender resolution: only use `profiles.full_name` -> `gender` mapping.
 
   async function handleMemberChange(selectedId: string) {
-    setForm({ ...form, user_id: selectedId });
+    setForm((f) => ({ ...f, user_id: selectedId }));
 
     // If no selection, clear gender
     if (!selectedId) {
@@ -125,12 +123,12 @@ export default function AdminRaceDetailPage() {
           try {
             const byNameRes = await fetch(`/api/admin/profiles?full_name=${encodeURIComponent(fullName)}`, { credentials: 'same-origin' });
             if (byNameRes.ok) {
-              const byNameJson = await byNameRes.json().catch(() => null) as any;
-              const list = byNameJson?.data || byNameJson?.profiles || byNameJson || [];
+              const byNameJson = await byNameRes.json().catch(() => null) as unknown;
+              const list = (byNameJson && typeof byNameJson === 'object') ? ((byNameJson as Record<string, unknown>)['data'] ?? (byNameJson as Record<string, unknown>)['profiles'] ?? byNameJson) : [];
               if (Array.isArray(list) && list.length > 0) {
-                const foundWithGender = list.find((p: any) => p && p.gender);
-                if (foundWithGender && foundWithGender.gender) {
-                  setForm((f) => ({ ...f, gender: String(foundWithGender.gender) }));
+                const foundWithGender = (list as Array<Record<string, unknown>>).find((p) => p && 'gender' in p && (p as Record<string, unknown>)['gender']);
+                if (foundWithGender && (foundWithGender as Record<string, unknown>)['gender']) {
+                  setForm((f) => ({ ...f, gender: String((foundWithGender as Record<string, unknown>)['gender']) }));
                   return;
                 }
               }
@@ -149,7 +147,7 @@ export default function AdminRaceDetailPage() {
       const m = members.find((m) => m.id === selectedId);
       const memberGender = m && m.gender ? String(m.gender) : "";
       setForm((f) => ({ ...f, gender: memberGender || "" }));
-    } catch (e) {
+    } catch {
       setForm((f) => ({ ...f, gender: "" }));
     }
   }
@@ -209,14 +207,6 @@ export default function AdminRaceDetailPage() {
       const chipSeconds = timeToSeconds(form.chip_time);
 
       // 1) Insert race result
-      const insertPayload: Record<string, unknown> = {
-        race_id: raceId,
-        user_id: form.user_id,
-        distance: form.distance,
-        chip_time_seconds: chipSeconds,
-        evidence_link: form.evidence_link || null,
-      };
-
       const res = await fetch(`/api/admin/races/${raceId}/results`, {
         method: 'POST',
         credentials: 'same-origin',
@@ -225,7 +215,7 @@ export default function AdminRaceDetailPage() {
           user_id: form.user_id,
           distance: form.distance,
           chip_time_seconds: chipSeconds,
-          evidence_link: insertPayload.evidence_link as string | null,
+          // evidence_link removed from schema
           podium_config_id: (form as Record<string, string>).podium_config_id || null,
         }),
       });
@@ -235,8 +225,8 @@ export default function AdminRaceDetailPage() {
         throw new Error(j?.error || 'Failed to save result');
       }
 
-      setMessage("Lưu kết quả thành công. Đã kiểm tra PB và phần thưởng.");
-      setForm({ ...form, user_id: "", chip_time: "", evidence_link: "", gender: "" });
+      setMessage("Lưu kết quả thành công!");
+        setForm({ ...form, user_id: "", chip_time: "", gender: "" });
       await fetchResults();
     } catch (err: unknown) {
       console.error("Save result error:", err);
@@ -420,28 +410,30 @@ export default function AdminRaceDetailPage() {
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link kết quả</label>
-                <input
-                  type="url"
-                  className="w-full border rounded-lg px-3 py-2"
-                  placeholder="https://official-result.com/..."
-                  value={form.evidence_link}
-                  onChange={(e) => setForm({ ...form, evidence_link: e.target.value })}
-                />
+              
+              <div className="flex items-center gap-3">
+                <button
+                  type="submit"
+                  disabled={!form.user_id || saving}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-60"
+                  style={{ background: "var(--color-primary)" }}
+                >
+                  {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
+                  Lưu kết quả
+                </button>
+                <button
+                  type="button"
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border"
+                  style={{ borderColor: "var(--color-primary)", color: "var(--color-primary)", background: "var(--color-card, white)" }}
+                  onClick={() => {
+                    setEditingId(null);
+                    setMessage(null);
+                    setForm({ user_id: "", distance: "5km", chip_time: "", podium_config_id: "", gender: "" });
+                  }}
+                >
+                  Hủy
+                </button>
               </div>
-
-              <button
-                type="submit"
-                disabled={!form.user_id || saving}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-60"
-                style={{ background: "var(--color-primary)" }}
-                onMouseEnter={(e) => !e.currentTarget.disabled && (e.currentTarget.style.opacity = '0.9')}
-                onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-              >
-                {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                Lưu kết quả
-              </button>
               {message && <p className="text-sm text-gray-700 mt-2">{message}</p>}
             </form>
           </div>
@@ -502,9 +494,9 @@ export default function AdminRaceDetailPage() {
                                 setForm((f) => ({
                                   ...f,
                                   user_id: r.user_id,
-                                  distance: r.distance as any,
+                                  distance: r.distance as RaceResultRow['distance'],
                                   chip_time: secondsToTime(r.chip_time_seconds),
-                                  evidence_link: r.evidence_link || '',
+                                                            
                                   podium_config_id: r.podium_config_id || '',
                                 }));
                                 await handleMemberChange(r.user_id);
@@ -529,40 +521,8 @@ export default function AdminRaceDetailPage() {
                             >
                               Xóa
                             </button>
-                            {editingId === r.id && (
-                              <button
-                                className="px-3 py-1.5 text-sm rounded text-white bg-green-600"
-                                onClick={async () => {
-                                  try {
-                                    const updates: Record<string, unknown> = {
-                                      distance: form.distance,
-                                      chip_time_seconds: timeToSeconds(form.chip_time || ''),
-                                      evidence_link: form.evidence_link || null,
-                                      podium_config_id: (form as Record<string, string>).podium_config_id || null,
-                                    };
-                                    const res = await fetch('/api/admin/race-results', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editingId, updates }) });
-                                    if (!res.ok) throw new Error('Update failed');
-                                    setMessage('Cập nhật thành công');
-                                    setEditingId(null);
-                                    setForm({ ...form, user_id: '', chip_time: '', evidence_link: '', gender: '' });
-                                    await fetchResults();
-                                  } catch (e) {
-                                    console.error('Update error', e);
-                                    alert('Không thể cập nhật');
-                                  }
-                                }}
-                              >
-                                Lưu
-                              </button>
-                            )}
+                            {/* Per-row save button removed — use the form's Save button above */}
                           </div>
-                        </td>
-                        <td className="py-2 px-3">
-                          {r.evidence_link ? (
-                            <a style={{ color: "var(--color-primary)" }} href={r.evidence_link} target="_blank">Link</a>
-                          ) : (
-                            "-"
-                          )}
                         </td>
                       </tr>
                     ))}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
-import type { SupabaseClient } from '@supabase/supabase-js';
+// SupabaseClient type removed — not needed in this route
 import { createClient } from "@supabase/supabase-js";
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
@@ -37,8 +37,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await service
       .from("pb_history")
-      .select("id, user_id, distance, time_seconds, achieved_at, evidence_link, profiles(full_name)")
-      .not("evidence_link", "is", null)
+      .select("id, user_id, distance, time_seconds, achieved_at, profiles(full_name)")
       .order("achieved_at", { ascending: false });
 
     if (error) {
