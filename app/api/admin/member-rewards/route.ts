@@ -228,6 +228,7 @@ export async function PUT(request: NextRequest) {
 
     const id = String(body.id);
     const updates = body.updates || { status: 'delivered', delivered_at: new Date().toISOString() };
+    const deliveredBy = body.delivered_by ?? null;
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -240,29 +241,38 @@ export async function PUT(request: NextRequest) {
     if (mmErr) serverDebug.warn('Error querying member_milestone_rewards', mmErr);
 
     if (mm) {
-      // create transaction for cash_amount if present
       let txnId: string | null = null;
       try {
-        const cash = Number(mm.cash_amount ?? 0);
+        const cash = Number((mm as Record<string, unknown>).cash_amount ?? 0);
         if (cash > 0) {
           const { data: tIns, error: tErr } = await client.from('transactions').insert({
-            user_id: mm.member_id,
+            user_id: (mm as Record<string, unknown>).member_id,
             type: 'reward_payout',
             amount: cash,
-            description: `Milestone payout: ${(mm.reward_description as string) ?? ''}`,
-            transaction_date: new Date().toISOString().slice(0,10),
+            description: `Milestone payout: ${((mm as Record<string, unknown>).reward_description as string) ?? ''}`,
+            transaction_date: new Date().toISOString().slice(0, 10),
             payment_status: 'paid'
           }).select('id').maybeSingle();
           if (!tErr && tIns) txnId = String((tIns as Record<string, unknown>)['id'] ?? null);
         }
-      } catch (e) {
-        serverDebug.warn('Failed to create transaction for milestone payout', e);
+      } catch {
+        serverDebug.warn('Failed to create transaction for milestone payout');
       }
 
-      // update reward row
       try {
-        const { data: updated, error: updErr } = await client.from('member_milestone_rewards').update({ ...updates, related_transaction_id: txnId }).eq('id', id).select().maybeSingle();
-        if (updErr) serverDebug.error('Failed to update member_milestone_rewards', updErr);
+        const payload: Record<string, unknown> = { ...updates, related_transaction_id: txnId };
+        if (deliveredBy) payload['delivered_by'] = deliveredBy;
+        const { data: updated, error: updErr } = await client.from('member_milestone_rewards').update(payload).eq('id', id).select().maybeSingle();
+        if (updErr) {
+          // Retry without delivered_by if column doesn't exist
+          if (/column .*delivered_by.*does not exist/i.test(String(updErr.message || ''))) {
+            delete payload['delivered_by'];
+            const { data: updated2, error: updErr2 } = await client.from('member_milestone_rewards').update(payload).eq('id', id).select().maybeSingle();
+            if (updErr2) serverDebug.error('Failed to update member_milestone_rewards (retry)', updErr2);
+            return NextResponse.json({ updated: updated2 });
+          }
+          serverDebug.error('Failed to update member_milestone_rewards', updErr);
+        }
         return NextResponse.json({ updated });
       } catch (e) {
         serverDebug.error('PUT member_milestone_rewards exception', e);
@@ -277,25 +287,35 @@ export async function PUT(request: NextRequest) {
     if (pr) {
       let txnId: string | null = null;
       try {
-        const cash = Number(pr.cash_amount ?? 0);
+        const cash = Number((pr as Record<string, unknown>).cash_amount ?? 0);
         if (cash > 0) {
           const { data: tIns, error: tErr } = await client.from('transactions').insert({
-            user_id: pr.member_id,
+            user_id: (pr as Record<string, unknown>).member_id,
             type: 'reward_payout',
             amount: cash,
-            description: `Podium payout: ${(pr.reward_description as string) ?? ''}`,
-            transaction_date: new Date().toISOString().slice(0,10),
+            description: `Podium payout: ${((pr as Record<string, unknown>).reward_description as string) ?? ''}`,
+            transaction_date: new Date().toISOString().slice(0, 10),
             payment_status: 'paid'
           }).select('id').maybeSingle();
           if (!tErr && tIns) txnId = String((tIns as Record<string, unknown>)['id'] ?? null);
         }
-      } catch (e) {
-        serverDebug.warn('Failed to create transaction for podium payout', e);
+      } catch {
+        serverDebug.warn('Failed to create transaction for podium payout');
       }
 
       try {
-        const { data: updated, error: updErr } = await client.from('member_podium_rewards').update({ ...updates, related_transaction_id: txnId }).eq('id', id).select().maybeSingle();
-        if (updErr) serverDebug.error('Failed to update member_podium_rewards', updErr);
+        const payload: Record<string, unknown> = { ...updates, related_transaction_id: txnId };
+        if (deliveredBy) payload['delivered_by'] = deliveredBy;
+        const { data: updated, error: updErr } = await client.from('member_podium_rewards').update(payload).eq('id', id).select().maybeSingle();
+        if (updErr) {
+          if (/column .*delivered_by.*does not exist/i.test(String(updErr.message || ''))) {
+            delete payload['delivered_by'];
+            const { data: updated2, error: updErr2 } = await client.from('member_podium_rewards').update(payload).eq('id', id).select().maybeSingle();
+            if (updErr2) serverDebug.error('Failed to update member_podium_rewards (retry)', updErr2);
+            return NextResponse.json({ updated: updated2 });
+          }
+          serverDebug.error('Failed to update member_podium_rewards', updErr);
+        }
         return NextResponse.json({ updated });
       } catch (e) {
         serverDebug.error('PUT member_podium_rewards exception', e);
@@ -310,3 +330,4 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
   }
 }
+

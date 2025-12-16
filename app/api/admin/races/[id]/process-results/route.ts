@@ -86,21 +86,7 @@ export async function POST(request: NextRequest) {
 
     const summary: Array<Record<string, unknown>> = [];
 
-    // Read system settings to determine whether to auto-deliver rewards
-    let autoDeliverAll = false;
-    let autoDeliverPodium = false;
-    let autoDeliverMilestone = false;
-    try {
-      const { data: sAll } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_rewards').maybeSingle();
-      const { data: sPod } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_podium').maybeSingle();
-      const { data: sMil } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_milestone').maybeSingle();
-      autoDeliverAll = String((sAll as any)?.value ?? '').toLowerCase() === 'true';
-      autoDeliverPodium = autoDeliverAll || String((sPod as any)?.value ?? '').toLowerCase() === 'true';
-      autoDeliverMilestone = autoDeliverAll || String((sMil as any)?.value ?? '').toLowerCase() === 'true';
-    } catch (e) {
-      // ignore and default to manual delivery
-    }
-
+    // Auto-deliver feature disabled: always create pending transactions and set rewards pending.
     // quick bail if no results
     if (!results || results.length === 0) {
       return NextResponse.json({ ok: true, processed: summary });
@@ -236,6 +222,7 @@ export async function POST(request: NextRequest) {
               } else {
                 // If there is cash, create transaction first so we can link it
                 let relatedTxnId: string | null = null;
+                // Always create pending transactions and set reward status to 'pending'
                 if ((found as Record<string, unknown>).cash_amount && Number((found as Record<string, unknown>).cash_amount) > 0) {
                   const { data: txnIns, error: txnErr } = await service.from('transactions').insert({
                     user_id: userId,
@@ -246,11 +233,11 @@ export async function POST(request: NextRequest) {
                     payment_status: 'pending'
                   }).select('id').maybeSingle();
                   if (txnErr) {
-                      serverDebug.warn('Failed to create transaction for milestone', txnErr);
-                    } else if (txnIns) {
-                      const maybeId = (txnIns as Record<string, unknown>)['id'];
-                      relatedTxnId = typeof maybeId === 'undefined' || maybeId === null ? null : String(maybeId);
-                    }
+                    serverDebug.warn('Failed to create transaction for milestone', txnErr);
+                  } else if (txnIns) {
+                    const maybeId = (txnIns as Record<string, unknown>)['id'];
+                    relatedTxnId = typeof maybeId === 'undefined' || maybeId === null ? null : String(maybeId);
+                  }
                 }
 
                 const ins = await service.from('member_milestone_rewards').insert({
@@ -262,6 +249,7 @@ export async function POST(request: NextRequest) {
                   reward_description: found.reward_description,
                   cash_amount: found.cash_amount,
                   status: 'pending',
+                  delivered_at: null,
                   related_transaction_id: relatedTxnId,
                 }).select('id').maybeSingle();
 
@@ -289,6 +277,7 @@ export async function POST(request: NextRequest) {
           serverDebug.warn('Failed to fetch podium config', podErr);
         } else if (podCfg) {
           let relatedPodTxnId: string | null = null;
+          // Always create pending transactions and set reward status to 'pending'
           if ((podCfg as Record<string, unknown>).cash_amount && Number((podCfg as Record<string, unknown>).cash_amount) > 0) {
             const { data: txnIns, error: txnErr } = await service.from('transactions').insert({
               user_id: userId,
@@ -315,6 +304,7 @@ export async function POST(request: NextRequest) {
             reward_description: (podCfg as Record<string, unknown>).reward_description,
             cash_amount: (podCfg as Record<string, unknown>).cash_amount,
             status: 'pending',
+            delivered_at: null,
             related_transaction_id: relatedPodTxnId,
           }).select('id').maybeSingle();
 
