@@ -86,6 +86,21 @@ export async function POST(request: NextRequest) {
 
     const summary: Array<Record<string, unknown>> = [];
 
+    // Read system settings to determine whether to auto-deliver rewards
+    let autoDeliverAll = false;
+    let autoDeliverPodium = false;
+    let autoDeliverMilestone = false;
+    try {
+      const { data: sAll } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_rewards').maybeSingle();
+      const { data: sPod } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_podium').maybeSingle();
+      const { data: sMil } = await service.from('system_settings').select('value').eq('key', 'auto_deliver_milestone').maybeSingle();
+      autoDeliverAll = String((sAll as any)?.value ?? '').toLowerCase() === 'true';
+      autoDeliverPodium = autoDeliverAll || String((sPod as any)?.value ?? '').toLowerCase() === 'true';
+      autoDeliverMilestone = autoDeliverAll || String((sMil as any)?.value ?? '').toLowerCase() === 'true';
+    } catch (e) {
+      // ignore and default to manual delivery
+    }
+
     // quick bail if no results
     if (!results || results.length === 0) {
       return NextResponse.json({ ok: true, processed: summary });
