@@ -30,6 +30,7 @@ interface RaceResultRow {
   approved?: boolean;
   podium_config_id?: string | null;
   profile?: { full_name: string; gender?: string };
+  milestone_reward?: string | null;
 }
 
 function timeToSeconds(t: string): number {
@@ -54,7 +55,7 @@ export default function AdminRaceDetailPage() {
   const [race, setRace] = useState<Race | null>(null);
   const [members, setMembers] = useState<ProfileOption[]>([]);
   const [results, setResults] = useState<RaceResultRow[]>([]);
-  const [, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
@@ -65,6 +66,7 @@ export default function AdminRaceDetailPage() {
     gender: "",
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [messageType, setMessageType] = useState<'success' | 'error' | null>(null);
   const [processingResults, setProcessingResults] = useState(false);
 
   
@@ -165,6 +167,7 @@ export default function AdminRaceDetailPage() {
           full_name: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.full_name || '',
           gender: ((r as Record<string, unknown>).profiles as Record<string, unknown> | undefined)?.gender || undefined,
         },
+        milestone_reward: (r as Record<string, unknown>).milestone_reward ?? null,
       })) as RaceResultRow[];
       setResults(mapped);
     } catch (e: unknown) {
@@ -205,32 +208,53 @@ export default function AdminRaceDetailPage() {
 
     try {
       const chipSeconds = timeToSeconds(form.chip_time);
-
-      // 1) Insert race result
-      const res = await fetch(`/api/admin/races/${raceId}/results`, {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: form.user_id,
-          distance: form.distance,
-          chip_time_seconds: chipSeconds,
-          // evidence_link removed from schema
-          podium_config_id: (form as Record<string, string>).podium_config_id || null,
-        }),
-      });
+      let res: Response;
+      if (editingId) {
+        // Update existing participant
+        res = await fetch(`/api/admin/races/${raceId}/participants/${editingId}`, {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chip_time_seconds: chipSeconds,
+            distance: form.distance,
+            podium_config_id: (form as Record<string, string>).podium_config_id || null,
+            user_id: form.user_id,
+          }),
+        });
+      } else {
+        // Add new participant
+        res = await fetch(`/api/admin/races/${raceId}/participants`, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: form.user_id,
+            distance: form.distance,
+            podium_config_id: (form as Record<string, string>).podium_config_id || null,
+          }),
+        });
+      }
 
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+          setMessage(j?.error || 'Thành viên đã tồn tại cho cự ly này');
+          setMessageType('error');
+          return;
+        }
         throw new Error(j?.error || 'Failed to save result');
       }
 
-      setMessage("Lưu kết quả thành công!");
-        setForm({ ...form, user_id: "", chip_time: "", gender: "" });
+      setMessageType('success');
+      setMessage(editingId ? 'Cập nhật thành công!' : 'Thêm thành công!');
+      setEditingId(null);
+      setForm({ user_id: '', distance: '5km', chip_time: '', podium_config_id: '', gender: '' });
       await fetchResults();
     } catch (err: unknown) {
       console.error("Save result error:", err);
       const msg = err && typeof err === 'object' && 'message' in err ? (err as {message: string}).message : String(err);
+      setMessageType('error');
       setMessage(msg || "Không thể lưu kết quả");
     } finally {
       setSaving(false);
@@ -239,21 +263,37 @@ export default function AdminRaceDetailPage() {
 
   // Pending rewards list
   const [pendingRewards, setPendingRewards] = useState<Array<Record<string, unknown>>>([]);
-  useEffect(() => {
-    if (raceId) fetchPendingRewards();
-  }, [raceId]);
-
-  async function fetchPendingRewards() {
+  const [pendingAuthRedirect, setPendingAuthRedirect] = useState<string | null>(null);
+  const fetchPendingRewards = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/member-rewards', { credentials: 'same-origin' });
+      const res = await fetch(`/api/admin/member-rewards?race_id=${encodeURIComponent(raceId)}`, { credentials: 'include' });
+      if (res.status === 401 || res.status === 403) {
+        // Not authenticated as admin — ask user to login and redirect back
+        try {
+          const redirectPath = window.location.pathname + window.location.search;
+          setPendingAuthRedirect(`/login?redirect=${encodeURIComponent(redirectPath)}`);
+        } catch {
+          setPendingAuthRedirect('/login');
+        }
+        setPendingRewards([]);
+        return;
+      }
+
       if (!res.ok) throw new Error('Failed to load pending rewards');
       const j = await res.json().catch(() => ({ data: [] }));
       const data = j.data || [];
       setPendingRewards(data as Array<Record<string, unknown>>);
     } catch (e: unknown) {
       console.error('Failed to load pending rewards', e);
+      setPendingRewards([]);
     }
-  }
+  }, [raceId]);
+
+  useEffect(() => {
+    if (raceId) fetchPendingRewards();
+  }, [raceId, fetchPendingRewards]);
+
+  
 
   async function markRewardDelivered(id: string) {
     try {
@@ -291,34 +331,6 @@ export default function AdminRaceDetailPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <Link href="/admin/races" className="font-medium" style={{ color: "var(--color-primary)" }}>← Quay lại</Link>
-                  <button
-                    className="inline-flex items-center gap-2 px-3 py-1 rounded text-sm bg-indigo-600 text-white"
-                    onClick={async () => {
-                      if (!raceId) return;
-                      setProcessingResults(true);
-                      setMessage(null);
-                      try {
-                        const res = await fetch(`/api/admin/races/${raceId}/process-results`, { method: 'POST' });
-                        const body = await res.json().catch(() => ({}));
-                        if (!res.ok) {
-                          setMessage(body?.error || 'Xử lý thất bại');
-                        } else {
-                          setMessage('Xử lý xong — ' + (body?.processed?.length || 0) + ' mục đã xử lý');
-                          // refresh results and pending rewards
-                          await fetchResults();
-                          await fetchPendingRewards();
-                        }
-                      } catch (e) {
-                        console.error('Process results failed', e);
-                        setMessage('Lỗi khi gọi API xử lý');
-                      } finally {
-                        setProcessingResults(false);
-                      }
-                    }}
-                    disabled={processingResults}
-                  >
-                    {processingResults ? <Loader2 className="animate-spin" size={14} /> : 'Xử lý kết quả'}
-                  </button>
                 </div>
               </div>
             </div>
@@ -419,7 +431,7 @@ export default function AdminRaceDetailPage() {
                   style={{ background: "var(--color-primary)" }}
                 >
                   {saving ? <Loader2 className="animate-spin" size={18} /> : <Save size={18} />}
-                  Lưu kết quả
+                  {editingId ? 'Cập nhật' : 'Thêm'}
                 </button>
                 <button
                   type="button"
@@ -434,7 +446,11 @@ export default function AdminRaceDetailPage() {
                   Hủy
                 </button>
               </div>
-              {message && <p className="text-sm text-gray-700 mt-2">{message}</p>}
+              {message && (
+                <p className={`text-sm mt-2 ${messageType === 'success' ? 'text-green-700' : messageType === 'error' ? 'text-red-700' : 'text-gray-700'}`}>
+                  {message}
+                </p>
+              )}
             </form>
           </div>
         </div>
@@ -442,7 +458,40 @@ export default function AdminRaceDetailPage() {
         {/* Results table */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">Danh sách tham gia</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900 mb-4">Danh sách tham gia</h2>
+                <div>
+                  <button
+                    className="inline-flex items-center gap-2 px-3 py-1 rounded text-sm disabled:opacity-60"
+                    style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
+                    onClick={async () => {
+                      if (!raceId) return;
+                      setProcessingResults(true);
+                      setMessage(null);
+                      try {
+                        const res = await fetch(`/api/admin/races/${raceId}/process-results`, { method: 'POST' });
+                        const body = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                          setMessage(body?.error || 'Xử lý thất bại');
+                        } else {
+                          setMessage('Xử lý xong — ' + (body?.processed?.length || 0) + ' mục đã xử lý');
+                          // refresh results and pending rewards
+                          await fetchResults();
+                          await fetchPendingRewards();
+                        }
+                      } catch (e) {
+                        console.error('Process results failed', e);
+                        setMessage('Lỗi khi gọi API xử lý');
+                      } finally {
+                        setProcessingResults(false);
+                      }
+                    }}
+                    disabled={processingResults}
+                  >
+                    {processingResults ? <Loader2 className="animate-spin" size={14} /> : 'Xử lý kết quả'}
+                  </button>
+                </div>
+              </div>
             {results.length === 0 ? (
               <p className="text-gray-600">Chưa có kết quả.</p>
             ) : (
@@ -455,9 +504,9 @@ export default function AdminRaceDetailPage() {
                           <th className="py-2 px-3">Cự ly</th>
                           <th className="py-2 px-3">Chip Time</th>
                           <th className="py-2 px-3">PR</th>
+                          <th className="py-2 px-3">Giải thưởng mốc</th>
                           <th className="py-2 px-3">Podium</th>
                           <th className="py-2 px-3 text-right">Hành động</th>
-                          <th className="py-2 px-3">Link</th>
                         </tr>
                   </thead>
                   <tbody>
@@ -469,6 +518,7 @@ export default function AdminRaceDetailPage() {
                         <td className="py-2 px-3">{secondsToTime(r.chip_time_seconds)}</td>
                           {/* official_rank and age_group_rank intentionally not shown here */}
                         <td className="py-2 px-3">{r.is_pr ? <CheckCircle className="text-green-600" size={18} /> : "-"}</td>
+                        <td className="py-2 px-3">{r.milestone_reward || '-'}</td>
 
                         <td className="py-2 px-3">{
                           r.podium_config_id ? (
@@ -476,8 +526,7 @@ export default function AdminRaceDetailPage() {
                               const found = rewardDefs.find((d) => (d as Record<string, unknown>).id === r.podium_config_id);
                               if (found) {
                                 const rec = asRecord(found);
-                                const typeLabel = rec.podium_type === 'overall' ? 'Chung cuộc' : rec.podium_type === 'age_group' ? 'Lứa tuổi' : String(rec.podium_type ?? '');
-                                return `${typeLabel} - Hạng ${String(rec.rank ?? '')}`;
+                                return String(rec.reward_description ?? rec.prize_description ?? `${rec.podium_type ?? ''} - Hạng ${String(rec.rank ?? '')}`);
                               }
                               return String(r.podium_config_id);
                             })()
@@ -537,19 +586,27 @@ export default function AdminRaceDetailPage() {
       {/* Pending Rewards */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Danh Sách Cần Trao Thưởng</h2>
-        {pendingRewards.length === 0 ? (
+        {pendingAuthRedirect ? (
+          <div className="text-sm">
+            <p className="text-gray-700 mb-2">Bạn cần đăng nhập bằng tài khoản admin để xem danh sách trao thưởng.</p>
+            <Link href={pendingAuthRedirect} className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg">Đăng nhập</Link>
+          </div>
+        ) : pendingRewards.length === 0 ? (
           <p className="text-gray-600">Chưa có phần thưởng nào chờ trao.</p>
         ) : (
           <div className="space-y-3">
             {pendingRewards.map((rw) => {
               const rec = asRecord(rw);
               const profile = asRecord(rec.profiles ?? {});
-              const rewardDef = asRecord(rec.reward_definitions ?? {});
+              const milestoneMeta = (rec.reward_milestones ?? (rec as Record<string, unknown>)['reward_milestones']) as Record<string, unknown> | undefined;
+              const podiumMeta = (rec.reward_podium_config ?? (rec as Record<string, unknown>)['reward_podium_config']) as Record<string, unknown> | undefined;
+              const rewardDesc = String(rec.reward_description ?? milestoneMeta?.reward_description ?? milestoneMeta?.milestone_name ?? podiumMeta?.reward_description ?? rec.prize_description ?? '—');
+              const typeLabel = rec.__type === 'milestone' ? 'Mốc' : rec.__type === 'podium' ? 'Podium' : '';
               return (
                 <div key={String(rec.id ?? '')} className="p-4 border rounded-lg flex items-center justify-between">
                   <div>
-                    <p className="font-semibold text-gray-900">{String(profile.full_name ?? '')}</p>
-                    <p className="text-sm text-gray-600">{String(rewardDef.prize_description ?? '')}</p>
+                    <p className="font-semibold text-gray-900">{String(profile.full_name ?? '')} {typeLabel ? <span className="text-sm text-gray-500">· {typeLabel}</span> : null}</p>
+                    <p className="text-sm text-gray-600">{rewardDesc}</p>
                   </div>
                   <button
                     onClick={() => markRewardDelivered(String(rec.id ?? ''))}

@@ -54,17 +54,94 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     const client = service || supabaseAuth;
 
-    const { data, error } = await client
-      .from('race_results')
-      .select('id, user_id, distance, chip_time_seconds, is_pr, approved, podium_config_id, profiles(full_name, gender)')
-      .eq('race_id', raceId)
-      .order('chip_time_seconds', { ascending: true });
-
-    if (error) {
-      serverDebug.error('GET race results error', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    // Try selecting with `approved` column; if the column doesn't exist (older schema), fall back.
+    let data: unknown = null;
+    try {
+      const res = await client
+        .from('race_results')
+        .select('id, user_id, distance, chip_time_seconds, is_pr, approved, podium_config_id, profiles(full_name, gender)')
+        .eq('race_id', raceId)
+        .order('chip_time_seconds', { ascending: true });
+      if (res.error) {
+        // If error is due to missing column, fallthrough to alternate query
+        if (!/column .*approved.*does not exist/i.test(String(res.error.message || ''))) {
+          serverDebug.error('GET race results error', res.error);
+          return NextResponse.json({ error: res.error.message }, { status: 500 });
+        }
+      } else {
+        data = res.data;
+      }
+    } catch {
+      // ignore and fallback
     }
-    return NextResponse.json({ data: data || [] });
+
+    if (!data) {
+      const res2 = await client
+        .from('race_results')
+        .select('id, user_id, distance, chip_time_seconds, is_pr, podium_config_id, profiles(full_name, gender)')
+        .eq('race_id', raceId)
+        .order('chip_time_seconds', { ascending: true });
+      if (res2.error) {
+        serverDebug.error('GET race results error (fallback)', res2.error);
+        return NextResponse.json({ error: res2.error.message }, { status: 500 });
+      }
+      data = res2.data;
+    }
+
+    // Attach any member_milestone_rewards / member_podium_rewards info for the returned race_result ids
+    const rows = (data || []) as Array<Record<string, unknown>>;
+    try {
+      const ids = rows.map((r) => String(r.id ?? '')).filter(Boolean);
+      if (ids.length > 0) {
+        // milestones
+        const { data: mm, error: mmErr } = await client
+          .from('member_milestone_rewards')
+          .select('id, race_result_id, status, milestone_id, reward_description, reward_milestones(id, milestone_name, reward_description)')
+          .in('race_result_id', ids);
+
+        if (!mmErr && mm) {
+          const mMap = new Map<string, Record<string, unknown>>();
+          for (const rwd of mm as Array<Record<string, unknown>>) {
+            const rrid = String(rwd.race_result_id ?? '');
+            const mmMeta = (rwd.reward_milestones as Record<string, unknown> | undefined) || null;
+            mMap.set(rrid, { type: 'milestone', milestone_id: rwd.milestone_id, milestone_name: mmMeta?.['milestone_name'] ?? mmMeta?.['reward_description'] ?? rwd.reward_description ?? null });
+          }
+
+          for (const r of rows) {
+            const rid = String(r.id ?? '');
+            const found = mMap.get(rid);
+            if (found) (r as Record<string, unknown>)['milestone_reward'] = found['milestone_name'] ?? null;
+          }
+        }
+
+        // podiums
+        const { data: pr, error: prErr } = await client
+          .from('member_podium_rewards')
+          .select('id, race_result_id, status, podium_config_id, reward_description, reward_podium_config(id, reward_description)')
+          .in('race_result_id', ids);
+
+        if (!prErr && pr) {
+          const pMap = new Map<string, Record<string, unknown>>();
+          for (const rwd of pr as Array<Record<string, unknown>>) {
+            const rrid = String(rwd.race_result_id ?? '');
+            const pc = (rwd.reward_podium_config as Record<string, unknown> | undefined) || null;
+            pMap.set(rrid, { type: 'podium', podium_config_id: rwd.podium_config_id, podium_name: pc?.['reward_description'] ?? rwd.reward_description ?? null });
+          }
+
+          for (const r of rows) {
+            const rid = String(r.id ?? '');
+            const found = pMap.get(rid);
+            if (found && !(r as Record<string, unknown>)['milestone_reward']) {
+              (r as Record<string, unknown>)['milestone_reward'] = found['podium_name'] ?? null;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      serverDebug.warn('Failed to fetch member rewards for race results', e);
+    }
+
+    return NextResponse.json({ data: rows || [] });
   } catch (err: unknown) {
     serverDebug.error('GET /api/admin/races/[id]/results exception', err);
     const status = (err as Record<string, unknown>)?.status || 500;
@@ -122,11 +199,20 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if ('category' in payload) delete (payload as Record<string, unknown>)['category'];
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      // fallback to auth client
-      const { data: inserted, error } = await supabaseAuth.from('race_results').insert(payload).select('id').maybeSingle();
+      // fallback to auth client — use upsert with onConflict to avoid duplicate-key 23505
+      const { data: inserted, error } = await supabaseAuth
+        .from('race_results')
+        .upsert(payload, { onConflict: 'race_id,user_id,distance' })
+        .select('id')
+        .maybeSingle();
       if (error) {
-        serverDebug.error('Insert race_result error', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        serverDebug.error('Insert/upsert race_result error', error);
+        const msg = String(error.message || error);
+        const errCode = (error as { code?: string }).code as string | undefined;
+        if (errCode === '23505' || msg.includes('duplicate key')) {
+          return NextResponse.json({ error: 'Duplicate race result exists' }, { status: 409 });
+        }
+        return NextResponse.json({ error: msg }, { status: 500 });
       }
 
       const raceResultId = inserted?.id;
@@ -138,22 +224,28 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         serverDebug.warn('Failed to trigger process-results', e);
       }
 
-      // Optionally create a manual member_rewards if provided
-      // Legacy/manual reward insertion (member_rewards) kept for backwards compatibility
-      if (body.reward_definition_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-        await service.from('member_rewards').insert({ user_id: body.user_id, race_result_id: raceResultId, reward_definition_id: body.reward_definition_id, status: 'pending' });
-      }
+      // Legacy/manual reward insertion into `member_rewards` has been deprecated in code.
+      // If admins need to assign milestone/podium rewards, use the specialized admin endpoints
+      // or create rows in `member_milestone_rewards` / `member_podium_rewards` directly.
 
       return NextResponse.json({ id: raceResultId });
     }
 
     // Prefer using service role for writes
     const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-    const { data: inserted, error } = await service.from('race_results').insert(payload).select('id').maybeSingle();
+    const { data: inserted, error } = await service
+      .from('race_results')
+      .upsert(payload, { onConflict: 'race_id,user_id,distance' })
+      .select('id')
+      .maybeSingle();
     if (error) {
-      serverDebug.error('Service insert race_result error', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      serverDebug.error('Service insert/upsert race_result error', error);
+      const msg = String(error.message || error);
+      const errCode = (error as { code?: string }).code as string | undefined;
+      if (errCode === '23505' || msg.includes('duplicate key')) {
+        return NextResponse.json({ error: 'Duplicate race result exists' }, { status: 409 });
+      }
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
 
     const raceResultId = inserted?.id;
@@ -178,10 +270,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       serverDebug.warn('Failed to trigger process-results', e);
     }
 
-    // If admin selected a reward manually, insert member_rewards
-    if (body.reward_definition_id) {
-      await service.from('member_rewards').insert({ user_id: body.user_id, race_result_id: raceResultId, reward_definition_id: body.reward_definition_id, status: 'pending' });
-    }
+    // Manual assignment via legacy `reward_definition_id` is intentionally skipped here.
+    // Use `member_milestone_rewards` or `member_podium_rewards` insertion paths instead.
 
     return NextResponse.json({ id: raceResultId });
   } catch (err: unknown) {

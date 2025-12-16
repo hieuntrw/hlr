@@ -33,7 +33,7 @@ export async function PUT(request: NextRequest) {
     const id = String(body.id);
     const updates = body.updates as Record<string, unknown> | undefined;
     // Sanitize updates: allow only known race_results columns
-    const allowedUpdateKeys = ['distance', 'chip_time_seconds', 'podium_config_id', 'is_pr', 'approved'];
+    const allowedUpdateKeys = ['distance', 'chip_time_seconds', 'podium_config_id', 'is_pr', 'status'];
     const cleanUpdates: Record<string, unknown> = {};
     if (updates) {
       for (const k of allowedUpdateKeys) {

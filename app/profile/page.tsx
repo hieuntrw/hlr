@@ -385,33 +385,64 @@ export default function ProfilePage() {
       const podium = json.podium || [];
       const lucky = json.lucky || [];
 
-      const combined = [...achieved, ...podium, ...lucky];
-
-      const mapped = (Array.isArray(combined) ? combined : []).map((r: unknown) => {
-        const rec = (r as Record<string, unknown>) || {};
-        const rdRaw = rec.reward_definitions;
-        const rd = Array.isArray(rdRaw) ? rdRaw[0] as Record<string, unknown> : rdRaw as Record<string, unknown> | undefined;
+      // Map different reward shapes (milestone, podium, lucky) into a common MemberReward-ish shape
+      const mapMilestone = (rec: Record<string, unknown>) => {
+        const milestone = (rec['milestone'] ?? rec['reward_milestone']) as Record<string, unknown> | null;
         return {
-          id: String(rec.id ?? `${rec.challenge_id ?? ''}-${rec.created_at ?? ''}`),
-          user_id: String(rec.user_id ?? user.id),
-          status: String(rec.status ?? 'achieved'),
-          awarded_date: String(rec.awarded_date ?? rec.awarded_at ?? rec.created_at ?? rec.delivered_at ?? ''),
-          created_at: String(rec.created_at ?? ''),
-          reward_definition_id: String(rec.reward_definition_id ?? rd?.id ?? ''),
-          reward_definitions: rd
+          id: String(rec['id'] ?? `${rec['challenge_id'] ?? ''}-${rec['created_at'] ?? ''}`),
+          user_id: String(rec['user_id'] ?? user.id),
+          status: String(rec['status'] ?? 'achieved'),
+          awarded_date: String(rec['awarded_date'] ?? rec['awarded_at'] ?? rec['created_at'] ?? rec['delivered_at'] ?? ''),
+          created_at: String(rec['created_at'] ?? ''),
+          reward_definition_id: String(milestone?.['id'] ?? ''),
+          reward_definitions: milestone
             ? {
-                id: String(rd.id ?? ''),
-                type: String(rd.type ?? ''),
-                category: String(rd.category ?? ''),
-                condition_label: String(rd.condition_label ?? rd.condition_label ?? ''),
-                prize_description: String(rd.prize_description ?? rd.prize ?? ''),
-                cash_amount: Number(rd.cash_amount ?? 0),
+                id: String(milestone['id'] ?? ''),
+                type: 'milestone',
+                category: String(milestone['race_type'] ?? ''),
+                condition_label: String(milestone['milestone_name'] ?? milestone['reward_description'] ?? ''),
+                prize_description: String(milestone['reward_description'] ?? ''),
+                cash_amount: Number(milestone['cash_amount'] ?? 0),
               }
             : null,
-          reward_name: String(rec.reward_name ?? (rd ? rd.condition_label : rec.reward_description) ?? ''),
-          reward_amount: rec.reward_amount ?? (rd ? Number(rd.cash_amount ?? 0) : undefined),
+          reward_name: String(milestone?.['milestone_name'] ?? milestone?.['reward_description'] ?? rec['reward_description'] ?? ''),
+          reward_amount: rec['reward_amount'] ?? Number(milestone?.['cash_amount'] ?? 0),
         } as MemberReward;
-      });
+      };
+
+      const mapPodium = (rec: Record<string, unknown>) => {
+        return {
+          id: String(rec['id'] ?? `${rec['race_id'] ?? ''}-${rec['created_at'] ?? ''}`),
+          user_id: String(rec['user_id'] ?? user.id),
+          status: String(rec['status'] ?? 'achieved'),
+          awarded_date: String(rec['awarded_date'] ?? rec['created_at'] ?? ''),
+          created_at: String(rec['created_at'] ?? ''),
+          reward_definition_id: String(rec['podium_config_id'] ?? ''),
+          reward_definitions: (rec['podium_config'] ?? null) as Record<string, unknown> | null,
+          reward_name: String(rec['reward_description'] ?? ((rec['podium_config'] as Record<string, unknown> | undefined)?.['reward_description'] ?? '')),
+          reward_amount: rec['cash_amount'] ?? ((rec['podium_config'] as Record<string, unknown> | undefined)?.['cash_amount'] ?? undefined),
+        } as MemberReward;
+      };
+
+      const mapLucky = (rec: Record<string, unknown>) => {
+        return {
+          id: String(rec['id'] ?? `${rec['challenge_id'] ?? ''}-${rec['created_at'] ?? ''}`),
+          user_id: String(rec['user_id'] ?? user.id),
+          status: String(rec['status'] ?? 'achieved'),
+          awarded_date: String(rec['awarded_date'] ?? rec['created_at'] ?? ''),
+          created_at: String(rec['created_at'] ?? ''),
+          reward_definition_id: String(rec['reward_definition_id'] ?? ''),
+          reward_definitions: null,
+          reward_name: String(rec['reward_name'] ?? rec['reward_description'] ?? ''),
+          reward_amount: rec['reward_amount'] ?? undefined,
+        } as MemberReward;
+      };
+
+      const mapped = [
+        ...(Array.isArray(achieved) ? achieved.map(mapMilestone) : []),
+        ...(Array.isArray(podium) ? podium.map(mapPodium) : []),
+        ...(Array.isArray(lucky) ? lucky.map(mapLucky) : []),
+      ];
 
       setRewards(mapped);
     } catch (err) {

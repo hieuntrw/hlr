@@ -93,7 +93,7 @@ export async function GET() {
       try {
         const rewardsResp = await supabase
           .from('member_rewards')
-          .select('*, reward_definitions(*)')
+          .select('*')
           .eq('user_id', user.id)
           .order(col as string, { ascending: false });
 
@@ -109,7 +109,7 @@ export async function GET() {
     }
 
     try {
-      const fallback = await supabase.from('member_rewards').select('*, reward_definitions(*)').eq('user_id', user.id);
+      const fallback = await supabase.from('member_rewards').select('*').eq('user_id', user.id);
       if (!fallback.error) return NextResponse.json({ ok: true, data: fallback.data });
       serverDebug.error('[profile.rewards] final fallback failed', fallback.error);
       return NextResponse.json({ ok: false, error: fallback.error.message }, { status: 500 });

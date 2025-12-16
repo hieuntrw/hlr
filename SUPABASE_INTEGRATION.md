@@ -317,6 +317,8 @@ export default function Rules() {
       // Get reward definitions
       const { data: rewards, error: rewardsError } = await supabase
         .from("reward_definitions")
+
+      Note: Although `reward_definitions` still exists for legacy and lucky-draw prize storage, the application now uses specialized tables for rewards: `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, and `member_podium_rewards`.
         .select("*")
         .order("category, priority_level");
 

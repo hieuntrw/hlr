@@ -28,3 +28,9 @@ pnpm-debug.log*
 .idea/
 *.sublime-workspace
 backups/*.tar.gz
+node_modules
+.next
+.env*.local
+.env
+dist
+build

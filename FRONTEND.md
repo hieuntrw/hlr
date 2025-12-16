@@ -186,6 +186,7 @@ To make these pages fully functional with Supabase:
 - [ ] Connect Profile page to `profiles` and `race_results` tables
 - [ ] Add Strava API integration for activity sync
 - [ ] Fetch reward definitions from `reward_definitions` table
+Note: `reward_definitions` is retained for legacy/lucky-draw usage. New reward flows use `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, and `member_podium_rewards`.
 - [ ] Add authentication check to protected routes
 - [ ] Implement error handling and loading states
 - [ ] Add pagination for race history

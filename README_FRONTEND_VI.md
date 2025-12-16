@@ -264,6 +264,7 @@ Tất cả 3 trang có hướng dẫn tích hợp chi tiết trong **SUPABASE_IN
 
 **Quy Định**
 - Truy vấn: Bảng `reward_definitions` (tùy chọn)
+Lưu ý: Bảng `reward_definitions` được giữ lại cho một số trường hợp legacy (ví dụ quay số may mắn). Các luồng phần thưởng mới sử dụng `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, và `member_podium_rewards`.
 - Tính năng: Nội dung tĩnh hoặc động
 
 ---
