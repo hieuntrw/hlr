@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@supabase/supabase-js';
 import { syncUserActivitiesForCurrentMonth } from '@/lib/services/stravaService';
 import serverDebug from '@/lib/server-debug'
@@ -42,6 +43,13 @@ export async function POST(request: NextRequest) {
         const msg = err instanceof Error ? err.message : String(err);
         results.push({ user_id: userId, success: false, error: msg });
       }
+    }
+
+    try {
+      revalidatePath('/challenges');
+      revalidatePath('/dashboard');
+    } catch (e) {
+      serverDebug.warn('[cron/strava-sync] revalidatePath failed', String(e));
     }
 
     return NextResponse.json({ success: true, processed: results.length, results });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from 'next/cache';
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import serverDebug from '@/lib/server-debug'
@@ -105,6 +106,12 @@ export async function POST(request: NextRequest) {
 
     try {
       const result = await syncUserActivitiesForCurrentMonth(user.id);
+      try {
+        revalidatePath('/challenges');
+        revalidatePath('/dashboard');
+      } catch (e) {
+        serverDebug.warn('[Strava Sync] revalidatePath failed', String(e));
+      }
       return NextResponse.json({ success: true, message: 'Synced via service', data: result });
       } catch (err: unknown) {
         serverDebug.error('[Strava Sync] Service sync failed:', String(err));

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
@@ -190,6 +191,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         serverDebug.error('Failed to award stars', a, errAward);
         awards.push({ user_id: a.user_id, participant_id: a.participant_id, stars: a.stars, error: String(errAward) });
       }
+    }
+
+    try {
+      revalidatePath(`/challenges/${challengeId}`);
+      revalidatePath('/challenges');
+      revalidatePath('/dashboard');
+    } catch (e) {
+      serverDebug.warn('[admin.recalc] revalidatePath failed', String(e));
     }
 
     return NextResponse.json({ ok: true, updated: results });

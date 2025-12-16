@@ -73,13 +73,13 @@ export default function ChallengePage({ params }: { params: { id: string } }) {
       setLoading(true);
       setError(null);
       try {
-        const chRes = await fetch(`/api/challenges/${id}`, { credentials: 'same-origin' });
+        const chRes = await fetch(`/api/challenges/${id}`, { credentials: 'same-origin', cache: 'no-store' });
         if (!chRes.ok) throw new Error(`Failed to load challenge (${chRes.status})`);
         const chJson = await chRes.json().catch(() => null);
         const ch = chJson?.challenge ?? null;
         if (mounted) setChallenge(ch);
 
-        const pRes = await fetch(`/api/challenges/${id}/participants`, { credentials: 'same-origin' });
+        const pRes = await fetch(`/api/challenges/${id}/participants`, { credentials: 'same-origin', cache: 'no-store' });
         if (!pRes.ok) throw new Error(`Failed to load participants (${pRes.status})`);
         const pJson = await pRes.json().catch(() => null);
         const parts = (pJson?.participants || []) as Participant[];

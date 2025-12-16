@@ -108,7 +108,7 @@ function DashboardContent() {
       setHallOfFameLoading(true);
       try {
         const base = typeof window !== 'undefined' ? window.location.origin : '';
-        const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin' });
+        const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin', cache: 'no-store' });
         const j = await resp.json().catch(() => null);
           if (resp.ok && j?.ok && Array.isArray(j.data)) {
           const mapped = j.data.map((r: unknown) => {
@@ -151,7 +151,7 @@ function DashboardContent() {
       // to avoid client-side direct PostgREST calls which may fail in dev.
       try {
         const base = typeof window !== 'undefined' ? window.location.origin : '';
-        const listResp = await fetch(`${base}/api/challenges?my=true`, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+        const listResp = await fetch(`${base}/api/challenges?my=true`, { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
         if (!listResp.ok) {
           console.warn('Failed to fetch my challenges for personal stats', listResp.status);
           setPersonalStats((prev) => ({ ...prev, status: 'not_joined', challengeName: 'Chưa có thử thách tháng này' }));
@@ -169,7 +169,7 @@ function DashboardContent() {
         if (!current) {
           // Not joined or no challenge this month
           // Try to fetch public challenge name for display
-          const pubResp = await fetch(`${base}/api/challenges`, { headers: { Accept: 'application/json' } });
+          const pubResp = await fetch(`${base}/api/challenges`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
           let pubName = 'Chưa có thử thách tháng này';
           if (pubResp.ok) {
             const pubJson = await pubResp.json().catch(() => null);

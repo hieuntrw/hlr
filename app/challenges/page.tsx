@@ -79,6 +79,7 @@ export default function ChallengesPage() {
       const resp = await fetch(url, {
         credentials: activeTab === 'my' ? 'same-origin' : 'omit',
         headers: { Accept: 'application/json' },
+        cache: 'no-store',
       });
       if (!resp.ok) {
         let bodyText = '';

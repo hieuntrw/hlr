@@ -111,7 +111,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // Defensive: remove any accidental/legacy fields that don't exist in the new schema
-    delete (payload as Record<string, unknown>)['category'];
+    if ('category' in body) {
+      serverDebug.warn('Legacy field `category` present in request body — removing before insert');
+      try {
+        delete (body as Record<string, unknown>)['category'];
+      } catch {
+        // ignore
+      }
+    }
+    if ('category' in payload) delete (payload as Record<string, unknown>)['category'];
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       // fallback to auth client

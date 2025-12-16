@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug'
 
@@ -42,6 +43,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     if (error) {
       serverDebug.error('POST /api/challenges/[id]/leave error', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    try {
+      revalidatePath(`/challenges/${id}`);
+      revalidatePath('/challenges');
+      revalidatePath('/dashboard');
+    } catch (e) {
+      serverDebug.warn('[leave.route] revalidatePath failed', String(e));
     }
 
     return NextResponse.json({ message: 'Left challenge' });

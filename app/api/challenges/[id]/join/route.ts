@@ -1,4 +1,5 @@
 import { NextResponse, NextRequest } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug'
 
@@ -133,6 +134,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
 
       serverDebug.debug('[join.route] participant updated successfully', { id: updated?.id, user_id, challenge_id: id, target_km });
+      try {
+        revalidatePath(`/challenges/${id}`);
+        revalidatePath('/challenges');
+        revalidatePath('/dashboard');
+      } catch (e) {
+        serverDebug.warn('[join.route] revalidatePath failed', String(e));
+      }
       return NextResponse.json({ participant: updated });
     }
 
@@ -150,6 +158,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     serverDebug.debug('[join.route] participant inserted successfully', { id: data?.id, user_id, challenge_id: id, target_km });
+    try {
+      revalidatePath(`/challenges/${id}`);
+      revalidatePath('/challenges');
+      revalidatePath('/dashboard');
+    } catch (e) {
+      serverDebug.warn('[join.route] revalidatePath failed', String(e));
+    }
     return NextResponse.json({ participant: data });
     } catch (err: unknown) {
       serverDebug.error('POST /api/challenges/[id]/join exception', err);

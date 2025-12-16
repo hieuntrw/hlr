@@ -359,7 +359,7 @@ export default function ProfilePage() {
       for (let i = 29; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = localDateKey(date); // use local date key to respect local (VN) timezone
         chartData.push({ date: dateStr, km: aggregatedData[dateStr] || 0 });
       }
 
@@ -963,7 +963,9 @@ export default function ProfilePage() {
                     const isRunOrWalk = activity.type === "Run" || activity.type === "Walk";
                     const hasMinDistance = kmDistance >= 1;
                     const hasGPS = !!activity.map_summary_polyline;
-                    const isValid = isRunOrWalk && hasMinDistance && hasGPS;
+                    // Pace: seconds per km. Mark fast runs (pace < 4:00 /km i.e. <240s/km)
+                    const isFastPace = pace >= 240;
+                    const isValid = isRunOrWalk && hasMinDistance && hasGPS && isFastPace;
                     
                     const rowClass = isValid 
                       ? "border-b hover:opacity-95 transition-colors"
@@ -974,9 +976,11 @@ export default function ProfilePage() {
                       : { borderColor: "var(--color-error)", background: "var(--color-error-bg, #FEE2E2)" };
                     
                     const textClass = isValid ? "text-gray-900" : "text-red-600";
+
+                    
                     
                     return (
-                      <tr key={activity.id} className={rowClass} style={rowStyle}>
+                      <tr key={activity.id} className={`${rowClass} ${isValid ? 'bg-green-50' : ''}`} style={isValid ? { ...rowStyle, background: 'var(--color-success-bg, #ECFDF5)' } : rowStyle}>
                         <td className="py-3 px-2 text-gray-600">
                           {formatDate(activity.start_date)}
                         </td>
@@ -997,7 +1001,7 @@ export default function ProfilePage() {
                             <span className="text-red-600 font-bold">✗</span>
                           )}
                         </td>
-                        <td className="py-3 px-2 text-right text-gray-600">
+                        <td className={`py-3 px-2 text-right ${isValid ? 'text-green-700 font-bold' : 'text-gray-600'}`}>
                           {formatPace(pace)}
                         </td>
                         <td className="py-3 px-2 text-right text-gray-600">
@@ -1018,7 +1022,8 @@ export default function ProfilePage() {
               <div className="mt-4 p-3 border rounded text-sm" style={{ background: "var(--color-warning-bg, #FEF3C7)", borderColor: "var(--color-warning, #F59E0B)" }}>
                 <p className="text-gray-700 mb-2"><strong>Chú thích:</strong></p>
                 <ul className="text-gray-600 space-y-1 text-xs">
-                  <li>• <span className="text-red-600 font-semibold">Hoạt động đỏ</span>: Không hợp lệ (không phải Run/Walk, hoặc &lt;1km, hoặc không có GPS)</li>
+                  <li>• <span className="text-red-600 font-semibold">Hoạt động đỏ</span>: Không hợp lệ (không phải Run/Walk, hoặc &lt;1km, hoặc không có GPS, Pace &lt; 4 phút/km)</li>
+                    
                   <li>• <span className="text-green-600 font-semibold">✓</span>: Có GPS map | <span className="text-red-600 font-semibold">✗</span>: Không có GPS map</li>
                   <li>• Chỉ hiển thị 30 ngày gần nhất</li>
                 </ul>
