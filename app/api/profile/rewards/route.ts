@@ -6,33 +6,8 @@ import serverDebug from '@/lib/server-debug';
 
 export const dynamic = 'force-dynamic';
 
-let ORDER_COLUMN: string | null = null;
-
-async function probeOrderColumn() {
-  try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key =
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) return;
-    const admin = createClient(url, key);
-
-    let resp = await admin.from('member_rewards').select('awarded_date').limit(1).maybeSingle();
-    if (!resp.error) {
-      ORDER_COLUMN = 'awarded_date';
-      return;
-    }
-
-    resp = await admin.from('member_rewards').select('awarded_at').limit(1).maybeSingle();
-    if (!resp.error) {
-      ORDER_COLUMN = 'awarded_at';
-      return;
-    }
-  } catch (e) {
-    serverDebug.debug('[profile.rewards] probeOrderColumn failed', String(e));
-  }
-}
-
-probeOrderColumn();
+// We now aggregate reward history from specialized tables instead of relying
+// primarily on legacy `member_rewards`. Keep minimal fallback for legacy rows.
 
 export async function GET() {
   const start = Date.now();
@@ -87,34 +62,116 @@ export async function GET() {
     }
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 401 });
 
-    const tryOrderCols = ORDER_COLUMN ? [ORDER_COLUMN] : ['awarded_date', 'awarded_at'];
-
-    for (const col of tryOrderCols) {
-      try {
-        const rewardsResp = await supabase
-          .from('member_rewards')
-          .select('*')
-          .eq('user_id', user.id)
-          .order(col as string, { ascending: false });
-
-        if (!rewardsResp.error) {
-          ORDER_COLUMN = col;
-          return NextResponse.json({ ok: true, data: rewardsResp.data });
-        }
-
-        serverDebug.debug('[profile.rewards] query error for col', col, rewardsResp.error?.message || rewardsResp.error);
-      } catch (e: unknown) {
-        serverDebug.debug('[profile.rewards] exception while querying with order', col, String(e));
-      }
-    }
-
+    // Aggregate from the canonical reward tables: milestone, podium, lucky draws.
     try {
-      const fallback = await supabase.from('member_rewards').select('*').eq('user_id', user.id);
-      if (!fallback.error) return NextResponse.json({ ok: true, data: fallback.data });
-      serverDebug.error('[profile.rewards] final fallback failed', fallback.error);
-      return NextResponse.json({ ok: false, error: fallback.error.message }, { status: 500 });
+      const [mmrResp, podiumResp, luckyResp, legacyResp] = await Promise.all([
+        supabase
+          .from('member_milestone_rewards')
+          .select('id, milestone_id, reward_description, cash_amount, status, approved_at, delivered_at, created_at')
+          .eq('member_id', user.id),
+        supabase
+          .from('member_podium_rewards')
+          .select('id, podium_config_id, podium_type, rank, reward_description, cash_amount, status, delivered_at, created_at')
+          .eq('member_id', user.id),
+        supabase
+          .from('lucky_draw_winners')
+          .select('id, challenge_id, reward_description, status, delivered_at, created_at')
+          .eq('member_id', user.id),
+        // Minimal legacy fallback: include challenge-star rows and any legacy lucky-draw rows
+        supabase
+          .from('member_rewards')
+          .select('id, reward_type, quantity, reward_definition_id, challenge_id, awarded_date, status, created_at')
+          .eq('user_id', user.id)
+          .or('quantity.not.is.null,reward_definition_id.not.is.null'),
+      ]);
+
+      if (mmrResp.error) serverDebug.warn('[profile.rewards] mmr query error', mmrResp.error);
+      if (podiumResp.error) serverDebug.warn('[profile.rewards] podium query error', podiumResp.error);
+      if (luckyResp.error) serverDebug.warn('[profile.rewards] lucky query error', luckyResp.error);
+      if (legacyResp.error) serverDebug.warn('[profile.rewards] legacy member_rewards query error', legacyResp.error);
+
+      const results: Array<Record<string, unknown>> = [];
+
+      if (mmrResp.data) {
+        for (const r of mmrResp.data as any[]) {
+          results.push({
+            id: r.id,
+            kind: 'milestone',
+            description: r.reward_description,
+            cash_amount: r.cash_amount,
+            status: r.status,
+            date: r.delivered_at || r.approved_at || r.created_at,
+            raw: r,
+          });
+        }
+      }
+
+      if (podiumResp.data) {
+        for (const r of podiumResp.data as any[]) {
+          results.push({
+            id: r.id,
+            kind: 'podium',
+            description: r.reward_description,
+            cash_amount: r.cash_amount,
+            status: r.status,
+            rank: r.rank,
+            date: r.delivered_at || r.created_at,
+            raw: r,
+          });
+        }
+      }
+
+      if (luckyResp.data) {
+        for (const r of luckyResp.data as any[]) {
+          results.push({
+            id: r.id,
+            kind: 'lucky',
+            description: r.reward_description,
+            cash_amount: null,
+            status: r.status,
+            date: r.delivered_at || r.created_at,
+            raw: r,
+          });
+        }
+      }
+
+      if (legacyResp.data) {
+        for (const r of legacyResp.data as any[]) {
+          if (r.quantity != null) {
+            results.push({
+              id: r.id,
+              kind: 'star',
+              quantity: r.quantity,
+              description: 'Challenge stars',
+              status: r.status,
+              date: r.awarded_date || r.created_at,
+              raw: r,
+            });
+          } else if (r.reward_definition_id != null) {
+            // Legacy lucky-draw stored via reward_definition_id — surface as legacy_lucky
+            results.push({
+              id: r.id,
+              kind: 'legacy_lucky',
+              reward_definition_id: r.reward_definition_id,
+              description: 'Legacy lucky-draw prize',
+              status: r.status,
+              date: r.awarded_date || r.created_at,
+              raw: r,
+            });
+          }
+        }
+      }
+
+      // Sort by date desc (nulls last)
+      results.sort((a, b) => {
+        const da = a.date ? new Date(String(a.date)).getTime() : 0;
+        const db = b.date ? new Date(String(b.date)).getTime() : 0;
+        return db - da;
+      });
+
+      return NextResponse.json({ ok: true, data: results });
     } catch (e: unknown) {
-      serverDebug.error('[profile.rewards] final fallback exception', String(e));
+      serverDebug.error('[profile.rewards] aggregation exception', String(e));
       const message = e instanceof Error ? e.message : String(e);
       return NextResponse.json({ ok: false, error: message }, { status: 500 });
     }
