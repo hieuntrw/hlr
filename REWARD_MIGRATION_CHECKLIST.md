@@ -2,6 +2,8 @@
 
 Purpose: Safely backfill legacy `member_rewards` entries that reference `reward_definitions` into the new specialized tables (`member_podium_rewards`, `member_milestone_rewards`) and prepare for deprecation of `reward_definitions`.
 
+IMPORTANT: `member_rewards` is a legacy table. New application code uses `member_milestone_rewards`, `member_podium_rewards`, `lucky_draw_winners`, and `member_star_awards` (challenge stars). Mentions of `member_rewards` in this checklist are for historical/backfill guidance only.
+
 Files added:
 - `supabase/migrations/20251216_migrate_rewards_from_definitions.sql`
 

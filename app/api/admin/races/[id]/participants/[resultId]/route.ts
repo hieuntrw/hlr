@@ -30,7 +30,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     if (!body || Object.keys(body).length === 0) return NextResponse.json({ error: 'Missing updates' }, { status: 400 });
 
     const updates: Record<string, unknown> = {};
-    const allowed = ['chip_time_seconds', 'distance', 'podium_config_id', 'status', 'is_pr', 'user_id'];
+    const allowed = ['chip_time_seconds', 'distance', 'podium_config_id', 'approved', 'is_pr', 'user_id'];
     for (const k of allowed) {
       if (k in body) updates[k] = (body as Record<string, unknown>)[k] as unknown;
     }

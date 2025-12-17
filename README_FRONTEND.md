@@ -280,8 +280,8 @@ All 3 pages have detailed integration guides in **SUPABASE_INTEGRATION.md**:
 
 **Rules**
 - Query: `reward_definitions` (optional)
-Note: The project retains the legacy `reward_definitions` table for certain use-cases (e.g. lucky-draw prizes stored in `member_rewards`).
-Milestone and podium logic has moved to `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, and `member_podium_rewards` — prefer these for new development.
+Note: `reward_definitions` is retained only for legacy lucky-draw definitions. The legacy table `member_rewards` has been deprecated and migrated into specialized tables.
+Milestone and podium logic has moved to `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, and `member_podium_rewards` — prefer these for new development. For challenge stars, use `member_star_awards`.
 - Query: `system_settings` for amounts
 - Features: Static or dynamic content
 

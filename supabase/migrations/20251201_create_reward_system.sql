@@ -92,6 +92,25 @@ CREATE TABLE IF NOT EXISTS lucky_draw_winners (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+create table public.lucky_draw_entries (
+  id uuid not null default gen_random_uuid (),
+  challenge_id uuid null,
+  user_id uuid null,
+  full_name text null,
+  challenge_title text null,
+  is_drawn boolean null default false,
+  is_awarded boolean null default false,
+  drawn_at timestamp with time zone null,
+  awarded_at timestamp with time zone null,
+  created_at timestamp with time zone null default now(),
+  constraint lucky_draw_entries_pkey primary key (id),
+  constraint lucky_draw_entries_challenge_id_fkey foreign KEY (challenge_id) references challenges (id) on delete CASCADE,
+  constraint lucky_draw_entries_user_id_fkey foreign KEY (user_id) references profiles (id) on delete CASCADE
+) TABLESPACE pg_default;
+
+create index IF not exists idx_lucky_entries_challenge on public.lucky_draw_entries using btree (challenge_id) TABLESPACE pg_default;
+
+create index IF not exists idx_lucky_entries_user on public.lucky_draw_entries using btree (user_id) TABLESPACE pg_default;
 
 CREATE INDEX idx_lucky_draw_challenge ON lucky_draw_winners(challenge_id);
 CREATE INDEX idx_lucky_draw_member ON lucky_draw_winners(member_id, status);

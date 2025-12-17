@@ -48,6 +48,7 @@ export default function LuckyDrawPage() {
     user_id: "",
     reward_description: "",
   });
+  const [selectedChallengeForRun, setSelectedChallengeForRun] = useState<string>('');
   const loadData = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/lucky-draw-winners', { credentials: 'same-origin' });
@@ -111,6 +112,22 @@ export default function LuckyDrawPage() {
     }
   };
 
+  const handleRunDraw = async (challengeId?: string) => {
+    const cid = challengeId || selectedChallengeForRun;
+    if (!cid) return alert('Vui lòng chọn thử thách để quay');
+    try {
+      const payload = { action: 'run', challenge_id: cid, num_winners: 2 };
+      const r = await fetch('/api/admin/lucky-draw-winners', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!r.ok) throw new Error('Run draw failed');
+      const j = await r.json().catch(() => null);
+      alert('Quay số hoàn thành: ' + (j?.winners?.length || 0) + ' người trúng');
+      loadData();
+    } catch (err) {
+      console.error('Error running draw:', err);
+      alert('Lỗi khi quay số');
+    }
+  };
+
   const handleMarkDelivered = async (winnerId: string) => {
     try {
       // user from AuthContext
@@ -132,6 +149,28 @@ if (!user) return;
       <AdminLayout>
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: "var(--color-primary)" }}></div>
+        </div>
+
+        {/* Quick Run Draw */}
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedChallengeForRun}
+            onChange={(e) => setSelectedChallengeForRun(e.target.value)}
+            className="px-3 py-2 border border-gray-300 rounded-lg"
+          >
+            <option value="">-- Chọn thử thách để quay --</option>
+            {challenges.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name} ({c.month}/{c.year})
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={() => handleRunDraw()}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+          >
+            Quay số thử
+          </button>
         </div>
       </AdminLayout>
     );

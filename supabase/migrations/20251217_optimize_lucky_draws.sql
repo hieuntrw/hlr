@@ -1,0 +1,4 @@
+-- DEPRECATED: This migration previously created `lucky_draw_sessions` and helper functions.
+-- We now use `lucky_draw_entries` and `lucky_draw_winners` and have a drop migration
+-- supabase/migrations/20251217_drop_lucky_draws_and_sessions.sql to remove the legacy objects.
+-- Keep this file as a reference only; DO NOT APPLY.

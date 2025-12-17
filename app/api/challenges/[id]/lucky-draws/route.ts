@@ -22,10 +22,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     );
 
     const { data, error } = await supabaseAuth
-      .from('lucky_draws')
-      .select('id, winner_user_id, prize_name, rank, profiles!lucky_draws_winner_user_id_fkey(full_name)')
+      .from('lucky_draw_winners')
+      .select('id, member_id, reward_description, status, member:profiles(full_name)')
       .eq('challenge_id', id)
-      .not('winner_user_id', 'is', null);
+      .not('member_id', 'is', null)
+      .order('created_at', { ascending: true });
 
     if (error) {
       serverDebug.error('GET /api/challenges/[id]/lucky-draws error', error);
@@ -36,17 +37,14 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       const dd = d as Record<string, unknown>;
       return {
         id: dd.id,
-        winner_user_id: dd.winner_user_id,
-        prize_name: dd.prize_name,
-        rank: dd.rank,
-        winner_profile: dd.profiles || null,
+        winner_user_id: dd.member_id,
+        prize_name: dd.reward_description,
+        status: dd.status,
+        winner_profile: dd.member || null,
       };
     });
 
-    // Sort in JS by numeric rank to avoid server-side ORDER BY issues
-    rows.sort((a: Record<string, unknown>, b: Record<string, unknown>) => (Number(a.rank as unknown as number) || 0) - (Number(b.rank as unknown as number) || 0));
-
-    // Return top 2 winners as the client expects
+    // Return first 2 winners
     return NextResponse.json({ winners: rows.slice(0, 2) });
   } catch (err: unknown) {
     serverDebug.error('GET /api/challenges/[id]/lucky-draws exception', err);

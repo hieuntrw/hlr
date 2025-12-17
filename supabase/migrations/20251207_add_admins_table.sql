@@ -1,4 +1,0 @@
--- Migration deprecated: the project no longer creates a separate `admins` table.
--- Roles are stored in auth.users.app_metadata->'role' and authorization checks use
--- the JWT `app_metadata.role` and the `profiles` table for display information.
--- This file is intentionally left as a no-op to avoid creating the `admins` table.

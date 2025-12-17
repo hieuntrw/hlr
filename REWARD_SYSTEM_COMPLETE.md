@@ -17,6 +17,8 @@ File: `supabase/migrations/20251201_create_reward_system.sql`
 - Đã insert 6 cấu hình đứng bục (Chung cuộc 3 hạng, Lứa tuổi 3 hạng)
 - Đã setup RLS policies cho tất cả bảng
 
+**Note:** The legacy table `member_rewards` has been deprecated. The application uses `member_milestone_rewards`, `member_podium_rewards`, `lucky_draw_winners`, and `member_star_awards` for new reward flows. Legacy mentions remain in migrations/docs for historical/backfill reasons.
+
 ### 2. Trang Công Khai - /rewards
 File: `app/rewards/page.tsx`
 

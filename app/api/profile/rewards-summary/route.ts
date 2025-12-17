@@ -34,6 +34,11 @@ export async function GET(request: NextRequest) {
     // Fetch profile row
     const { data: profileRow } = await supabase.from('profiles').select('*').eq('id', user.id).maybeSingle();
 
+    // Parse optional date range for aggregated counts (e.g., yearly stars)
+    const q = request.nextUrl.searchParams;
+    const startDate = q.get('start') || null;
+    const endDate = q.get('end') || null;
+
     // Active reward milestones
     const { data: milestones } = await supabase.from('reward_milestones').select('*').eq('is_active', true).order('priority', { ascending: true });
 
@@ -55,10 +60,30 @@ export async function GET(request: NextRequest) {
     const { data: lucky } = await supabase
       .from('lucky_draw_winners')
       .select('*, challenge:challenges(name, month, year)')
-      .eq('user_id', user.id)
+      .eq('member_id', user.id)
       .order('created_at', { ascending: false });
 
-    return NextResponse.json({ ok: true, profile: profileRow ?? null, milestones: milestones || [], achieved: achieved || [], podium: podium || [], lucky: lucky || [] });
+    // Star totals (now stored in member_star_awards). Use created_at range when provided.
+    let star_total = 0;
+    try {
+      let starQuery = supabase.from('member_star_awards').select('quantity').eq('member_id', user.id);
+      if (startDate) starQuery = starQuery.gte('created_at', startDate);
+      if (endDate) starQuery = starQuery.lte('created_at', endDate);
+      const { data: stars, error: starsErr } = await starQuery;
+      if (!starsErr && Array.isArray(stars)) {
+        star_total = stars.reduce((s: number, r: unknown) => {
+          const rr = r as Record<string, unknown>;
+          const q = rr['quantity'];
+          return s + (Number(q ?? 0) || 0);
+        }, 0);
+      } else if (starsErr) {
+        serverDebug.warn('[profile.rewards-summary] star total query error', starsErr);
+      }
+    } catch (e: unknown) {
+      serverDebug.warn('[profile.rewards-summary] star aggregation failed', String(e));
+    }
+
+    return NextResponse.json({ ok: true, profile: profileRow ?? null, milestones: milestones || [], achieved: achieved || [], podium: podium || [], lucky: lucky || [], star_total });
   } catch (err: unknown) {
     serverDebug.error('[profile.rewards-summary] exception', String(err));
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });

@@ -318,7 +318,7 @@ export default function Rules() {
       const { data: rewards, error: rewardsError } = await supabase
         .from("reward_definitions")
 
-      Note: Although `reward_definitions` still exists for legacy and lucky-draw prize storage, the application now uses specialized tables for rewards: `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, and `member_podium_rewards`.
+      Note: Although `reward_definitions` still exists for legacy and lucky-draw prize storage, the legacy `member_rewards` table has been deprecated and its data migrated to specialized tables. The application now uses `reward_milestones`, `member_milestone_rewards`, `reward_podium_config`, `member_podium_rewards`, `lucky_draw_winners`, and `member_star_awards`.
         .select("*")
         .order("category, priority_level");
 

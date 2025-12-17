@@ -282,22 +282,21 @@ function DashboardContent() {
         const challengesJoined = participations.length;
         const challengesCompleted = participations.filter((p) => p.status === "completed").length;
 
-        // Get total stars from rewards
-        const { data: rewards } = await supabase
-          .from("member_rewards")
-          .select("quantity")
-          .eq("user_id", user.id)
-          .gte("earned_at", startDate)
-          .lte("earned_at", endDate);
-
-        const totalStars = rewards ? rewards.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0) : 0;
-
-        setYearlyStats({
-          totalKm: Math.round(totalKm),
-          totalStars,
-          challengesJoined,
-          challengesCompleted,
-        });
+        // Get total stars via server summary endpoint (avoids direct PostgREST queries)
+        let totalStars = 0;
+        try {
+          const base = typeof window !== 'undefined' ? window.location.origin : '';
+          const resp = await fetch(`${base}/api/profile/rewards-summary?start=${startDate}&end=${endDate}`, { credentials: 'same-origin', cache: 'no-store' });
+          const j = await resp.json().catch(() => null);
+          if (resp.ok && j?.ok) {
+            totalStars = Number(j.star_total || 0);
+          } else {
+            console.warn('[Dashboard] rewards-summary API failed', j);
+          }
+        } catch (e) {
+          console.error('[Dashboard] rewards-summary fetch error', e);
+        }
+        setYearlyStats({ totalKm: Math.round(totalKm), totalStars, challengesJoined, challengesCompleted });
       }
     } catch (err) {
       console.error("Failed to fetch yearly stats:", err);

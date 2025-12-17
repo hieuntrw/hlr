@@ -78,16 +78,15 @@ export default function AdminRacesPage() {
     setUploading(true);
     setUploadMsg(null);
     try {
-      // Upload via server endpoint which uses the service role key.
       const bucket = "race-banners";
-      const form = new FormData();
-      form.append('file', file);
-      form.append('bucket', bucket);
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('bucket', bucket);
 
       const res = await fetch('/api/admin/storage/upload', {
         method: 'POST',
         credentials: 'same-origin',
-        body: form,
+        body: fd,
       });
 
       if (!res.ok) {
@@ -101,7 +100,6 @@ export default function AdminRacesPage() {
         setForm((prev) => ({ ...prev, image_url: publicUrl }));
         setUploadMsg('Đã tải banner lên thành công.');
       } else {
-        // fallback to local preview
         try {
           const tmpUrl = URL.createObjectURL(file);
           setForm((prev) => ({ ...prev, image_url: tmpUrl }));
@@ -121,7 +119,6 @@ export default function AdminRacesPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="flex items-center gap-3">
           <Trophy size={28} className="text-yellow-500" />
@@ -130,7 +127,6 @@ export default function AdminRacesPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Create Race */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Tạo Sự Kiện Mới</h2>
@@ -146,6 +142,7 @@ export default function AdminRacesPage() {
                   placeholder="VD: HCMC Marathon 2026"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ngày tổ chức</label>
                 <div className="flex items-center gap-2">
@@ -159,6 +156,7 @@ export default function AdminRacesPage() {
                   />
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Địa điểm</label>
                 <div className="flex items-center gap-2">
@@ -173,6 +171,7 @@ export default function AdminRacesPage() {
                   />
                 </div>
               </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh banner (URL)</label>
                 <div className="flex items-center gap-2">
@@ -186,6 +185,7 @@ export default function AdminRacesPage() {
                     placeholder="https://..."
                   />
                 </div>
+
                 <div className="mt-3">
                   <label className="block text-sm font-medium text-gray-700 mb-1">Hoặc tải ảnh lên</label>
                   <div className="flex items-center gap-3">
@@ -200,6 +200,7 @@ export default function AdminRacesPage() {
                       </span>
                     )}
                   </div>
+
                   {form.image_url && (
                     <div className="mt-3">
                       <Image src={form.image_url} alt="Race banner preview" width={1200} height={300} className="w-full max-h-40 object-cover rounded" />
@@ -225,7 +226,6 @@ export default function AdminRacesPage() {
           </div>
         </div>
 
-        {/* Race List */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4">Danh Sách Sự Kiện</h2>

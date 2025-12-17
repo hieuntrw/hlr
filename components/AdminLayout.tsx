@@ -101,6 +101,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       requiredRoles: ["admin"],
     },
     {
+      title: "Theo Dõi Phần Thưởng",
+      icon: Award,
+      link: "/admin/reward-monitor",
+      requiredRoles: ["admin", "mod_finance"],
+    },
+    {
       title: "Phần Thưởng Đứng Bục",
       icon: Star,
       link: "/admin/podium-rewards",

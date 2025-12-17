@@ -31,8 +31,8 @@
 - **races** - Race events (date, location)
 - **race_results** - Individual results (chip time, PR flag)
 - **transactions** - Financial tracking (collection, fines, donations, expenses, rewards)
-- **reward_definitions** - Milestones and podium criteria
-- **member_rewards** - Reward distribution tracking
+- **reward_definitions** - (legacy: retained for lucky-draw definitions)
+- **member_rewards** - (legacy; migrated to specialized reward tables such as `member_milestone_rewards`, `member_podium_rewards`, `lucky_draw_winners`, `member_star_awards`)
 - **pb_history** - Personal best history
 - **system_settings** - Configurable values (monthly_fund_fee: 50,000 VND, challenge_fine_fee: 100,000 VND)
 

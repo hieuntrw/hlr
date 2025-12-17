@@ -259,6 +259,13 @@ CREATE TABLE IF NOT EXISTS reward_definitions (
 );
 
 -- Lịch sử nhận thưởng (Để kiểm soát việc nhận 1 lần)
+-- DEPRECATED: Legacy table retained for migration/backfill.
+-- As of 2025-12-17 the application writes to specialized tables instead:
+--  - member_milestone_rewards
+--  - member_podium_rewards
+--  - lucky_draw_winners
+--  - member_star_awards
+-- Avoid inserting new rows into this table; use the new tables and admin APIs.
 CREATE TABLE IF NOT EXISTS member_rewards (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     user_id UUID REFERENCES profiles(id),

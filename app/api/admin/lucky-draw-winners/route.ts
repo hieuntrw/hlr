@@ -23,6 +23,68 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { cookies: { get(n: string) { return request.cookies.get(n)?.value }, set() {}, remove() {} } });
+
+    // Accept either direct insert payload (legacy) or run-draw command
+    if (body.action === 'run' && body.challenge_id) {
+      const challengeId = body.challenge_id as string;
+      const numWinners = Number(body.num_winners ?? 2);
+
+      // 1) fetch existing winners for this challenge
+      const { data: existingWinners, error: ewErr } = await supabase.from('lucky_draw_winners').select('member_id').eq('challenge_id', challengeId);
+      if (ewErr) {
+        serverDebug.error('[admin/lucky-draw-winners] fetch existing winners error', ewErr);
+        return NextResponse.json({ error: ewErr.message }, { status: 500 });
+      }
+      const existingIds = (existingWinners || []).map((r: any) => r.member_id).filter(Boolean);
+
+      // if already reached limit, return
+      if (existingIds.length >= numWinners) {
+        return NextResponse.json({ message: 'Challenge already has enough winners', winners: existingIds });
+      }
+
+      // 2) fetch eligible entries (not drawn yet)
+      const { data: entries, error: eErr } = await supabase.from('lucky_draw_entries').select('user_id,full_name').eq('challenge_id', challengeId).is('is_drawn', false);
+      if (eErr) {
+        serverDebug.error('[admin/lucky-draw-winners] fetch entries error', eErr);
+        return NextResponse.json({ error: eErr.message }, { status: 500 });
+      }
+
+      // filter out existing winners
+      const eligible = (entries || []).filter((en: any) => !existingIds.includes(en.user_id));
+      if (!eligible.length) return NextResponse.json({ message: 'No eligible entries' });
+
+      // shuffle and pick
+      for (let i = eligible.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
+      }
+      const toPick = Math.min(numWinners - existingIds.length, eligible.length);
+      const picked = eligible.slice(0, toPick);
+
+      // 3) insert winners and mark entries
+      const insertPayload = picked.map((p: any) => ({ challenge_id: challengeId, member_id: p.user_id, reward_description: 'Lucky draw prize', status: 'pending' }));
+      const { data: inserted, error: insErr } = await supabase.from('lucky_draw_winners').insert(insertPayload).select();
+      if (insErr) {
+        serverDebug.error('[admin/lucky-draw-winners] insert winners error', insErr);
+        return NextResponse.json({ error: insErr.message }, { status: 500 });
+      }
+
+      // mark entries as drawn
+      const userIds = picked.map((p: any) => p.user_id);
+      const { error: updErr } = await supabase.from('lucky_draw_entries').update({ is_drawn: true, drawn_at: new Date() }).in('user_id', userIds).eq('challenge_id', challengeId);
+      if (updErr) serverDebug.warn('[admin/lucky-draw-winners] failed to mark entries drawn', updErr);
+
+      // 4) if total winners >= threshold (2) update challenges.lucky_draw_completed
+      const totalWinners = existingIds.length + (inserted?.length || 0);
+      if (totalWinners >= 2) {
+        const { error: cErr } = await supabase.from('challenges').update({ lucky_draw_completed: true }).eq('id', challengeId);
+        if (cErr) serverDebug.warn('[admin/lucky-draw-winners] failed to flag challenge completed', cErr);
+      }
+
+      return NextResponse.json({ winners: inserted });
+    }
+
+    // Fallback: legacy direct insert
     const payload = Array.isArray(body) ? body : [body];
     const { data, error } = await supabase.from('lucky_draw_winners').insert(payload).select();
     if (error) {

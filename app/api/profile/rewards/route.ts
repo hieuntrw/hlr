@@ -1,13 +1,10 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import { createClient } from '@supabase/supabase-js';
+// note: do not use `createClient` in this server route; use createServerClient instead
 import serverDebug from '@/lib/server-debug';
 
 export const dynamic = 'force-dynamic';
-
-// We now aggregate reward history from specialized tables instead of relying
-// primarily on legacy `member_rewards`. Keep minimal fallback for legacy rows.
 
 export async function GET() {
   const start = Date.now();
@@ -64,7 +61,7 @@ export async function GET() {
 
     // Aggregate from the canonical reward tables: milestone, podium, lucky draws.
     try {
-      const [mmrResp, podiumResp, luckyResp, legacyResp] = await Promise.all([
+      const [mmrResp, podiumResp, luckyResp, starResp] = await Promise.all([
         supabase
           .from('member_milestone_rewards')
           .select('id, milestone_id, reward_description, cash_amount, status, approved_at, delivered_at, created_at')
@@ -77,90 +74,83 @@ export async function GET() {
           .from('lucky_draw_winners')
           .select('id, challenge_id, reward_description, status, delivered_at, created_at')
           .eq('member_id', user.id),
-        // Minimal legacy fallback: include challenge-star rows and any legacy lucky-draw rows
-        supabase
-          .from('member_rewards')
-          .select('id, reward_type, quantity, reward_definition_id, challenge_id, awarded_date, status, created_at')
-          .eq('user_id', user.id)
-          .or('quantity.not.is.null,reward_definition_id.not.is.null'),
+          // Stars now in member_star_awards
+          supabase
+            .from('member_star_awards')
+            .select('id, member_id, challenge_id, quantity, status, created_at')
+            .eq('member_id', user.id),
       ]);
 
       if (mmrResp.error) serverDebug.warn('[profile.rewards] mmr query error', mmrResp.error);
       if (podiumResp.error) serverDebug.warn('[profile.rewards] podium query error', podiumResp.error);
       if (luckyResp.error) serverDebug.warn('[profile.rewards] lucky query error', luckyResp.error);
-      if (legacyResp.error) serverDebug.warn('[profile.rewards] legacy member_rewards query error', legacyResp.error);
+      if (starResp.error) serverDebug.warn('[profile.rewards] star query error', starResp.error);
 
       const results: Array<Record<string, unknown>> = [];
 
-      if (mmrResp.data) {
-        for (const r of mmrResp.data as any[]) {
+      if (mmrResp.data && Array.isArray(mmrResp.data)) {
+        for (const r of mmrResp.data as unknown[]) {
+          const rr = r as Record<string, unknown>;
           results.push({
-            id: r.id,
+            id: rr['id'] ?? null,
             kind: 'milestone',
-            description: r.reward_description,
-            cash_amount: r.cash_amount,
-            status: r.status,
-            date: r.delivered_at || r.approved_at || r.created_at,
-            raw: r,
+            description: rr['reward_description'] ?? null,
+            cash_amount: rr['cash_amount'] != null ? Number(rr['cash_amount']) : null,
+            status: rr['status'] ?? null,
+            date: rr['delivered_at'] ?? rr['approved_at'] ?? rr['created_at'] ?? null,
+            raw: rr,
           });
         }
       }
 
-      if (podiumResp.data) {
-        for (const r of podiumResp.data as any[]) {
+      if (podiumResp.data && Array.isArray(podiumResp.data)) {
+        for (const r of podiumResp.data as unknown[]) {
+          const rr = r as Record<string, unknown>;
           results.push({
-            id: r.id,
+            id: rr['id'] ?? null,
             kind: 'podium',
-            description: r.reward_description,
-            cash_amount: r.cash_amount,
-            status: r.status,
-            rank: r.rank,
-            date: r.delivered_at || r.created_at,
-            raw: r,
+            description: rr['reward_description'] ?? null,
+            cash_amount: rr['cash_amount'] != null ? Number(rr['cash_amount']) : null,
+            status: rr['status'] ?? null,
+            rank: rr['rank'] ?? null,
+            date: rr['delivered_at'] ?? rr['created_at'] ?? null,
+            raw: rr,
           });
         }
       }
 
-      if (luckyResp.data) {
-        for (const r of luckyResp.data as any[]) {
+      if (luckyResp.data && Array.isArray(luckyResp.data)) {
+        for (const r of luckyResp.data as unknown[]) {
+          const rr = r as Record<string, unknown>;
           results.push({
-            id: r.id,
+            id: rr['id'] ?? null,
             kind: 'lucky',
-            description: r.reward_description,
+            description: rr['reward_description'] ?? null,
             cash_amount: null,
-            status: r.status,
-            date: r.delivered_at || r.created_at,
-            raw: r,
+            status: rr['status'] ?? null,
+            date: rr['delivered_at'] ?? rr['created_at'] ?? null,
+            raw: rr,
           });
         }
       }
 
-      if (legacyResp.data) {
-        for (const r of legacyResp.data as any[]) {
-          if (r.quantity != null) {
-            results.push({
-              id: r.id,
-              kind: 'star',
-              quantity: r.quantity,
-              description: 'Challenge stars',
-              status: r.status,
-              date: r.awarded_date || r.created_at,
-              raw: r,
-            });
-          } else if (r.reward_definition_id != null) {
-            // Legacy lucky-draw stored via reward_definition_id — surface as legacy_lucky
-            results.push({
-              id: r.id,
-              kind: 'legacy_lucky',
-              reward_definition_id: r.reward_definition_id,
-              description: 'Legacy lucky-draw prize',
-              status: r.status,
-              date: r.awarded_date || r.created_at,
-              raw: r,
-            });
-          }
+      // member_star_awards data
+      if (starResp.data && Array.isArray(starResp.data)) {
+        for (const r of starResp.data as unknown[]) {
+          const rr = r as Record<string, unknown>;
+          results.push({
+            id: rr['id'] ?? null,
+            kind: 'star',
+            quantity: rr['quantity'] != null ? Number(rr['quantity']) : 0,
+            description: 'Challenge stars',
+            status: rr['status'] ?? null,
+            date: rr['created_at'] ?? null,
+            raw: rr,
+          });
         }
       }
+
+      // No legacy fallbacks: all reward history is read from canonical tables.
 
       // Sort by date desc (nulls last)
       results.sort((a, b) => {

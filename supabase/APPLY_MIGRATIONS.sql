@@ -99,6 +99,8 @@ CREATE POLICY "Mods update race results"
   );
 
 -- member_rewards: allow mod_member to read all and update status (delivery)
+-- NOTE: `member_rewards` is a legacy table. New code reads rewards from `member_milestone_rewards`, `member_podium_rewards`, `lucky_draw_winners`, and `member_star_awards`.
+-- The following policies remain for historical/compatibility reasons until backfill and removal are complete.
 DROP POLICY IF EXISTS "Mods read all rewards" ON member_rewards;
 CREATE POLICY "Mods read all rewards"
   ON member_rewards FOR SELECT
