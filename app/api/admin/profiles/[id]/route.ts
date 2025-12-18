@@ -53,7 +53,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (authUser && authUser.app_metadata && typeof authUser.app_metadata === 'object') {
         roleValue = (authUser.app_metadata as Record<string, unknown>)['role'] as string | null;
       }
-    } catch (e) {
+    } catch {
       // ignore - role will be null
     }
 

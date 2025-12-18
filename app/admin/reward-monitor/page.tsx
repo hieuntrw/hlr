@@ -12,11 +12,15 @@ interface RewardRow {
   id: string;
   member_id: string;
   race_id: string;
+  milestone_id?: string | null;
   race_result_id?: string | null;
   status: string;
   reward_description?: string | null;
   cash_amount?: number | null;
   profiles?: { full_name?: string | null; email?: string | null } | null;
+  delivered_at?: string | null;
+  delivered_by?: string | null;
+  member?: { full_name?: string | null } | null;
 }
 
 
@@ -30,7 +34,11 @@ interface LuckyWinner {
   status?: string | null;
   delivered_at?: string | null;
   delivered_by?: string | null;
+  cash_amount?: number | null;
 }
+
+interface RaceRow { id: string; name?: string | null }
+interface MilestoneRow { id: string; milestone_name?: string | null; race_type?: string | null }
 
 export default function RewardMonitorPage() {
   const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
@@ -42,6 +50,8 @@ export default function RewardMonitorPage() {
   const [activeTab, setActiveTab] = useState<'milestone'|'podium'|'lucky'|'star'>('milestone');
   const [loading, setLoading] = useState(true);
   const [deliveredProfiles, setDeliveredProfiles] = useState<Record<string, { full_name?: string }>>({});
+  const [raceMap, setRaceMap] = useState<Record<string, { name?: string }>>({});
+  const [milestoneMap, setMilestoneMap] = useState<Record<string, { milestone_name?: string; race_type?: string }>>({});
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;
@@ -103,16 +113,42 @@ export default function RewardMonitorPage() {
         }) as T[];
       };
 
+      // attach milestone_name and normalize race name via lookups after fetching
+
+      // fetch races and milestones in parallel (admin endpoints)
+      try {
+        const [racesRes, msRes] = await Promise.all([
+          fetch('/api/races', { credentials: 'same-origin' }),
+          fetch('/api/admin/reward-milestones', { credentials: 'same-origin' }),
+        ]);
+        if (racesRes.ok) {
+          const jr = await racesRes.json().catch(() => null);
+          const list: unknown[] = Array.isArray(jr) ? jr : (jr?.data || []);
+          const rm: Record<string, { name?: string }> = {};
+          list.forEach((rr: unknown) => { const R = rr as RaceRow; if (R && R.id) rm[R.id] = { name: R.name ?? undefined }; });
+          setRaceMap(rm);
+        }
+        if (msRes.ok) {
+          const jm = await msRes.json().catch(() => null);
+          const mlist: unknown[] = Array.isArray(jm) ? jm : (jm?.data || []);
+          const mm: Record<string, { milestone_name?: string; race_type?: string }> = {};
+          mlist.forEach((mmr: unknown) => { const M = mmr as MilestoneRow; if (M && M.id) mm[M.id] = { milestone_name: M.milestone_name ?? undefined, race_type: M.race_type ?? undefined }; });
+          setMilestoneMap(mm);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch races or milestones', e);
+      }
+
       setRewards(sortList([...mRows.map(r => ({ ...r, __type: 'milestone' })), ...pRows.map(r => ({ ...r, __type: 'podium' }))]));
       setLuckyWinners(sortList(lRows as unknown as Array<Record<string, unknown>>) as unknown as LuckyWinner[]);
       setStarAwards(sortList(sRows as Array<Record<string, unknown>>));
 
       // fetch delivered_by profiles for any delivered_by values across all lists
       const allDeliveredBy = Array.from(new Set([
-        ...mRows.map(r => String((r as unknown as Record<string, unknown>).delivered_by ?? '')),
-        ...pRows.map(r => String((r as unknown as Record<string, unknown>).delivered_by ?? '')),
-        ...lRows.map(r => String((r as unknown as Record<string, unknown>).delivered_by ?? '')),
-        ...sRows.map(r => String((r as unknown as Record<string, unknown>).delivered_by ?? '')),
+        ...mRows.map(r => String(r.delivered_by ?? '')),
+        ...pRows.map(r => String(r.delivered_by ?? '')),
+        ...lRows.map(r => String(r.delivered_by ?? '')),
+        ...sRows.map(r => String((r as Record<string, unknown>).delivered_by ?? '')),
       ].filter(Boolean)));
       if (allDeliveredBy.length > 0) {
         try {
@@ -243,9 +279,11 @@ export default function RewardMonitorPage() {
                               setSelectedIds(next);
                             }} /></th>
                             <th className="px-3 py-2 text-left">Thành viên</th>
-                            <th className="px-3 py-2 text-left">Mô tả</th>
-                            <th className="px-3 py-2 text-right">Tiền</th>
-                            <th className="px-3 py-2 text-left">Chi tiết</th>
+                            <th className="px-3 py-2 text-left">Loại</th>
+                            <th className="px-3 py-2 text-left">Mốc</th>
+                            <th className="px-3 py-2 text-left">Hiện vật</th>
+                            <th className="px-3 py-2 text-right">Tiền mặt</th>
+                            <th className="px-3 py-2 text-left">Race</th>
                             <th className="px-3 py-2 text-left">Trạng thái</th>
                             <th className="px-3 py-2 text-left">Đã trao</th>
                             <th className="px-3 py-2 text-left">Người trao</th>
@@ -260,14 +298,16 @@ export default function RewardMonitorPage() {
                                 <div className="font-semibold">{r.profiles?.full_name || r.member_id}</div>
                                 <div className="text-sm text-gray-500">{r.profiles?.email || ''}</div>
                               </td>
+                              <td className="px-3 py-2 text-sm">{r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.race_type ?? '') : ''}</td>
+                              <td className="px-3 py-2 text-sm">{r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.milestone_name ?? '') : ''}</td>
                               <td className="px-3 py-2 text-sm">{r.reward_description || '—'}</td>
                               <td className="px-3 py-2 text-right font-semibold">{formatCurrency(r.cash_amount)}</td>
-                              <td className="px-3 py-2 text-sm">{r.race_result_id ? `result ${r.race_result_id}` : ''}</td>
+                              <td className="px-3 py-2 text-sm">{r.race_id ? (raceMap[String(r.race_id)]?.name ?? '') : ''}</td>
                               <td className="px-3 py-2 text-sm">
                                 {r.status === 'pending' ? <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 inline-flex items-center gap-1"><Clock size={12} />Chưa trao</span> : <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"><CheckCircle size={12} />Đã trao</span>}
                               </td>
-                              <td className="px-3 py-2 text-sm">{(r as unknown as Record<string, unknown>).delivered_at ? new Date(String((r as unknown as Record<string, unknown>).delivered_at)).toLocaleString('vi-VN') : ''}</td>
-                              <td className="px-3 py-2 text-sm">{(r as unknown as Record<string, unknown>).delivered_by ? deliveredProfiles[String((r as unknown as Record<string, unknown>).delivered_by)]?.full_name || String((r as unknown as Record<string, unknown>).delivered_by) : ''}</td>
+                              <td className="px-3 py-2 text-sm">{r.delivered_at ? new Date(String(r.delivered_at)).toLocaleString('vi-VN') : ''}</td>
+                              <td className="px-3 py-2 text-sm">{r.delivered_by ? deliveredProfiles[String(r.delivered_by)]?.full_name || String(r.delivered_by) : ''}</td>
                               <td className="px-3 py-2">
                                 {r.status === 'pending' ? (
                                   <button
@@ -288,7 +328,7 @@ export default function RewardMonitorPage() {
                                 ) : (
                                   <div className="text-xs text-gray-500">—</div>
                                 )}
-                                <div className="text-xs text-gray-400 mt-1">ID: {r.id}</div>
+                                {/* reward ID intentionally hidden per UI preference */}
                               </td>
                             </tr>
                           ))}
@@ -330,7 +370,7 @@ export default function RewardMonitorPage() {
                                 <div className="text-sm text-gray-500">{w.member?.email || ''}</div>
                               </td>
                               <td className="px-3 py-2 text-sm">{w.reward_description || 'Quay thưởng'}</td>
-                              <td className="px-3 py-2 text-right font-semibold">{formatCurrency((w as unknown as Record<string, unknown>).cash_amount as number)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{formatCurrency(w.cash_amount)}</td>
                               <td className="px-3 py-2 text-sm">{w.challenge?.name || w.challenge_id}</td>
                               <td className="px-3 py-2 text-sm">{w.status === 'pending' ? <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 inline-flex items-center gap-1"><Clock size={12} />Chưa trao</span> : <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"><CheckCircle size={12} />Đã trao</span>}</td>
                               <td className="px-3 py-2 text-sm">{w.delivered_at ? new Date(String(w.delivered_at)).toLocaleString('vi-VN') : ''}</td>

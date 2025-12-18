@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const type = url.searchParams.get('type');
 
-    // Build and run milestone query
+    // Build and run milestone query (rich select may fail if relation/columns missing)
     let mmRows: Array<Record<string, unknown>> | null = null;
     let mmErr: unknown = null;
     {
@@ -49,17 +49,34 @@ export async function GET(request: NextRequest) {
     }
 
     // Fallback: if no rows returned (or error), try a simple select(*) to diagnose RLS/relational select issues
-    if ((!mmRows || mmRows.length === 0) && !mmErr) {
+    if (!mmRows || mmRows.length === 0) {
       try {
         const fb = await client.from('member_milestone_rewards').select('*').order('created_at', { ascending: false });
         if (fb.error) serverDebug.warn('Fallback simple select member_milestone_rewards error', fb.error);
         const fbRows = fb.data as Array<Record<string, unknown>> | null;
         if (fbRows && fbRows.length > 0) {
           mmRows = fbRows;
+          mmErr = fb.error ?? mmErr;
         }
       } catch (e) {
         serverDebug.warn('Fallback select failed for member_milestone_rewards', e);
       }
+    }
+
+    // Normalize common schema variants (user_id alias, missing cash_amount)
+    if (mmRows && mmRows.length > 0) {
+      mmRows = mmRows.map((r) => {
+        const rec = { ...r } as Record<string, unknown>;
+        if (!('member_id' in rec) && 'user_id' in rec) rec.member_id = (rec as Record<string, unknown>).user_id;
+        if (!('cash_amount' in rec)) {
+          // try to pull from related reward_milestones if present
+          const rm = rec.reward_milestones as Record<string, unknown> | undefined | null;
+          if (rm && 'cash_amount' in rm) rec.cash_amount = Number((rm as Record<string, unknown>).cash_amount ?? 0);
+        } else {
+          rec.cash_amount = Number(rec.cash_amount ?? 0);
+        }
+        return rec;
+      });
     }
 
     // Build and run podium query
@@ -74,18 +91,34 @@ export async function GET(request: NextRequest) {
       prErr = r2.error;
     }
 
-    // Podium fallback simple select if complex select returned nothing (help with RLS/relational failures)
-    if ((!prRows || prRows.length === 0) && !prErr) {
+    // Podium fallback simple select if complex select returned nothing
+    if (!prRows || prRows.length === 0) {
       try {
         const fb2 = await client.from('member_podium_rewards').select('*').order('created_at', { ascending: false });
         if (fb2.error) serverDebug.warn('Fallback simple select member_podium_rewards error', fb2.error);
         const fbRows2 = fb2.data as Array<Record<string, unknown>> | null;
         if (fbRows2 && fbRows2.length > 0) {
           prRows = fbRows2;
+          prErr = fb2.error ?? prErr;
         }
       } catch (e) {
         serverDebug.warn('Fallback select failed for member_podium_rewards', e);
       }
+    }
+
+    // Normalize podium schema variants
+    if (prRows && prRows.length > 0) {
+      prRows = prRows.map((r) => {
+        const rec = { ...r } as Record<string, unknown>;
+        if (!('member_id' in rec) && 'user_id' in rec) rec.member_id = (rec as Record<string, unknown>).user_id;
+        if (!('cash_amount' in rec)) {
+          const rpc = rec.reward_podium_config as Record<string, unknown> | undefined | null;
+          if (rpc && 'cash_amount' in rpc) rec.cash_amount = Number((rpc as Record<string, unknown>).cash_amount ?? 0);
+        } else {
+          rec.cash_amount = Number(rec.cash_amount ?? 0);
+        }
+        return rec;
+      });
     }
 
     if (mmErr) serverDebug.warn('GET member_milestone_rewards error', mmErr);
@@ -93,14 +126,47 @@ export async function GET(request: NextRequest) {
 
     // If the client requested only lucky or star items, return them now
     if (type === 'lucky') {
-      const rLucky = await client
-        .from('lucky_draw_winners')
-        .select('id, member_id, status, challenge_id,reward_description, related_transaction_id, created_at, profiles(full_name)')
-        .order('created_at', { ascending: false });
-      if (rLucky.error) serverDebug.warn('GET lucky_draw_winners error', rLucky.error);
-      const rows = rLucky.data as Array<Record<string, unknown>> | null;
+      // Attempt to select with `cash_amount` if present; if column missing, retry without it.
+      let rows: Array<Record<string, unknown>> | null = null;
+      try {
+        const rLucky = await client
+          .from('lucky_draw_winners')
+          .select('id, member_id, status, challenge_id, reward_description, cash_amount, related_transaction_id, created_at, profiles(full_name)')
+          .order('created_at', { ascending: false });
+        if (rLucky.error) {
+          // If DB complains about missing column, fall through to retry below
+          serverDebug.warn('GET lucky_draw_winners error (first attempt)', rLucky.error);
+          if (!/column .*cash_amount.*does not exist/i.test(String(rLucky.error.message || ''))) throw rLucky.error;
+        } else {
+          rows = rLucky.data as Array<Record<string, unknown>> | null;
+        }
+      } catch (e) {
+        // swallow and retry without cash_amount
+        serverDebug.warn('Retrying lucky_draw_winners select without cash_amount', e);
+      }
+
+      if (!rows) {
+        try {
+          const rLucky2 = await client
+            .from('lucky_draw_winners')
+            .select('id, member_id, status, challenge_id, reward_description, related_transaction_id, created_at, profiles(full_name)')
+            .order('created_at', { ascending: false });
+          if (rLucky2.error) serverDebug.warn('GET lucky_draw_winners error (second attempt)', rLucky2.error);
+          rows = rLucky2.data as Array<Record<string, unknown>> | null;
+        } catch (e) {
+          serverDebug.warn('Failed to select lucky_draw_winners', e);
+          rows = null;
+        }
+      }
+
       const memberIds = new Set<string>();
-      (rows || []).forEach((x) => { if (x && x.member_id) memberIds.add(String(x.member_id)); });
+      (rows || []).forEach((x) => {
+        // normalize possible user_id alias
+        if (x) {
+          if (!('member_id' in x) && 'user_id' in x) x.member_id = (x as Record<string, unknown>).user_id;
+          if (x.member_id) memberIds.add(String(x.member_id));
+        }
+      });
       const profileMap: Record<string, Record<string, unknown>> = {};
       if (memberIds.size > 0) {
         try {
@@ -114,21 +180,55 @@ export async function GET(request: NextRequest) {
       const out: Array<Record<string, unknown>> = [];
       (rows || []).forEach((r2) => {
         const rec = r2 as Record<string, unknown>;
+        if (!('member_id' in rec) && 'user_id' in rec) rec.member_id = (rec as Record<string, unknown>).user_id;
         if (!rec.profiles) rec.profiles = profileMap[String(rec.member_id ?? '')] ?? null;
+        // normalize cash_amount to number if present
+        if ('cash_amount' in rec) rec.cash_amount = Number(rec.cash_amount ?? 0);
         out.push({ __type: 'lucky', ...rec });
       });
       return NextResponse.json({ data: out });
     }
 
     if (type === 'star') {
-      const rStar = await client
-        .from('member_star_awards')
-        .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at, profiles(full_name)')
-        .order('created_at', { ascending: false });
-      if (rStar.error) serverDebug.warn('GET member_star_awards error', rStar.error);
-      const rows = rStar.data as Array<Record<string, unknown>> | null;
+      // member_star_awards schema may use `member_id` or `user_id` depending on migration state.
+      let rows: Array<Record<string, unknown>> | null = null;
+      try {
+        // Prefer selecting member_id if available
+        const rStar = await client
+          .from('member_star_awards')
+          .select('id, member_id, challenge_participant_id, stars_awarded, awarded_by, created_at, reward_description, profiles(full_name)')
+          .order('created_at', { ascending: false });
+        if (rStar.error) {
+          serverDebug.warn('GET member_star_awards error (first attempt)', rStar.error);
+          if (!/column .*member_id.*does not exist/i.test(String(rStar.error.message || ''))) throw rStar.error;
+        } else {
+          rows = rStar.data as Array<Record<string, unknown>> | null;
+        }
+      } catch (e) {
+        serverDebug.warn('Retrying member_star_awards select with user_id', e);
+      }
+
+      if (!rows) {
+        try {
+          const rStar2 = await client
+            .from('member_star_awards')
+            .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at, reward_description, profiles(full_name)')
+            .order('created_at', { ascending: false });
+          if (rStar2.error) serverDebug.warn('GET member_star_awards error (second attempt)', rStar2.error);
+          rows = rStar2.data as Array<Record<string, unknown>> | null;
+        } catch (e) {
+          serverDebug.warn('Failed to select member_star_awards', e);
+          rows = null;
+        }
+      }
+
       const memberIds = new Set<string>();
-      (rows || []).forEach((x) => { if (x && x.member_id) memberIds.add(String(x.member_id)); });
+      (rows || []).forEach((x) => {
+        if (x) {
+          if (!('member_id' in x) && 'user_id' in x) x.member_id = (x as Record<string, unknown>).user_id;
+          if (x.member_id) memberIds.add(String(x.member_id));
+        }
+      });
       const profileMap: Record<string, Record<string, unknown>> = {};
       if (memberIds.size > 0) {
         try {
@@ -142,6 +242,7 @@ export async function GET(request: NextRequest) {
       const out: Array<Record<string, unknown>> = [];
       (rows || []).forEach((r2) => {
         const rec = r2 as Record<string, unknown>;
+        if (!('member_id' in rec) && 'user_id' in rec) rec.member_id = (rec as Record<string, unknown>).user_id;
         if (!rec.profiles) rec.profiles = profileMap[String(rec.member_id ?? '')] ?? null;
         out.push({ __type: 'star', ...rec });
       });
