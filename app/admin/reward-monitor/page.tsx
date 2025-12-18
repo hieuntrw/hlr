@@ -182,11 +182,7 @@ export default function RewardMonitorPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-      
-
-        {/* Tabs-only UI (no race selector) */}
-
+      <div>
         {loading ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 mx-auto" style={{ borderColor: "var(--color-primary)" }}></div>
@@ -285,7 +281,6 @@ export default function RewardMonitorPage() {
                             <th className="px-3 py-2 text-right">Tiền mặt</th>
                             <th className="px-3 py-2 text-left">Race</th>
                             <th className="px-3 py-2 text-left">Trạng thái</th>
-                            <th className="px-3 py-2 text-left">Đã trao</th>
                             <th className="px-3 py-2 text-left">Người trao</th>
                             <th className="px-3 py-2 text-left">Hành động</th>
                           </tr>
@@ -298,15 +293,14 @@ export default function RewardMonitorPage() {
                                 <div className="font-semibold">{r.profiles?.full_name || r.member_id}</div>
                                 <div className="text-sm text-gray-500">{r.profiles?.email || ''}</div>
                               </td>
-                              <td className="px-3 py-2 text-sm">{r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.race_type ?? '') : ''}</td>
-                              <td className="px-3 py-2 text-sm">{r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.milestone_name ?? '') : ''}</td>
+                              <td className="px-3 py-2 text-sm">{r.__type === 'milestone' && r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.race_type ?? '') : (r.__type === 'podium' ? 'Podium' : '')}</td>
+                              <td className="px-3 py-2 text-sm">{r.__type === 'milestone' && r.milestone_id ? (milestoneMap[String(r.milestone_id)]?.milestone_name ?? '') : ''}</td>
                               <td className="px-3 py-2 text-sm">{r.reward_description || '—'}</td>
                               <td className="px-3 py-2 text-right font-semibold">{formatCurrency(r.cash_amount)}</td>
                               <td className="px-3 py-2 text-sm">{r.race_id ? (raceMap[String(r.race_id)]?.name ?? '') : ''}</td>
                               <td className="px-3 py-2 text-sm">
                                 {r.status === 'pending' ? <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 inline-flex items-center gap-1"><Clock size={12} />Chưa trao</span> : <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"><CheckCircle size={12} />Đã trao</span>}
                               </td>
-                              <td className="px-3 py-2 text-sm">{r.delivered_at ? new Date(String(r.delivered_at)).toLocaleString('vi-VN') : ''}</td>
                               <td className="px-3 py-2 text-sm">{r.delivered_by ? deliveredProfiles[String(r.delivered_by)]?.full_name || String(r.delivered_by) : ''}</td>
                               <td className="px-3 py-2">
                                 {r.status === 'pending' ? (
@@ -324,7 +318,7 @@ export default function RewardMonitorPage() {
                                       }
                                     }}
                                     className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-medium transition"
-                                  >Đánh dấu đã trao</button>
+                                  >Đã trao</button>
                                 ) : (
                                   <div className="text-xs text-gray-500">—</div>
                                 )}
@@ -356,7 +350,6 @@ export default function RewardMonitorPage() {
                             <th className="px-3 py-2 text-right">Tiền</th>
                             <th className="px-3 py-2 text-left">Gói</th>
                             <th className="px-3 py-2 text-left">Trạng thái</th>
-                            <th className="px-3 py-2 text-left">Đã trao</th>
                             <th className="px-3 py-2 text-left">Người trao</th>
                             <th className="px-3 py-2 text-left">Hành động</th>
                           </tr>
@@ -373,7 +366,6 @@ export default function RewardMonitorPage() {
                               <td className="px-3 py-2 text-right font-semibold">{formatCurrency(w.cash_amount)}</td>
                               <td className="px-3 py-2 text-sm">{w.challenge?.name || w.challenge_id}</td>
                               <td className="px-3 py-2 text-sm">{w.status === 'pending' ? <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 inline-flex items-center gap-1"><Clock size={12} />Chưa trao</span> : <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"><CheckCircle size={12} />Đã trao</span>}</td>
-                              <td className="px-3 py-2 text-sm">{w.delivered_at ? new Date(String(w.delivered_at)).toLocaleString('vi-VN') : ''}</td>
                               <td className="px-3 py-2 text-sm">{w.delivered_by ? deliveredProfiles[String(w.delivered_by)]?.full_name || String(w.delivered_by) : ''}</td>
                               <td className="px-3 py-2">
                                 {w.status === 'pending' ? (
@@ -422,7 +414,6 @@ export default function RewardMonitorPage() {
                             <th className="px-3 py-2 text-left">Mô tả</th>
                             <th className="px-3 py-2 text-left">Số lượng</th>
                             <th className="px-3 py-2 text-left">Trạng thái</th>
-                            <th className="px-3 py-2 text-left">Đã trao</th>
                             <th className="px-3 py-2 text-left">Người trao</th>
                             <th className="px-3 py-2 text-left">Hành động</th>
                           </tr>
@@ -440,7 +431,6 @@ export default function RewardMonitorPage() {
                                 <td className="px-3 py-2 text-sm">{String(sRec.reward_description ?? '')}</td>
                                 <td className="px-3 py-2 text-sm">{String(sRec.quantity ?? '')}</td>
                                 <td className="px-3 py-2 text-sm">{String(sRec.status ?? '') === 'pending' ? <span className="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700 inline-flex items-center gap-1"><Clock size={12} />Chưa trao</span> : <span className="px-2 py-1 rounded-full bg-green-100 text-green-700 inline-flex items-center gap-1"><CheckCircle size={12} />Đã trao</span>}</td>
-                                <td className="px-3 py-2 text-sm">{sRec.delivered_at ? new Date(String(sRec.delivered_at)).toLocaleString('vi-VN') : ''}</td>
                                 <td className="px-3 py-2 text-sm">{sRec.delivered_by ? deliveredProfiles[String(sRec.delivered_by)]?.full_name || String(sRec.delivered_by) : ''}</td>
                                 <td className="px-3 py-2">
                                   {String(sRec.status ?? '') === 'pending' ? (

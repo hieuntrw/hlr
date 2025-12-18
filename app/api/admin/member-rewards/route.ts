@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     {
       const r = await client
         .from('member_milestone_rewards')
-        .select('id, member_id, race_id, race_result_id, status, achieved_time_seconds, reward_description, cash_amount, related_transaction_id, profiles(full_name) , reward_milestones(id, milestone_name, reward_description, cash_amount)')
+        .select('id, member_id, race_id, race_result_id, status, achieved_time_seconds, reward_description, cash_amount, related_transaction_id, profiles!member_milestone_rewards_member_id_fkey(full_name), reward_milestones(id, milestone_name, reward_description, cash_amount)')
         .order('created_at', { ascending: false });
       mmRows = r.data as Array<Record<string, unknown>> | null;
       mmErr = r.error;
@@ -66,8 +66,8 @@ export async function GET(request: NextRequest) {
     }
     }
 
-    // Fallback: if no rows returned (or error), try a simple select(*) to diagnose RLS/relational select issues
-    if (!mmRows || mmRows.length === 0) {
+    // Fallback: if the rich select returned an error or no rows, try a simple select(*)
+    if (mmErr || !mmRows || mmRows.length === 0) {
       try {
         const fb = await client.from('member_milestone_rewards').select('*').order('created_at', { ascending: false });
         if (fb.error) serverDebug.warn('Fallback simple select member_milestone_rewards error', fb.error);
@@ -104,15 +104,15 @@ export async function GET(request: NextRequest) {
     {
       const r2 = await client
         .from('member_podium_rewards')
-        .select('id, member_id, race_id, race_result_id, status, podium_config_id, reward_description, cash_amount, related_transaction_id, profiles(full_name), reward_podium_config(id, reward_description, cash_amount)')
+        .select('id, member_id, race_id, race_result_id, status, podium_config_id, reward_description, cash_amount, related_transaction_id, profiles!member_podium_rewards_member_id_fkey(full_name), reward_podium_config(id, reward_description, cash_amount)')
         .order('created_at', { ascending: false });
       prRows = r2.data as Array<Record<string, unknown>> | null;
       prErr = r2.error;
     serverDebug.info('member-rewards: member_podium_rewards initial select', { count: Array.isArray(prRows) ? prRows.length : 0, error: prErr });
     }
 
-    // Podium fallback simple select if complex select returned nothing
-    if (!prRows || prRows.length === 0) {
+    // Podium fallback: if the rich select returned an error or no rows, try a simple select(*)
+    if (prErr || !prRows || prRows.length === 0) {
       try {
         const fb2 = await client.from('member_podium_rewards').select('*').order('created_at', { ascending: false });
         if (fb2.error) serverDebug.warn('Fallback simple select member_podium_rewards error', fb2.error);
@@ -150,39 +150,65 @@ export async function GET(request: NextRequest) {
       // Attempt to select with `cash_amount` if present; if column missing, retry without it.
       let rows: Array<Record<string, unknown>> | null = null;
       try {
+        // Prefer a conservative select that avoids optional columns which may not exist
         const rLucky = await client
           .from('lucky_draw_winners')
-          .select('id, member_id, status, challenge_id, reward_description, cash_amount, related_transaction_id, created_at, profiles(full_name)')
+          .select('id, member_id, status, challenge_id, reward_description, created_at, profiles!lucky_draw_winners_member_id_fkey(full_name)')
           .order('created_at', { ascending: false });
         if (rLucky.error) {
-          // If DB complains about missing column, fall through to retry below
           serverDebug.warn('GET lucky_draw_winners error (first attempt)', rLucky.error);
-          if (!/column .*cash_amount.*does not exist/i.test(String(rLucky.error.message || ''))) throw rLucky.error;
         } else {
           rows = rLucky.data as Array<Record<string, unknown>> | null;
         }
       } catch (e) {
-        // swallow and retry without cash_amount
-        serverDebug.warn('Retrying lucky_draw_winners select without cash_amount', e);
+        serverDebug.warn('Retrying lucky_draw_winners (first attempt) failed', e);
+      }
+
+      try {
+        // Prefer selecting `user_id` which some migrations use instead of `member_id`
+        const rStar = await client
+          .from('member_star_awards')
+          .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at')
+          .order('created_at', { ascending: false });
+        if (rStar.error) {
+          // If permission denied or table missing, bail out and return empty set
+          const code = String(((rStar.error as unknown) as { code?: string })?.code || '');
+          serverDebug.warn('GET member_star_awards error (first attempt)', rStar.error);
+          if (code === '42501' || code === '42P01') {
+            serverDebug.warn('member-star: permission denied or table missing, skipping star fetch', { code });
+            rows = [];
+          }
+        } else {
+          rows = rStar.data as Array<Record<string, unknown>> | null;
+        }
+      } catch (e) {
+        serverDebug.warn('Retrying member_star_awards select (first attempt) failed', e);
       }
 
       if (!rows) {
         try {
-          const rLucky2 = await client
-            .from('lucky_draw_winners')
-            .select('id, member_id, status, challenge_id, reward_description, related_transaction_id, created_at, profiles(full_name)')
+          // Fallback to older schema that may use `member_id` and `reward_description`
+          const rStar2 = await client
+            .from('member_star_awards')
+            .select('id, member_id, challenge_participant_id, stars_awarded, awarded_by, created_at, reward_description')
             .order('created_at', { ascending: false });
-          if (rLucky2.error) serverDebug.warn('GET lucky_draw_winners error (second attempt)', rLucky2.error);
-          rows = rLucky2.data as Array<Record<string, unknown>> | null;
+          if (rStar2.error) {
+            const code2 = String(((rStar2.error as unknown) as { code?: string })?.code || '');
+            serverDebug.warn('GET member_star_awards error (second attempt)', rStar2.error);
+            if (code2 === '42501' || code2 === '42P01') {
+              serverDebug.warn('member-star: permission denied or table missing on second attempt, skipping star fetch', { code: code2 });
+              rows = [];
+            }
+          } else {
+            rows = rStar2.data as Array<Record<string, unknown>> | null;
+          }
         } catch (e) {
-          serverDebug.warn('Failed to select lucky_draw_winners', e);
+          serverDebug.warn('Failed to select member_star_awards (second attempt)', e);
           rows = null;
         }
       }
-
       const memberIds = new Set<string>();
       (rows || []).forEach((x) => {
-        // normalize possible user_id alias
         if (x) {
           if (!('member_id' in x) && 'user_id' in x) x.member_id = (x as Record<string, unknown>).user_id;
           if (x.member_id) memberIds.add(String(x.member_id));
@@ -214,31 +240,43 @@ export async function GET(request: NextRequest) {
       // member_star_awards schema may use `member_id` or `user_id` depending on migration state.
       let rows: Array<Record<string, unknown>> | null = null;
       try {
-        // Prefer selecting member_id if available
+        // Prefer selecting `user_id` which some migrations use instead of `member_id`
         const rStar = await client
           .from('member_star_awards')
-          .select('id, member_id, challenge_participant_id, stars_awarded, awarded_by, created_at, reward_description, profiles(full_name)')
+          .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at')
           .order('created_at', { ascending: false });
         if (rStar.error) {
           serverDebug.warn('GET member_star_awards error (first attempt)', rStar.error);
-          if (!/column .*member_id.*does not exist/i.test(String(rStar.error.message || ''))) throw rStar.error;
         } else {
           rows = rStar.data as Array<Record<string, unknown>> | null;
         }
       } catch (e) {
-        serverDebug.warn('Retrying member_star_awards select with user_id', e);
+        serverDebug.warn('Retrying member_star_awards select (first attempt) failed', e);
       }
 
       if (!rows) {
         try {
+          // Fallback to older schema that may use `member_id` and `reward_description`
           const rStar2 = await client
             .from('member_star_awards')
-            .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at, reward_description, profiles(full_name)')
+            .select('id, user_id, challenge_participant_id, stars_awarded, awarded_by, created_at')
             .order('created_at', { ascending: false });
           if (rStar2.error) serverDebug.warn('GET member_star_awards error (second attempt)', rStar2.error);
           rows = rStar2.data as Array<Record<string, unknown>> | null;
         } catch (e) {
-          serverDebug.warn('Failed to select member_star_awards', e);
+          serverDebug.warn('Failed to select member_star_awards (second attempt)', e);
+          rows = null;
+        }
+      }
+
+      // Final fallback for star awards: select(*) to avoid missing-column failures
+      if (!rows) {
+        try {
+          const rStarFb = await client.from('member_star_awards').select('*').order('created_at', { ascending: false });
+          if (rStarFb.error) serverDebug.warn('GET member_star_awards final fallback error', rStarFb.error);
+          rows = rStarFb.data as Array<Record<string, unknown>> | null;
+        } catch (e) {
+          serverDebug.warn('Failed to select member_star_awards (final fallback)', e);
           rows = null;
         }
       }
