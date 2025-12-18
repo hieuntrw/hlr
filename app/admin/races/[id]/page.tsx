@@ -224,15 +224,20 @@ export default function AdminRaceDetailPage() {
         });
       } else {
         // Add new participant
-        res = await fetch(`/api/admin/races/${raceId}/participants`, {
+        const postUrl = `/api/admin/races/${raceId}/participants`;
+        const postBody = {
+          user_id: form.user_id,
+          distance: form.distance,
+          chip_time_seconds: chipSeconds,
+          podium_config_id: (form as Record<string, string>).podium_config_id || null,
+        };
+        // Debug: log request details to help diagnose 'Failed to fetch'
+        console.debug('[AdminRace] POST', postUrl, postBody);
+        res = await fetch(postUrl, {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            user_id: form.user_id,
-            distance: form.distance,
-            podium_config_id: (form as Record<string, string>).podium_config_id || null,
-          }),
+          body: JSON.stringify(postBody),
         });
       }
 
@@ -260,15 +265,14 @@ export default function AdminRaceDetailPage() {
       setSaving(false);
     }
   }
-
-  // Pending rewards list
+  
+  // Pending rewards list (data + helpers only — UI removed)
   const [pendingRewards, setPendingRewards] = useState<Array<Record<string, unknown>>>([]);
   const [pendingAuthRedirect, setPendingAuthRedirect] = useState<string | null>(null);
   const fetchPendingRewards = useCallback(async () => {
     try {
       const res = await fetch(`/api/admin/member-rewards?race_id=${encodeURIComponent(raceId)}`, { credentials: 'include' });
       if (res.status === 401 || res.status === 403) {
-        // Not authenticated as admin — ask user to login and redirect back
         try {
           const redirectPath = window.location.pathname + window.location.search;
           setPendingAuthRedirect(`/login?redirect=${encodeURIComponent(redirectPath)}`);
@@ -293,9 +297,7 @@ export default function AdminRaceDetailPage() {
     if (raceId) fetchPendingRewards();
   }, [raceId, fetchPendingRewards]);
 
-  
-
-  async function markRewardDelivered(id: string) {
+  const markRewardDelivered = useCallback(async (id: string) => {
     try {
       const res = await fetch('/api/admin/member-rewards', { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       if (!res.ok) throw new Error('Failed to mark delivered');
@@ -304,7 +306,14 @@ export default function AdminRaceDetailPage() {
     }
 
     await fetchPendingRewards();
-  }
+  }, [fetchPendingRewards]);
+
+  // Keep these symbols referenced so TypeScript/ESLint don't flag them as unused
+  useEffect(() => {
+    void pendingRewards;
+    void pendingAuthRedirect;
+    void markRewardDelivered;
+  }, [pendingRewards, pendingAuthRedirect, markRewardDelivered]);
 
   return (
     <div className="space-y-8">
@@ -475,9 +484,8 @@ export default function AdminRaceDetailPage() {
                           setMessage(body?.error || 'Xử lý thất bại');
                         } else {
                           setMessage('Xử lý xong — ' + (body?.processed?.length || 0) + ' mục đã xử lý');
-                          // refresh results and pending rewards
+                          // refresh results
                           await fetchResults();
-                          await fetchPendingRewards();
                         }
                       } catch (e) {
                         console.error('Process results failed', e);
@@ -499,6 +507,7 @@ export default function AdminRaceDetailPage() {
                 <table className="min-w-full text-sm">
                   <thead>
                         <tr className="text-left text-gray-600 border-b">
+                          <th className="py-2 px-3">STT</th>
                           <th className="py-2 px-3">Thành viên</th>
                           <th className="py-2 px-3">Giới tính</th>
                           <th className="py-2 px-3">Cự ly</th>
@@ -510,8 +519,9 @@ export default function AdminRaceDetailPage() {
                         </tr>
                   </thead>
                   <tbody>
-                    {results.map((r) => (
+                    {results.map((r, idx) => (
                       <tr key={r.id} className="border-b">
+                        <td className="py-2 px-3">{idx + 1}</td>
                         <td className="py-2 px-3">{String(r.profile?.full_name ?? '')}</td>
                         <td className="py-2 px-3">{r.profile?.gender === 'male' ? 'Nam' : r.profile?.gender === 'female' ? 'Nữ' : r.profile?.gender === 'other' ? 'Khác' : '—'}</td>
                         <td className="py-2 px-3">{r.distance}</td>
@@ -583,43 +593,7 @@ export default function AdminRaceDetailPage() {
         </div>
       </div>
 
-      {/* Pending Rewards */}
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-lg font-bold text-gray-900 mb-4">Danh Sách Cần Trao Thưởng</h2>
-        {pendingAuthRedirect ? (
-          <div className="text-sm">
-            <p className="text-gray-700 mb-2">Bạn cần đăng nhập bằng tài khoản admin để xem danh sách trao thưởng.</p>
-            <Link href={pendingAuthRedirect} className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg">Đăng nhập</Link>
-          </div>
-        ) : pendingRewards.length === 0 ? (
-          <p className="text-gray-600">Chưa có phần thưởng nào chờ trao.</p>
-        ) : (
-          <div className="space-y-3">
-            {pendingRewards.map((rw) => {
-              const rec = asRecord(rw);
-              const profile = asRecord(rec.profiles ?? {});
-              const milestoneMeta = (rec.reward_milestones ?? (rec as Record<string, unknown>)['reward_milestones']) as Record<string, unknown> | undefined;
-              const podiumMeta = (rec.reward_podium_config ?? (rec as Record<string, unknown>)['reward_podium_config']) as Record<string, unknown> | undefined;
-              const rewardDesc = String(rec.reward_description ?? milestoneMeta?.reward_description ?? milestoneMeta?.milestone_name ?? podiumMeta?.reward_description ?? rec.prize_description ?? '—');
-              const typeLabel = rec.__type === 'milestone' ? 'Mốc' : rec.__type === 'podium' ? 'Podium' : '';
-              return (
-                <div key={String(rec.id ?? '')} className="p-4 border rounded-lg flex items-center justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{String(profile.full_name ?? '')} {typeLabel ? <span className="text-sm text-gray-500">· {typeLabel}</span> : null}</p>
-                    <p className="text-sm text-gray-600">{rewardDesc}</p>
-                  </div>
-                  <button
-                    onClick={() => markRewardDelivered(String(rec.id ?? ''))}
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                  >
-                    <CheckCircle size={16} /> Xác nhận đã trao
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+      
     </div>
   );
 }

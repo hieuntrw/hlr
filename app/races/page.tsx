@@ -13,6 +13,7 @@ interface Race {
   race_date: string;
   location: string;
   image_url?: string;
+  participant_count?: number;
 }
 
 interface RaceResult {
@@ -98,6 +99,10 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
           <p className="flex items-center gap-2">
             <MapPin size={20} className="text-gray-600" />
             <span>{race.location || "Chưa có thông tin"}</span>
+          </p>
+          <p className="flex items-center gap-2">
+            <User size={18} className="text-gray-600" />
+            <span>{(race.participant_count ?? 0) + ' thành viên'}</span>
           </p>
         </div>
 
@@ -312,6 +317,11 @@ export default function RacesPage() {
             <div className="text-blue-100">
               <div className="flex items-center gap-3 text-gray-600">
                 <Calendar size={18} /> {formatDate(selectedRace.race_date)} • <MapPin size={18} /> {selectedRace.location}
+                <span className="mx-2">•</span>
+                <div className="flex items-center gap-2">
+                  <User size={16} />
+                  <span>{String(raceResults.length)} thành viên</span>
+                </div>
               </div>
             </div>
           </div>

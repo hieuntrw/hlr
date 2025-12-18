@@ -24,13 +24,17 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const { user, role } = await ensureAdmin(supabaseAuth);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       : null;
 
     const client = service || supabaseAuth;
+    serverDebug.info('member-rewards: initialized client', { hasService: !!service });
+    if (!service && role !== 'admin') {
+      serverDebug.warn('member-rewards: non-admin role without service key — RLS will restrict results', { role, user: user.id });
+    }
 
     // Optionally filter by race_id or type
     const url = new URL(request.url);
@@ -46,6 +50,20 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false });
       mmRows = r.data as Array<Record<string, unknown>> | null;
       mmErr = r.error;
+    serverDebug.info('member-rewards: member_milestone_rewards initial select', { count: Array.isArray(mmRows) ? mmRows.length : 0, error: mmErr });
+    try {
+      const cnt = await client.from('member_milestone_rewards').select('id', { count: 'exact' });
+      serverDebug.info('member-rewards: total rows visible via count-select', { count: cnt.count, countError: cnt.error });
+    } catch (e) {
+      serverDebug.warn('member-rewards: count-select failed', e);
+    }
+    if (Array.isArray(mmRows) && mmRows.length > 0) {
+      try {
+        serverDebug.info('member-rewards: mmRows sample ids', { ids: (mmRows as Array<Record<string, unknown>>).slice(0, 20).map((x) => x.id) });
+      } catch (e) {
+        serverDebug.warn('member-rewards: failed to log mmRows ids', e);
+      }
+    }
     }
 
     // Fallback: if no rows returned (or error), try a simple select(*) to diagnose RLS/relational select issues
@@ -57,6 +75,7 @@ export async function GET(request: NextRequest) {
         if (fbRows && fbRows.length > 0) {
           mmRows = fbRows;
           mmErr = fb.error ?? mmErr;
+          serverDebug.info('member-rewards: member_milestone_rewards fallback select used', { fallbackCount: fbRows.length, fallbackError: fb.error });
         }
       } catch (e) {
         serverDebug.warn('Fallback select failed for member_milestone_rewards', e);
@@ -89,6 +108,7 @@ export async function GET(request: NextRequest) {
         .order('created_at', { ascending: false });
       prRows = r2.data as Array<Record<string, unknown>> | null;
       prErr = r2.error;
+    serverDebug.info('member-rewards: member_podium_rewards initial select', { count: Array.isArray(prRows) ? prRows.length : 0, error: prErr });
     }
 
     // Podium fallback simple select if complex select returned nothing
@@ -100,6 +120,7 @@ export async function GET(request: NextRequest) {
         if (fbRows2 && fbRows2.length > 0) {
           prRows = fbRows2;
           prErr = fb2.error ?? prErr;
+          serverDebug.info('member-rewards: member_podium_rewards fallback select used', { fallbackCount: fbRows2.length, fallbackError: fb2.error });
         }
       } catch (e) {
         serverDebug.warn('Fallback select failed for member_podium_rewards', e);
@@ -322,7 +343,7 @@ export async function PUT(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const { user, role } = await ensureAdmin(supabaseAuth);
 
     const body = await request.json().catch(() => null);
     if (!body || !body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -336,6 +357,9 @@ export async function PUT(request: NextRequest) {
       : null;
 
     const client = service || supabaseAuth;
+    if (!service && role !== 'admin') {
+      serverDebug.warn('member-rewards (PUT): non-admin role without service key — RLS will restrict which rows can be updated', { role, user: user.id });
+    }
 
     // Helper to process a single id across supported reward tables (milestone, podium, lucky, star)
     async function processId(targetId: string) {

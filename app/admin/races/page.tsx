@@ -11,6 +11,7 @@ interface Race {
   race_date: string;
   location?: string;
   image_url?: string;
+  participant_count?: number;
 }
 
 export default function AdminRacesPage() {
@@ -251,7 +252,7 @@ export default function AdminRacesPage() {
                         <div>
                           <h3 className="font-semibold text-gray-900">{race.name}</h3>
                           <p className="text-sm text-gray-600">
-                            {new Date(race.race_date).toLocaleDateString("vi-VN")} • {race.location}
+                            {new Date(race.race_date).toLocaleDateString("vi-VN")} • {race.location} • {String(race.participant_count ?? 0)} tham gia
                           </p>
                         </div>
                         <span className="text-sm font-semibold" style={{ color: "var(--color-primary)" }}>Quản lý →</span>

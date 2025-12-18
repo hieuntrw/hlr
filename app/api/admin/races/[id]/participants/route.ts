@@ -26,6 +26,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     await ensureAdmin(supabaseAuth);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+    serverDebug.debug('POST /api/admin/races/[id]/participants body', { raceId, body });
     if (!body || !body.user_id) return NextResponse.json({ error: 'Missing user_id' }, { status: 400 });
 
     const userId = String(body.user_id);

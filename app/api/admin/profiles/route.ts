@@ -48,7 +48,9 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     // Expose commonly-needed profile columns for admin UI by default.
     // Callers can still override via `?fields=` if necessary.
-    const fields = url.searchParams.get('fields') || 'id,full_name,email,role,is_active,join_date,leave_date,gender,phone_number,dob,device_name,pb_hm_seconds,pb_fm_seconds,pb_hm_approved,pb_fm_approved,strava_id,strava_access_token,strava_refresh_token,strava_token_expires_at';
+    // By default do not select `role` column because it may have been migrated
+    // to auth.user app_metadata. Callers can request it explicitly via `?fields=`.
+    const fields = url.searchParams.get('fields') || 'id,full_name,email,is_active,join_date,leave_date,gender,phone_number,dob,device_name,pb_hm_seconds,pb_fm_seconds,pb_hm_approved,pb_fm_approved,strava_id,strava_access_token,strava_refresh_token,strava_token_expires_at';
 
     const { data, error } = await service.from('profiles').select(fields).order('full_name', { ascending: true });
     if (error) {

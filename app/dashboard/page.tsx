@@ -338,7 +338,7 @@ function DashboardContent() {
       } else if (user.email) {
         const { data: profileByEmail, error: errByEmail } = await supabase
           .from("profiles")
-          .select("id, full_name, email, role")
+          .select("id, full_name, email")
           .eq("email", user.email)
           .maybeSingle();
 
