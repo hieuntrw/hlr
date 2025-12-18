@@ -14,10 +14,7 @@ BEGIN
       ON public.profiles
       FOR SELECT
       USING (
-        EXISTS (
-          SELECT 1 FROM public.profiles p
-          WHERE p.id = auth.uid() AND p.role = 'admin'
-        )
+        ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
       );
   END IF;
 END $$;

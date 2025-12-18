@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
 
 export const dynamic = 'force-dynamic';
@@ -37,7 +38,14 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
 
-    const { data, error } = await supabase
+    // Use service-role client for transactions query to avoid evaluation of
+    // legacy RLS policies that reference `profiles.role` in the database.
+    const service = process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+      : null;
+    const client = service || supabase;
+
+    const { data, error } = await client
       .from('transactions')
       .select('id, type, amount, payment_status, created_at')
       .eq('user_id', user.id)

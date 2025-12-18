@@ -44,15 +44,9 @@ export async function POST(request: NextRequest) {
     }
 
     const userId = session.user.id;
-    // Fetch profile role (if present) and determine admin status
-    const { data: profileRow } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', userId)
-      .maybeSingle();
-
+    // Determine admin status from JWT app_metadata (profiles.role removed)
     const sessionAppMeta = (session.user as unknown as { app_metadata?: Record<string, unknown> })?.app_metadata;
-    const isAdmin = (profileRow && profileRow.role === 'admin') || (session.user && typeof sessionAppMeta === 'object' && (sessionAppMeta as Record<string, unknown>).role === 'admin');
+    const isAdmin = !!(sessionAppMeta && typeof sessionAppMeta === 'object' && (sessionAppMeta as Record<string, unknown>)['role'] === 'admin');
 
     // Allow debug flag via JSON body { debug: true } or query ?debug=true
     let debug = false;

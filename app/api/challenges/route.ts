@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
 
 export const dynamic = 'force-dynamic';
@@ -66,7 +67,15 @@ export async function GET(request: NextRequest) {
 
       // Fetch participant rows (joined with challenges) directly from
       // `challenge_participants` for this user. This returns one row per
-      const { data: rows, error: rowsError } = await supabase
+      // Use service-role client for this internal join query to avoid RLS
+      // evaluation against removed `profiles.role` policies. We still filter
+      // by the authenticated user's id to return personal data only.
+      const service = process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+        : null;
+      const client = service || supabase;
+
+      const { data: rows, error: rowsError } = await client
         .from('challenge_participants')
         .select(
           // use actual DB column names; map to flattened response names below

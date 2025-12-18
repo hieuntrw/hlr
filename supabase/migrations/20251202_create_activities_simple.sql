@@ -42,11 +42,7 @@ CREATE POLICY "Admins and mods can read all activities"
   ON activities FOR SELECT
   TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role IN ('admin', 'mod_finance', 'mod_challenge', 'mod_member')
-    )
+    ((auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance', 'mod_challenge', 'mod_member'))
   );
 
 -- System can insert activities (will be used by Strava sync function)

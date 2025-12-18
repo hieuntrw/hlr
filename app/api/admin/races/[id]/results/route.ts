@@ -11,13 +11,9 @@ async function ensureAdmin(supabaseAuth: SupabaseClient) {
   const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
   if (userError || !user) throw { status: 401, message: 'Không xác thực' };
 
-  const { data: profile } = await supabaseAuth
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .maybeSingle();
-
-  const role = profile?.role;
+  // Prefer role from JWT app_metadata; fallback to profiles.role is not available after migration
+  const sessionAppMeta = (user as unknown as { app_metadata?: Record<string, unknown> })?.app_metadata;
+  const role = sessionAppMeta && typeof sessionAppMeta === 'object' ? (sessionAppMeta as Record<string, unknown>)['role'] as string | undefined : undefined;
   if (!role || !['admin', 'mod_race'].includes(role)) throw { status: 403, message: 'Không có quyền' };
   return { user, role };
 }

@@ -30,12 +30,15 @@ export async function POST(request: NextRequest) {
       const numWinners = Number(body.num_winners ?? 2);
 
       // 1) fetch existing winners for this challenge
+      type WinnerRow = { member_id: string | null };
+      type EntryRow = { user_id: string; full_name?: string | null };
+
       const { data: existingWinners, error: ewErr } = await supabase.from('lucky_draw_winners').select('member_id').eq('challenge_id', challengeId);
       if (ewErr) {
         serverDebug.error('[admin/lucky-draw-winners] fetch existing winners error', ewErr);
         return NextResponse.json({ error: ewErr.message }, { status: 500 });
       }
-      const existingIds = (existingWinners || []).map((r: any) => r.member_id).filter(Boolean);
+      const existingIds = (existingWinners || []).map((r: WinnerRow) => r.member_id).filter((id): id is string => !!id);
 
       // if already reached limit, return
       if (existingIds.length >= numWinners) {
@@ -50,7 +53,7 @@ export async function POST(request: NextRequest) {
       }
 
       // filter out existing winners
-      const eligible = (entries || []).filter((en: any) => !existingIds.includes(en.user_id));
+      const eligible = (entries || []).filter((en: EntryRow) => !existingIds.includes(en.user_id));
       if (!eligible.length) return NextResponse.json({ message: 'No eligible entries' });
 
       // shuffle and pick
@@ -62,7 +65,7 @@ export async function POST(request: NextRequest) {
       const picked = eligible.slice(0, toPick);
 
       // 3) insert winners and mark entries
-      const insertPayload = picked.map((p: any) => ({ challenge_id: challengeId, member_id: p.user_id, reward_description: 'Lucky draw prize', status: 'pending' }));
+      const insertPayload = picked.map((p: EntryRow) => ({ challenge_id: challengeId, member_id: p.user_id, reward_description: 'Lucky draw prize', status: 'pending' }));
       const { data: inserted, error: insErr } = await supabase.from('lucky_draw_winners').insert(insertPayload).select();
       if (insErr) {
         serverDebug.error('[admin/lucky-draw-winners] insert winners error', insErr);
@@ -70,7 +73,7 @@ export async function POST(request: NextRequest) {
       }
 
       // mark entries as drawn
-      const userIds = picked.map((p: any) => p.user_id);
+      const userIds = picked.map((p: EntryRow) => p.user_id);
       const { error: updErr } = await supabase.from('lucky_draw_entries').update({ is_drawn: true, drawn_at: new Date() }).in('user_id', userIds).eq('challenge_id', challengeId);
       if (updErr) serverDebug.warn('[admin/lucky-draw-winners] failed to mark entries drawn', updErr);
 

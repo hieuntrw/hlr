@@ -7,14 +7,10 @@ ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 CREATE POLICY admin_update_transactions ON public.transactions
 FOR UPDATE
 USING (
-  EXISTS (
-    SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
-  )
+  ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
 )
 WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'
-  )
+  ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
 );
 
 -- Optionally, allow mod_finance as well:

@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
           const minimal = {
             id: data.user.id,
             full_name: ((data.user.user_metadata as unknown) as Record<string, unknown>)?.fullName || null,
-            role: 'member',
+            role: ((data.user.app_metadata as unknown) as Record<string, unknown>)?.role || 'member',
           };
           serverDebug.debug('[email-login] Creating minimal profile for user', data.user.id);
           const upsertResp = await supabase.from('profiles').upsert(minimal).select().single();
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: {
         ...data.user,
-        role: profile?.role || "member",
+        role: profile?.role || ((data.user.app_metadata as unknown) as Record<string, unknown>)?.role || "member",
         full_name: profile?.full_name,
       },
     };

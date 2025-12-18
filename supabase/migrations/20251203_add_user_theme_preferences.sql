@@ -64,11 +64,7 @@ CREATE POLICY "Admins can view all theme preferences"
     ON user_theme_preferences
     FOR SELECT
     USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-            AND profiles.role = 'admin'
-        )
+        ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
     );
 
 -- Create index for faster lookups
@@ -144,11 +140,7 @@ CREATE POLICY "Admins can manage theme presets"
     ON theme_presets
     FOR ALL
     USING (
-        EXISTS (
-            SELECT 1 FROM profiles
-            WHERE profiles.id = auth.uid()
-            AND profiles.role = 'admin'
-        )
+        ((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin')
     );
 
 -- Users can create custom themes
