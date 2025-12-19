@@ -3,7 +3,7 @@
 import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState } from "react";
 import { Trophy, Plus, Edit, Trash2, Save, X } from "lucide-react";
-
+import Link from "next/link";
 interface Milestone {
   id: string;
   race_type: string;
@@ -164,15 +164,23 @@ export default function RewardMilestonesPage() {
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+   
+      <div className="min-h-screen bg-gray-50">
+
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Trophy size={32} style={{ color: "var(--color-primary)" }} />
-            <h1 className="text-3xl font-bold text-gray-900">Quản Lý Mốc Thành Tích</h1>
+      <div className="py-6 px-4 gradient-theme-primary">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <Trophy size={32} style={{ color: "white" }} />
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>Quản Lý Mốc Thành Tích</h1>
+            
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
+              ← Quay lại
+            </Link>
           </div>
-          <button
+        </div>
+      </div>
+      <button
             onClick={() => setShowAddForm(true)}
             className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
             style={{ background: "var(--color-primary)" }}
@@ -182,7 +190,6 @@ export default function RewardMilestonesPage() {
             <Plus size={20} />
             Thêm Mốc
           </button>
-        </div>
 
         {/* Add Form */}
         {showAddForm && (
@@ -458,6 +465,6 @@ export default function RewardMilestonesPage() {
           ))}
         </div>
       </div>
-    </AdminLayout>
+    
   );
 }

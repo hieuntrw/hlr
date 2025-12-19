@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Calendar, MapPin, Image as ImageIcon, Plus, Trophy, Loader2, Upload, CheckCircle } from "lucide-react";
+import { Calendar, MapPin, Image as ImageIcon, Plus, Loader2, Upload, CheckCircle } from "lucide-react";
 import Image from "next/image";
 
 interface Race {
@@ -119,11 +119,16 @@ export default function AdminRacesPage() {
   }
 
   return (
-    <div className="space-y-8">
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center gap-3">
-          <Trophy size={28} className="text-yellow-500" />
-          <h1 className="text-2xl font-bold text-gray-900">Quản Lý Giải Chạy</h1>
+    <div className="min-h-screen bg-gray-50">
+       {/* Header */}
+      <div className="py-6 px-4 gradient-theme-primary">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>Quản lý giải chạy</h1>
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
+              ← Quay lại
+            </Link>
+          </div>
         </div>
       </div>
 

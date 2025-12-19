@@ -4,8 +4,8 @@ import AdminLayout from "@/components/AdminLayout";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
-import { Gift, Plus, CheckCircle, Clock, User } from "lucide-react";
-
+import { Gift, CheckCircle, Clock, User } from "lucide-react";
+import Link from "next/link";
 interface Challenge {
   id: string;
   name: string;
@@ -177,25 +177,22 @@ if (!user) return;
   }
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
+       <div className="min-h-screen bg-gray-50">
+
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Gift size={32} style={{ color: "var(--color-primary)" }} />
-            <h1 className="text-3xl font-bold text-gray-900">Quản Lý Quay Số May Mắn</h1>
+      <div className="py-6 px-4 gradient-theme-primary">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex items-center justify-between">
+            <Gift size={32} style={{ color: "white" }} />
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>Quản Lý Quay Số May Mắn</h1>
+            
+            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
+              ← Quay lại
+            </Link>
           </div>
-          <button
-            onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
-            style={{ background: "var(--color-primary)" }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-          >
-            <Plus size={20} />
-            Thêm Người Trúng
-          </button>
         </div>
+      </div>
+      
 
         {/* Add Form */}
         {showAddForm && (
@@ -325,6 +322,6 @@ if (!user) return;
           )}
         </div>
       </div>
-    </AdminLayout>
+   
   );
 }
