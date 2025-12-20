@@ -77,8 +77,8 @@ export async function GET() {
           // Stars now in member_star_awards
           supabase
             .from('member_star_awards')
-            .select('id, member_id, challenge_id, quantity, status, created_at')
-            .eq('member_id', user.id),
+            .select('id, user_id, challenge_participant_id, stars_awarded, awarded_at')
+            .eq('user_id', user.id),
       ]);
 
       if (mmrResp.error) serverDebug.warn('[profile.rewards] mmr query error', mmrResp.error);
@@ -141,10 +141,9 @@ export async function GET() {
           results.push({
             id: rr['id'] ?? null,
             kind: 'star',
-            quantity: rr['quantity'] != null ? Number(rr['quantity']) : 0,
+            quantity: rr['stars_awarded'] != null ? Number(rr['stars_awarded']) : 0,
             description: 'Challenge stars',
-            status: rr['status'] ?? null,
-            date: rr['created_at'] ?? null,
+            date: rr['awarded_at'] ?? null,
             raw: rr,
           });
         }
