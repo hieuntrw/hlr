@@ -13,17 +13,25 @@ interface PBRecord {
   time_seconds: number;
   achieved_at: string;
   profile?: {
-    full_name: string;
-  };
+    full_name?: string;
+  } | null;
+  pb_fm_seconds?: number | null;
+  pb_hm_seconds?: number | null;
+  pb_fm_approved?: boolean | null;
+  pb_hm_approved?: boolean | null;
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+interface IncomingPB {
+  id: string;
+  user_id: string;
+  distance: string;
+  time_seconds: number;
+  achieved_at: string | null;
+  profile?: { full_name?: string } | null;
+  pb_fm_seconds?: number | null;
+  pb_hm_seconds?: number | null;
+  pb_fm_approved?: boolean | null;
+  pb_hm_approved?: boolean | null;
 }
 
 function formatTime(seconds: number): string {
@@ -33,14 +41,6 @@ function formatTime(seconds: number): string {
   return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs
     .toString()
     .padStart(2, "0")}`;
-}
-
-function formatPace(seconds: number, distance: string): string {
-  const distanceKm = distance === "HM" ? 21 : 42;
-  const pacePerKm = (seconds * 1000) / distanceKm;
-  const mins = Math.floor(pacePerKm / 60);
-  const secs = Math.floor(pacePerKm % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}/km`;
 }
 
 export default function PBApprovalPage() {
@@ -57,25 +57,21 @@ export default function PBApprovalPage() {
       if (!res.ok) throw new Error('Failed to load');
       const j = await res.json().catch(() => ({ data: [] }));
       const data = j.data || [];
+      // API already returns only pending PB rows; map directly
+      const incoming = (data as IncomingPB[]) || [];
       setPendingPBs(
-        data.map((p: unknown) => {
-          const item = p as {
-            id: string;
-            user_id: string;
-            distance: string;
-            time_seconds: number;
-            achieved_at: string;
-            profiles?: { full_name?: string } | null;
-          };
-          return {
-            id: item.id,
-            user_id: item.user_id,
-            distance: item.distance,
-            time_seconds: item.time_seconds,
-            achieved_at: item.achieved_at,
-            profile: item.profiles,
-          };
-        }) || []
+        incoming.map((p) => ({
+          id: p.id,
+          user_id: p.user_id,
+          distance: p.distance,
+          time_seconds: p.time_seconds,
+          achieved_at: p.achieved_at ?? '',
+          profile: p.profile ?? null,
+          pb_fm_seconds: p.pb_fm_seconds,
+          pb_hm_seconds: p.pb_hm_seconds,
+          pb_fm_approved: p.pb_fm_approved,
+          pb_hm_approved: p.pb_hm_approved,
+        })) || []
       );
     } catch (err) {
       console.error('Error:', err);
@@ -108,35 +104,28 @@ export default function PBApprovalPage() {
       const pbData = pendingPBs.find((p) => p.id === pbId);
 
       if (!pbData) return;
+      const ok = window.confirm(`Bạn có chắc muốn duyệt PB của ${pbData.profile?.full_name ?? 'thành viên này'}?`);
+      if (!ok) return;
 
+      const payload = { user_id: pbData.user_id, distance: pbData.distance };
       const res = await fetch('/api/admin/pb-approval', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: pbId }),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Approve failed');
 
       alert("Đã duyệt thành tích!");
-      fetchPendingPBs();
+      // remove approved PB from UI list
+      setPendingPBs((prev) => prev.filter((p) => p.id !== pbId));
     } catch (err) {
       console.error("Error:", err);
       alert("Lỗi khi duyệt thành tích");
     }
   }
 
-  async function handleReject(pbId: string) {
-    try {
-      const res = await fetch(`/api/admin/pb-approval?id=${pbId}`, { method: 'DELETE', credentials: 'same-origin' });
-      if (!res.ok) throw new Error('Delete failed');
-
-      alert("Đã từ chối thành tích!");
-      fetchPendingPBs();
-    } catch (err) {
-      console.error("Error:", err);
-      alert("Lỗi khi từ chối");
-    }
-  }
+  // Note: per spec, reject is a client-only action and removed from UI
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -165,9 +154,7 @@ export default function PBApprovalPage() {
                 <tr className="border-b-2 border-gray-300 bg-gray-50">
                   <th className="text-left py-3 px-4 font-bold text-gray-700">Thành Viên</th>
                   <th className="text-center py-3 px-4 font-bold text-gray-700">Cự Ly</th>
-                  <th className="text-right py-3 px-4 font-bold text-gray-700">Thời Gian</th>
-                  <th className="text-right py-3 px-4 font-bold text-gray-700">Pace</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày</th>
+                                  <th className="text-right py-3 px-4 font-bold text-gray-700">Thời Gian</th>
           
                   <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
                 </tr>
@@ -184,10 +171,7 @@ export default function PBApprovalPage() {
                     <td className="py-3 px-4 text-right font-bold" style={{ color: "var(--color-primary)" }}>
                       {formatTime(pb.time_seconds)}
                     </td>
-                    <td className="py-3 px-4 text-right text-gray-600">
-                      {formatPace(pb.time_seconds, pb.distance)}
-                    </td>
-                    <td className="py-3 px-4">{formatDate(pb.achieved_at)}</td>
+                    
                     
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-2">
@@ -197,12 +181,7 @@ export default function PBApprovalPage() {
                         >
                           ✓ Duyệt
                         </button>
-                        <button
-                          onClick={() => handleReject(pb.id)}
-                          className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded transition-colors"
-                        >
-                          ✕ Từ Chối
-                        </button>
+                        
                       </div>
                     </td>
                   </tr>
