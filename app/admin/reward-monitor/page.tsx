@@ -139,7 +139,7 @@ export default function RewardMonitorPage() {
     if (s === 'pending') {
       return <span style={{ color: theme.colors.error, fontWeight: 600 }}>{statusRaw}</span>;
     }
-    if (s === 'delivered' || s === 'delivered') {
+    if (s === 'delivered') {
       return <span style={{ color: theme.colors.success, fontWeight: 600 }}>{statusRaw}</span>;
     }
     return <span>{statusRaw}</span>;
@@ -205,7 +205,7 @@ export default function RewardMonitorPage() {
 
       // Preload races map for Race column (call general races API and map by id)
       try {
-        const racesRes = await fetch('/api/races', { credentials: 'same-origin' });
+        const racesRes = await fetch('/api/races', { credentials: 'same-origin', cache: 'no-store' });
         if (racesRes.ok) {
           const racesJson = await racesRes.json().catch(() => null);
           if (Array.isArray(racesJson)) {

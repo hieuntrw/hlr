@@ -57,6 +57,30 @@ export async function GET(request: NextRequest) {
     // select if the column is missing or ordering fails. Returns { data, error } shape.
     async function fetchWithOrderFallback(table: string): Promise<ApiResult> {
       try {
+        // If service role is available, call PostgREST directly with no-cache to avoid Next's fetch cache
+        if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          try {
+            const base = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+            const url = `${base}/rest/v1/${table}?select=${encodeURIComponent('*')}&order=created_at.desc&limit=10000`;
+            const res = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+              },
+              cache: 'no-store'
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+              serverDebug.warn('GET member-rewards: direct REST fetch failed', { table, status: res.status, statusText: res.statusText, url });
+              return { error: { message: res.statusText }, data: null };
+            }
+            return { data } as ApiResult;
+          } catch (e) {
+            serverDebug.warn('GET member-rewards: direct REST fetch threw', { table, error: String(e) });
+            // fall through to client-based fetch below
+          }
+        }
+
         // Add a generous limit to avoid any unexpected implicit limits from clients
         const res = await client.from(table).select('*').order('created_at', { ascending: false }).limit(10000) as ApiResult;
         if (res.error) {
@@ -89,6 +113,30 @@ export async function GET(request: NextRequest) {
     async function fetchMemberMilestonesWithJoins(): Promise<ApiResult> {
       try {
         const selectStr = `id,member_id,race_id,race_result_id,status,achieved_time_seconds,reward_description,cash_amount,related_transaction_id,created_at,profiles!member_milestone_rewards_member_id_fkey(full_name,email),reward_milestones(id,milestone_name,race_type,reward_description),races(id,name)`;
+        // If service role is available, call PostgREST directly with no-cache to avoid Next fetch caching
+        if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+          try {
+            const base = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').replace(/\/$/, '');
+            const url = `${base}/rest/v1/member_milestone_rewards?select=${encodeURIComponent(selectStr)}&order=created_at.desc&limit=10000`;
+            const res = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+                apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+              },
+              cache: 'no-store'
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+              serverDebug.warn('GET member-rewards: direct REST fetch failed for milestones', { status: res.status, statusText: res.statusText, url });
+              return { error: { message: res.statusText }, data: null };
+            }
+            return { data } as ApiResult;
+          } catch (e) {
+            serverDebug.warn('GET member-rewards: direct REST fetch threw for milestones', { error: String(e) });
+            // fall back to client-based fetch below
+          }
+        }
+
         const res = await client.from('member_milestone_rewards').select(selectStr).order('created_at', { ascending: false }).limit(10000) as ApiResult;
         if (res.error) {
           const msg = String((res.error || {}).message || '');
