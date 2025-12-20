@@ -94,12 +94,23 @@ function DashboardContent() {
   const [yearlyStatsLoading, setYearlyStatsLoading] = useState(true);
   const [notificationsLoading, setNotificationsLoading] = useState(true);
 
-  // Format time in seconds to MM:SS
+  // Format time in seconds to HH:MM:SS
   const formatTime = (seconds: number | null): string => {
-    if (!seconds) return "—";
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, "0")}`;
+    if (seconds === null || seconds === undefined) return "—";
+    const secNum = Math.max(0, Math.floor(Number(seconds)));
+    const h = Math.floor(secNum / 3600);
+    const m = Math.floor((secNum % 3600) / 60);
+    const s = secNum % 60;
+    return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const isFullMarathon = (distance: string) => {
+    if (!distance) return false;
+    const d = distance.toLowerCase();
+    if (d === "fm" || d === "full marathon") return true;
+    if (d.includes("full") && d.includes("marathon")) return true;
+    if (d.includes("42") || d.includes("42.195")) return true;
+    return false;
   };
 
   // Fetch Hall of Fame (top 3 per distance)
@@ -111,17 +122,24 @@ function DashboardContent() {
         const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin', cache: 'no-store' });
         const j = await resp.json().catch(() => null);
           if (resp.ok && j?.ok && Array.isArray(j.data)) {
-          const mapped = j.data.map((r: unknown) => {
-            const row = r as Record<string, unknown>;
-            return {
-              rank: Number(row.rank ?? 0),
-              name: String(row.name ?? ''),
-              time: formatTime(Number(row.time_seconds ?? 0)),
-              distance: String(row.distance ?? ''),
-            } as HallOfFameEntry;
-          });
-          setHallOfFame(mapped);
-        } else {
+            const mapped = j.data.map((r: unknown) => {
+              const row = r as Record<string, unknown>;
+              return {
+                rank: Number(row.rank ?? 0),
+                name: String(row.name ?? ''),
+                time: formatTime(Number(row.time_seconds ?? 0)),
+                distance: String(row.distance ?? ''),
+              } as HallOfFameEntry;
+            });
+            // Prioritize Full Marathon (FM) entries first, then by rank
+            const sorted = mapped.sort((a, b) => {
+              const aFM = isFullMarathon(a.distance) ? 0 : 1;
+              const bFM = isFullMarathon(b.distance) ? 0 : 1;
+              if (aFM !== bFM) return aFM - bFM;
+              return a.rank - b.rank;
+            });
+            setHallOfFame(sorted);
+          } else {
           console.warn('[Dashboard] hall-of-fame API failed', j);
         }
       } catch (e) {

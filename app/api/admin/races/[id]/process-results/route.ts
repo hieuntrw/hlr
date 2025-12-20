@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
           // update profile PB (mark pending approval)
           const updatePayload: Record<string, unknown> = {};
           updatePayload[pbField] = chip;
-          updatePayload[approvalField] = false;
+          updatePayload[approvalField] = true;
           const { error: pErr } = await service.from('profiles').update(updatePayload).eq('id', userId);
           if (pErr) serverDebug.warn('Failed to update profile PB', pErr);
 

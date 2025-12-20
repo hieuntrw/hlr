@@ -25,11 +25,13 @@ const tabs = [
 ];
 
 // Format time (seconds) to readable string (HH:MM:SS)
-function formatTime(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = seconds % 60;
-  return `${hours}:${minutes.toString().padStart(2, "0")}:${secs
+function formatTime(seconds?: number | null): string {
+  if (seconds === null || seconds === undefined || Number.isNaN(Number(seconds))) return "—";
+  const secNum = Math.max(0, Math.floor(Number(seconds)));
+  const hours = Math.floor(secNum / 3600);
+  const minutes = Math.floor((secNum % 3600) / 60);
+  const secs = secNum % 60;
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${secs
     .toString()
     .padStart(2, "0")}`;
 }
@@ -104,68 +106,50 @@ function TopCards({ data, pbField }: { data: ProfilePB[]; pbField: string }) {
   );
 }
 
-// Leaderboard list for 11+
-function LeaderboardList({ data, pbField }: { data: ProfilePB[]; pbField: string }) {
-  return (
-    <div className="space-y-2">
-      {data.map((person, idx) => {
-        const pbValue = person[pbField as keyof ProfilePB] as number || 0;
-        return (
-          <div key={person.id} className="flex items-center gap-3 px-3 py-2 rounded bg-gray-50 border border-gray-200">
-            <div className="w-10 h-10 rounded-full bg-gray-400 flex items-center justify-center text-white font-bold text-sm">
-              {person.full_name.charAt(0).toUpperCase()}
-            </div>
-            <div className="flex-1">
-              <div className="font-medium text-gray-700">{person.full_name}</div>
-              <div className="text-xs text-gray-500">PB: {formatTime(pbValue)}</div>
-            </div>
-            <div className="text-xs text-gray-400">Top {idx + 11}</div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+// (Removed unused LeaderboardList component — remaining items are rendered via TopCards)
 
 export default function HallOfFamePage() {
   const [activeTab, setActiveTab] = useState<TabType>("fm_male");
-  const [leaderboard, setLeaderboard] = useState<ProfilePB[]>([]);
+  const [rawLeaderboard, setRawLeaderboard] = useState<ProfilePB[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchLeaderboard() {
-    setLoading(true);
-
-    try {
-      const base = typeof window !== 'undefined' ? window.location.origin : '';
-      const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin' });
-      const j = await resp.json().catch(() => null);
-      if (resp.ok && j?.ok && Array.isArray(j.data)) {
-        // j.data is expected to be ordered top->best (time ascending) and include rank,name,time_seconds,distance
-        // Map incoming minimal data to ProfilePB shape used by UI
-        const mapped = (Array.isArray(j.data) ? j.data : []).map((p: unknown) => {
-          const rec = (p as Record<string, unknown>) || {};
-          return {
-            id: String(rec.id ?? rec.name ?? ''),
-            full_name: String(rec.name ?? ''),
-            pb_fm_seconds: Number(rec.time_seconds ?? 0),
-            gender: undefined,
-          } as ProfilePB;
-        });
-        setLeaderboard(mapped);
-      } else {
-        console.warn('[HallOfFame] /api/hall-of-fame failed', j);
-        setLeaderboard([]);
+      setLoading(true);
+      try {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const resp = await fetch(`${base}/api/hall-of-fame`, { credentials: 'same-origin' });
+        const j = await resp.json().catch(() => null);
+        if (resp.ok && j?.ok && Array.isArray(j.data)) {
+          const mapped = (j.data as unknown[]).map((p: unknown) => {
+            const rec = (p as Record<string, unknown>) || {};
+            const dist = String(rec.distance ?? '').toUpperCase();
+            const timeSec = Number(rec.time_seconds ?? rec.pb_seconds ?? 0) || 0;
+            const genderRaw = (rec.gender ?? rec.sex ?? '') as string;
+            const gender = genderRaw ? (genderRaw.charAt(0).toUpperCase() + genderRaw.slice(1)) as "Male" | "Female" : undefined;
+            return {
+              id: String(rec.id ?? rec.name ?? ''),
+              full_name: String(rec.name ?? ''),
+              pb_fm_seconds: dist === 'FM' ? timeSec : undefined,
+              pb_hm_seconds: dist === 'HM' ? timeSec : undefined,
+              gender,
+              device_name: String(rec.device_name ?? ''),
+            } as ProfilePB;
+          });
+          setRawLeaderboard(mapped);
+        } else {
+          console.warn('[HallOfFame] /api/hall-of-fame failed', j);
+          setRawLeaderboard([]);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+        setRawLeaderboard([]);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Unexpected error:", err);
-      setLeaderboard([]);
-    } finally {
-      setLoading(false);
-    }
     }
     fetchLeaderboard();
-  }, [activeTab]);
+  }, []);
 
   // Determine PB field based on active tab for display
   const getPbField = () => {
@@ -174,9 +158,32 @@ export default function HallOfFamePage() {
   };
 
   const pbField = getPbField();
-  const top3 = leaderboard.slice(0, 3);
-  const top4_10 = leaderboard.slice(3, 10);
-  const top11Plus = leaderboard.slice(10);
+
+  const normalizeGender = (g?: string) => {
+    if (!g) return undefined;
+    const gg = String(g).toLowerCase();
+    if (gg.startsWith('m')) return 'Male';
+    if (gg.startsWith('f')) return 'Female';
+    return undefined;
+  };
+
+  const filtered = rawLeaderboard
+    .filter((p) => {
+      const gender = normalizeGender(p.gender as string | undefined);
+      if (activeTab === 'fm_male') return (p.pb_fm_seconds || 0) > 0 && gender === 'Male';
+      if (activeTab === 'fm_female') return (p.pb_fm_seconds || 0) > 0 && gender === 'Female';
+      if (activeTab === 'hm_male') return (p.pb_hm_seconds || 0) > 0 && gender === 'Male';
+      if (activeTab === 'hm_female') return (p.pb_hm_seconds || 0) > 0 && gender === 'Female';
+      return false;
+    })
+    .sort((a, b) => {
+      const aVal = (pbField === 'pb_fm_seconds' ? a.pb_fm_seconds : a.pb_hm_seconds) || Infinity;
+      const bVal = (pbField === 'pb_fm_seconds' ? b.pb_fm_seconds : b.pb_hm_seconds) || Infinity;
+      return aVal - bVal;
+    });
+
+  const top3 = filtered.slice(0, 3);
+  const remaining = filtered.slice(3);
 
   return (
     <div>
@@ -229,43 +236,23 @@ export default function HallOfFamePage() {
               </div>
             )}
 
-            {/* Top 4-10 Cards */}
-            {top4_10.length > 0 && (
+            {/* Remaining (Top 4 - n) Cards */}
+            {remaining.length > 0 && (
               <div className="mb-12">
                 <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
                   <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
                     <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <circle cx="12" cy="8" r="5"/>
                       <path d="M20 21a8 8 0 1 0-16 0"/>
-                      <circle cx="18" cy="8" r="3"/>
-                      <circle cx="6" cy="8" r="3"/>
                     </svg>
-                    Top 4-10
+                    Top 4 - Danh Sách Tiếp Theo
                   </h2>
                 </div>
-                <TopCards data={top4_10} pbField={pbField} />
+                <TopCards data={remaining} pbField={pbField} />
               </div>
             )}
 
-            {/* Top 11+ List */}
-            {top11Plus.length > 0 && (
-              <div className="mb-12">
-                <div className="rounded-lg p-4 mb-6 shadow-lg gradient-theme-primary">
-                  <h2 className="text-2xl font-bold flex items-center gap-3" style={{ color: "var(--color-text-inverse)" }}>
-                    <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                      <circle cx="9" cy="7" r="4"/>
-                      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-                    </svg>
-                    Danh Sách Còn Lại
-                  </h2>
-                </div>
-                <LeaderboardList data={top11Plus} pbField={pbField} />
-              </div>
-            )}
-
-            {leaderboard.length === 0 && (
+            {filtered.length === 0 && (
               <div className="rounded-lg p-12 text-center shadow-sm" style={{ background: "var(--color-bg-secondary)" }}>
                 <p className="text-lg" style={{ color: "var(--color-text-secondary)" }}>Chưa có dữ liệu PB được duyệt cho danh mục này</p>
               </div>

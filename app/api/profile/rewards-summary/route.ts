@@ -46,14 +46,14 @@ export async function GET(request: NextRequest) {
     const { data: achieved } = await supabase
       .from('member_milestone_rewards')
       .select('*, race:races(name, date), milestone:reward_milestones(*)')
-      .eq('user_id', user.id)
+      .eq('member_id', user.id)
       .order('created_at', { ascending: false });
 
     // Podium rewards
     const { data: podium } = await supabase
       .from('member_podium_rewards')
       .select('*, race:races(name, date)')
-      .eq('user_id', user.id)
+      .eq('member_id', user.id)
       .order('created_at', { ascending: false });
 
     // Lucky draw wins
@@ -66,14 +66,14 @@ export async function GET(request: NextRequest) {
     // Star totals (now stored in member_star_awards). Use created_at range when provided.
     let star_total = 0;
     try {
-      let starQuery = supabase.from('member_star_awards').select('quantity').eq('member_id', user.id);
+      let starQuery = supabase.from('member_star_awards').select('stars_awarded').eq('user_id', user.id);
       if (startDate) starQuery = starQuery.gte('created_at', startDate);
       if (endDate) starQuery = starQuery.lte('created_at', endDate);
       const { data: stars, error: starsErr } = await starQuery;
       if (!starsErr && Array.isArray(stars)) {
         star_total = stars.reduce((s: number, r: unknown) => {
           const rr = r as Record<string, unknown>;
-          const q = rr['quantity'];
+          const q = rr['stars_awarded'];
           return s + (Number(q ?? 0) || 0);
         }, 0);
       } else if (starsErr) {
