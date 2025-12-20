@@ -138,7 +138,13 @@ function DashboardContent() {
               if (aFM !== bFM) return aFM - bFM;
               return a.rank - b.rank;
             });
-            setHallOfFame(sorted);
+            // Take top 3 FM and top 3 HM to show concise Hall of Fame on dashboard
+            const fmEntries = sorted.filter((e) => isFullMarathon(e.distance)).slice(0, 3);
+            const hmEntries = sorted.filter((e) => !isFullMarathon(e.distance)).slice(0, 3);
+            // Recompute ranks per-distance so FM shows 1..n and HM shows 1..n
+            const fmMapped = fmEntries.map((e, i) => ({ ...e, rank: i + 1 }));
+            const hmMapped = hmEntries.map((e, i) => ({ ...e, rank: i + 1 }));
+            setHallOfFame([...fmMapped, ...hmMapped]);
           } else {
           console.warn('[Dashboard] hall-of-fame API failed', j);
         }
