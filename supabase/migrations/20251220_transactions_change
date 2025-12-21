@@ -1,0 +1,130 @@
+-- =================================================================
+-- 1. TẠO BẢNG DANH MỤC TÀI CHÍNH (FINANCIAL CATEGORIES)
+-- =================================================================
+CREATE TABLE IF NOT EXISTS public.financial_categories (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  code text NULL UNIQUE, -- Định danh (MONTHLY_FUND, CHALLENGE_FINE...)
+  flow_type text NOT NULL CHECK (flow_type IN ('in', 'out')), -- in=Thu, out=Chi
+  is_recurring boolean DEFAULT false,
+  description text NULL,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT financial_categories_pkey PRIMARY KEY (id)
+);
+
+-- Bật RLS
+ALTER TABLE public.financial_categories ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Read Categories" ON public.financial_categories FOR SELECT USING (true);
+
+-- Seed Data (Dữ liệu mẫu)
+INSERT INTO public.financial_categories (name, code, flow_type, is_recurring) VALUES 
+('Thu Quỹ Tháng', 'MONTHLY_FUND', 'in', true),
+('Phạt Thử Thách', 'CHALLENGE_FINE', 'in', true),
+('Ủng hộ/Tài trợ', 'DONATION', 'in', false),
+('Chi Hoạt động (Longrun)', 'EXPENSE_OPERATION', 'out', false),
+('Chi Thưởng Sự kiện', 'EXPENSE_REWARD', 'out', false),
+('Chi Quà May Mắn', 'EXPENSE_LUCKY_DRAW', 'out', false)
+ON CONFLICT (code) DO NOTHING;
+
+-- =================================================================
+-- 2. TỐI ƯU HÓA BẢNG TRANSACTIONS
+-- =================================================================
+-- 2.1. Thêm các cột mới
+ALTER TABLE public.transactions 
+ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES public.financial_categories(id),
+ADD COLUMN IF NOT EXISTS fiscal_year int DEFAULT EXTRACT(YEAR FROM CURRENT_DATE),
+ADD COLUMN IF NOT EXISTS period_month int,
+ADD COLUMN IF NOT EXISTS metadata jsonb DEFAULT '{}'::jsonb,
+ADD COLUMN IF NOT EXISTS processed_by uuid REFERENCES public.profiles(id),
+ADD COLUMN IF NOT EXISTS processed_at timestamp with time zone;
+
+-- 2.2. Migrate dữ liệu cũ (Map Type cũ -> Category mới)
+UPDATE public.transactions SET category_id = (SELECT id FROM financial_categories WHERE code = 'MONTHLY_FUND') WHERE type = 'fund_collection' AND category_id IS NULL;
+UPDATE public.transactions SET category_id = (SELECT id FROM financial_categories WHERE code = 'CHALLENGE_FINE') WHERE type = 'fine' AND category_id IS NULL;
+UPDATE public.transactions SET category_id = (SELECT id FROM financial_categories WHERE code = 'DONATION') WHERE type = 'donation' AND category_id IS NULL;
+UPDATE public.transactions SET category_id = (SELECT id FROM financial_categories WHERE code = 'EXPENSE_OPERATION') WHERE type = 'expense' AND category_id IS NULL;
+-- Nếu còn dòng nào chưa có category, gán tạm vào EXPENSE_OPERATION hoặc xóa
+-- DELETE FROM transactions WHERE category_id IS NULL; 
+
+-- 2.3. Migrate dữ liệu quan hệ -> Metadata
+-- ... (Phần thêm cột metadata giữ nguyên) ...
+
+-- Migrate dữ liệu cũ (Giả sử bạn đang có cột related_member_reward_id liên kết với bảng reward cũ)
+-- Chúng ta sẽ chuyển ID đó vào metadata để tra cứu ngược lại nguồn gốc
+UPDATE public.transactions 
+SET metadata = jsonb_build_object(
+    'source_table', 'member_milestone_rewards', -- Đánh dấu nguồn
+    'reward_id', related_member_reward_id,      -- ID bản ghi gốc
+    'note', 'Migrated data'
+)
+WHERE related_member_reward_id IS NOT NULL;
+
+-- 2.4. Migrate Audit Log
+UPDATE public.transactions SET processed_by = paid_by, processed_at = paid_at WHERE payment_status = 'paid';
+UPDATE public.transactions SET processed_by = rejected_by, processed_at = rejected_at WHERE payment_status IN ('cancelled', 'rejected');
+
+-- 2.5. Xóa cột cũ & Khóa cấu trúc
+ALTER TABLE public.transactions 
+DROP COLUMN IF EXISTS type,
+DROP COLUMN IF EXISTS related_challenge_id,
+DROP COLUMN IF EXISTS related_member_reward_id,
+DROP COLUMN IF EXISTS paid_by,
+DROP COLUMN IF EXISTS paid_at,
+DROP COLUMN IF EXISTS rejected_by,
+DROP COLUMN IF EXISTS rejected_at,
+DROP COLUMN IF EXISTS transaction_date; -- Dùng created_at
+
+ALTER TABLE public.transactions ALTER COLUMN category_id SET NOT NULL;
+
+-- =================================================================
+-- 3. TẠO CÁC VIEW BÁO CÁO (REPORTING VIEWS)
+-- =================================================================
+
+-- 3.1. View Tài chính Cá nhân (Dùng cho Member xem nợ/lịch sử)
+CREATE OR REPLACE VIEW public.view_my_finance_status WITH (security_invoker = true) AS 
+SELECT 
+    t.id as transaction_id,
+    t.user_id,
+    fc.name as category_name,
+    fc.code as category_code,
+    fc.flow_type,
+    t.amount,
+    t.description,
+    t.created_at,
+    t.payment_status,
+    t.fiscal_year,
+    t.period_month,
+    t.metadata
+FROM public.transactions t
+JOIN public.financial_categories fc ON t.category_id = fc.id;
+
+-- 3.2. View Quỹ Công khai (Tổng hợp số liệu)
+CREATE OR REPLACE VIEW public.view_public_fund_stats AS
+SELECT 
+    EXTRACT(YEAR FROM CURRENT_DATE)::int as fiscal_year,
+    COALESCE(SUM(CASE WHEN fc.flow_type = 'in' AND t.payment_status = 'paid' THEN t.amount ELSE 0 END), 0) as total_income,
+    COALESCE(SUM(CASE WHEN fc.flow_type = 'out' AND t.payment_status = 'paid' THEN t.amount ELSE 0 END), 0) as total_expense,
+    (
+      COALESCE(SUM(CASE WHEN fc.flow_type = 'in' AND t.payment_status = 'paid' THEN t.amount ELSE 0 END), 0) -
+      COALESCE(SUM(CASE WHEN fc.flow_type = 'out' AND t.payment_status = 'paid' THEN t.amount ELSE 0 END), 0)
+    ) as current_balance
+FROM public.transactions t
+JOIN public.financial_categories fc ON t.category_id = fc.id
+WHERE t.fiscal_year = EXTRACT(YEAR FROM CURRENT_DATE);
+
+GRANT SELECT ON public.view_public_fund_stats TO authenticated;
+
+-- 3.3. View Chi tiêu Công khai (Minh bạch hóa)
+CREATE OR REPLACE VIEW public.view_public_recent_expenses AS
+SELECT 
+    t.processed_at as payment_date,
+    fc.name as category_name,
+    t.description,
+    t.amount,
+    t.metadata
+FROM public.transactions t
+JOIN public.financial_categories fc ON t.category_id = fc.id
+WHERE fc.flow_type = 'out' AND t.payment_status = 'paid'
+ORDER BY t.processed_at DESC LIMIT 20;
+
+GRANT SELECT ON public.view_public_recent_expenses TO authenticated;

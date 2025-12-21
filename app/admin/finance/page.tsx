@@ -1,362 +1,226 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import RejectModal from "./RejectModal";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { useAuth } from "@/lib/auth/AuthContext";
-import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
+import { useEffect, useState } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import Link from 'next/link';
+import { Plus, Search, Filter } from 'lucide-react';
+import { financeService } from '@/lib/services/financeService';
 
-interface Transaction {
+// 1. Định nghĩa Interface cho dữ liệu (Fix lỗi Line 10)
+interface TransactionWithDetails {
   id: string;
-  user_id?: string;
-  type: string;
+  created_at: string;
   amount: number;
   description: string;
-  transaction_date: string;
-  payment_status: string;
-  profile?: {
+  payment_status: string; // Hoặc 'pending' | 'paid' | ...
+  profiles?: {
     full_name: string;
-  };
-  receipt_url?: string | null;
-  paid_by?: string | null;
-  paid_at?: string | null;
-  rejected_by?: string | null;
-  rejected_at?: string | null;
-  rejection_reason?: string | null;
+  } | null;
+  financial_categories?: {
+    name: string;
+    flow_type: 'in' | 'out';
+    code: string;
+  } | null;
 }
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+// Interface cho Stats
+interface FundStats {
+  opening_balance: number;
+  total_revenue: number;
+  total_expense: number;
+  current_balance: number;
 }
 
-function formatCash(amount: number): string {
-  return amount.toLocaleString("vi-VN") + " ₫";
+// 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
+interface KPICardProps {
+  title: string;
+  value: string | number;
+  color: string;
 }
 
-function getTypeColor(type: string): string {
-  const colors: { [key: string]: string } = {
-    fund_collection: "bg-blue-100 text-blue-800",
-    fine: "bg-red-100 text-red-800",
-    donation: "bg-green-100 text-green-800",
-    expense: "bg-purple-100 text-purple-800",
-    reward_payout: "bg-yellow-100 text-yellow-800",
-  };
-  return colors[type] || "bg-gray-100 text-gray-800";
-}
-
-function getTypeLabel(type: string): string {
-  const labels: { [key: string]: string } = {
-    fund_collection: "Thu Quỹ",
-    fine: "Phạt",
-    donation: "Quyên Góp",
-    expense: "Chi Tiêu",
-    reward_payout: "Thưởng",
-  };
-  return labels[type] || type;
-}
-
-export default function FinancePage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
-  const router = useRouter();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+export default function AdminFinanceDashboard() {
+  // Thay thế <any[]> bằng <TransactionWithDetails[]>
+  const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [role, setRole] = useState<string | null>(null);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState<string | null>(null);
+  const supabase = createClientComponentClient();
+  const [stats, setStats] = useState<FundStats | null>(null);
 
-  const checkRole = useCallback(async () => {
-    if (!user) {
-      router.push("/debug-login");
-      return;
-    }
-    const detectedRole = getEffectiveRole(user, profile);
-    console.log('[Finance Page] Checking role for user:', user?.email, 'Role:', detectedRole);
+  // Load toàn bộ giao dịch
+  useEffect(() => {
+    async function fetchAll() {
+      // 1. Gọi song song: Lấy Stats chuẩn + Lấy List giao dịch
+      const [statsData, transRes] = await Promise.all([
+        financeService.getPublicStats(),
+        supabase
+          .from('transactions')
+          .select(`
+            *,
+            profiles:user_id(full_name),
+            financial_categories(name, flow_type, code)
+          `)
+          .order('created_at', { ascending: false })
+          .limit(100)
+      ]);
 
-    if (detectedRole && (isAdminRole(detectedRole) || detectedRole === 'mod_finance')) {
-      setRole(detectedRole);
-      console.log('[Finance Page] Role authorized:', detectedRole);
-    } else {
-      console.log('[Finance Page] Unauthorized role:', detectedRole);
-      router.push("/");
-    }
-  }, [user, profile, router]);
-
-  const fetchTransactions = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      const q = filterType ? `?type=${encodeURIComponent(filterType)}` : '';
-      const res = await fetch(`/api/admin/transactions${q}`, { credentials: 'same-origin' });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(txt || 'Failed to load transactions');
-      }
-      const body = await res.json().catch(() => ({ transactions: [] }));
-      setTransactions(body.transactions || []);
-    } catch (err) {
-      console.error("Error:", err);
-    } finally {
+      if (statsData) setStats(statsData as unknown as FundStats);
+      if (transRes.data) setTransactions(transRes.data as unknown as TransactionWithDetails[]);
+      
       setLoading(false);
     }
-  }, [filterType]);
+    fetchAll();
+  }, [supabase]);
 
-  useEffect(() => {
-    if (authLoading || !sessionChecked) return;
-    checkRole();
-    fetchTransactions();
-  }, [user, authLoading, sessionChecked, checkRole, fetchTransactions]);
-
-  async function approveTransaction(transactionId: string) {
-    try {
-      const res = await fetch('/api/admin/transactions', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: transactionId, action: 'approve' }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || 'Approve failed');
-      }
-      alert('Đã xác nhận thanh toán.');
-      fetchTransactions();
-    } catch (err) {
-      console.error(err);
-      alert('Không thể xác nhận.');
+  // Hành động xác nhận thu tiền nhanh
+  const markAsPaid = async (id: string) => {
+    if(!confirm('Xác nhận đã thu tiền khoản này?')) return;
+    
+    const { error } = await supabase
+      .from('transactions')
+      .update({ payment_status: 'paid', processed_at: new Date().toISOString() })
+      .eq('id', id);
+      
+    if (!error) {
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
     }
-  }
+  };
 
-  async function rejectTransaction(transactionId: string, reason: string) {
-    try {
-      const res = await fetch('/api/admin/transactions', {
-        method: 'PUT',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: transactionId, action: 'reject', reason }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || 'Reject failed');
-      }
-      alert('Đã từ chối biên lai.');
-      fetchTransactions();
-    } catch (err) {
-      console.error(err);
-      alert('Không thể từ chối.');
-    }
-  }
-
-  useEffect(() => {
-    fetchTransactions();
-  }, [filterType, fetchTransactions]);
-
-  const totalIncome = transactions
-    .filter((t) => ["fund_collection", "donation"].includes(t.type))
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalExpense = transactions
-    .filter((t) => ["expense", "fine", "reward_payout"].includes(t.type))
-    .reduce((sum, t) => sum + t.amount, 0);
-
-  const balance = totalIncome - totalExpense;
-
-  if (!role) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-gray-600">Đang kiểm tra quyền...</p>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-8">Đang tải dashboard...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="py-6 px-4 gradient-theme-primary">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>💰 Quản Lý Thu/Chi</h1>
-            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
-              ← Quay lại
-            </Link>
-          </div>
-
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-white/20 rounded-lg p-4">
-              <p className="text-blue-100">Thu Nhập</p>
-              <p className="text-2xl font-bold">{formatCash(totalIncome)}</p>
-            </div>
-            <div className="bg-white/20 rounded-lg p-4">
-              <p className="text-blue-100">Chi Tiêu</p>
-              <p className="text-2xl font-bold">{formatCash(totalExpense)}</p>
-            </div>
-            <div className={`${balance >= 0 ? "bg-green-500/20" : "bg-red-500/20"} rounded-lg p-4`}>
-              <p className="text-white/80">Số Dư</p>
-              <p className="text-2xl font-bold">{formatCash(balance)}</p>
-            </div>
-          </div>
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800">Quản trị Tài chính</h1>
+          <p className="text-gray-500">Quản lý thu chi và duyệt giao dịch</p>
         </div>
+        <Link 
+          href="/admin/finance/create" 
+          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition"
+        >
+          <Plus size={18} /> Tạo Giao dịch Mới
+        </Link>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Filter */}
-        <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
-          <button
-            onClick={() => setFilterType(null)}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              filterType === null
-                ? "text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-            style={filterType === null ? { background: "var(--color-primary)" } : {}}
-          >
-            Tất Cả
-          </button>
-          <button
-            onClick={() => setFilterType("fund_collection")}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              filterType === "fund_collection"
-                ? "text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-            style={filterType === "fund_collection" ? { background: "var(--color-primary)" } : {}}
-          >
-            Thu Quỹ
-          </button>
-          <button
-            onClick={() => setFilterType("fine")}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              filterType === "fine"
-                ? "text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-            style={filterType === "fine" ? { background: "var(--color-primary)" } : {}}
-          >
-            Phạt
-          </button>
-          <button
-            onClick={() => setFilterType("expense")}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              filterType === "expense"
-                ? "text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-            style={filterType === "expense" ? { background: "var(--color-primary)" } : {}}
-          >
-            Chi Tiêu
-          </button>
-          <button
-            onClick={() => setFilterType("reward_payout")}
-            className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
-              filterType === "reward_payout"
-                ? "text-white"
-                : "bg-white text-gray-700 hover:bg-gray-100"
-            }`}
-            style={filterType === "reward_payout" ? { background: "var(--color-primary)" } : {}}
-          >
-            Thưởng
+     {/* KPI CARDS - CẬP NHẬT THEO SỐ LIỆU CHUẨN TỪ VIEW */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {/* Card 1: Tổng Quỹ (Quan trọng nhất với Admin) */}
+        <div className="p-4 rounded-xl bg-blue-600 text-white shadow-md">
+          <p className="text-blue-100 text-sm font-medium">TỔNG QUỸ HIỆN CÓ</p>
+          <p className="text-2xl font-bold mt-1">{formatCurrency(stats?.current_balance || 0)}</p>
+          <div className="mt-2 text-xs text-blue-200 flex justify-between">
+            <span>Đầu kỳ: {formatCurrency(stats?.opening_balance || 0)}</span>
+          </div>
+        </div>
+
+        {/* Card 2: Nợ phải thu (Pending) - Cái này tính từ list transactions hoặc gọi API riêng */}
+        <KPICard 
+          title="Nợ phải thu (Pending)" 
+          value={formatCurrency(transactions.filter(t => t.payment_status === 'pending' && t.financial_categories?.flow_type === 'in').reduce((s, t) => s + t.amount, 0))} 
+          color="red" 
+        />
+
+        {/* Card 3: Thu Mới (Revenue) */}
+        <KPICard 
+          title="Thu Mới (Trong năm)" 
+          value={formatCurrency(stats?.total_revenue || 0)} 
+          color="green" 
+        />
+
+        {/* Card 4: Tổng Chi */}
+        <KPICard 
+          title="Tổng Chi (Trong năm)" 
+          value={formatCurrency(stats?.total_expense || 0)} 
+          color="orange" 
+        />
+      </div>
+
+      {/* TABLE */}
+      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b flex gap-4 bg-gray-50">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
+            <input type="text" placeholder="Tìm thành viên, nội dung..." className="pl-10 pr-4 py-2 border rounded-lg w-full text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          </div>
+          <button className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-white text-gray-600 hover:bg-gray-50">
+            <Filter size={18} /> Bộ lọc
           </button>
         </div>
 
-        {/* Transactions Table */}
-        <div className="bg-white rounded-lg shadow-md overflow-x-auto">
-          {loading ? (
-            <div className="p-8 text-center">
-              <p className="text-gray-600">Đang tải dữ liệu...</p>
-            </div>
-          ) : transactions.length > 0 ? (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-gray-300 bg-gray-50">
-                  <th className="text-left py-3 px-4 font-bold text-gray-700">Ngày</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700">Loại</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700">Thành Viên</th>
-                  <th className="text-left py-3 px-4 font-bold text-gray-700">Mô Tả</th>
-                  <th className="text-right py-3 px-4 font-bold text-gray-700">Số Tiền</th>
-                  <th className="text-center py-3 px-4 font-bold text-gray-700">Trạng Thái</th>
-                  <th className="text-center py-3 px-4 font-bold text-gray-700">Hành Động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map((transaction) => (
-                  <tr key={transaction.id} className="border-b border-gray-200 hover:bg-gray-50">
-                    <td className="py-3 px-4">{formatDate(transaction.transaction_date)}</td>
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded-full text-xs font-semibold ${getTypeColor(
-                          transaction.type
-                        )}`}
-                      >
-                        {getTypeLabel(transaction.type)}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">{transaction.profile?.full_name || "---"}</td>
-                    <td className="py-3 px-4">{transaction.description}</td>
-                    <td className="py-3 px-4 text-right font-bold">
-                      {["expense", "fine", "reward_payout"].includes(transaction.type) ? "-" : "+"}
-                      {formatCash(transaction.amount)}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <span
-                        className={`inline-flex px-2 py-1 rounded text-xs font-semibold ${
-                          transaction.payment_status === "paid"
-                            ? "bg-green-100 text-green-800"
-                            : transaction.payment_status === "rejected"
-                            ? "bg-red-100 text-red-800"
-                            : "bg-yellow-100 text-yellow-800"
-                        }`}
-                      >
-                        {transaction.payment_status === "paid"
-                          ? "✓ Đã thanh toán"
-                          : transaction.payment_status === "rejected"
-                          ? "Đã từ chối"
-                          : "⏳ Chờ"}
-                      </span>
-                      {transaction.payment_status === "rejected" && transaction.rejection_reason && (
-                        <div className="text-xs text-red-600 mt-1">Lý do: {transaction.rejection_reason}</div>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      {transaction.payment_status === 'submitted' ? (
-                        <div className="flex items-center justify-center gap-2">
-                          {transaction['receipt_url'] && (
-                            <a href={transaction['receipt_url']} target="_blank" rel="noreferrer" className="text-sm underline text-sky-600">Xem biên lai</a>
-                          )}
-                          <button onClick={() => approveTransaction(transaction.id)} className="px-3 py-1 bg-green-600 text-white rounded text-sm">Xác nhận</button>
-                          <button onClick={() => { setRejectingId(transaction.id); setShowRejectModal(true); }} className="px-3 py-1 bg-red-600 text-white rounded text-sm">Từ chối</button>
-                              <RejectModal
-                                open={showRejectModal}
-                                onClose={() => setShowRejectModal(false)}
-                                onSubmit={reason => {
-                                  if (rejectingId) rejectTransaction(rejectingId, reason);
-                                  setShowRejectModal(false);
-                                  setRejectingId(null);
-                                }}
-                              />
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-600">-</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          ) : (
-            <div className="p-8 text-center">
-              <p className="text-gray-500">Không có giao dịch nào</p>
-            </div>
-          )}
-        </div>
+        <table className="w-full text-sm text-left">
+          <thead className="bg-gray-100 text-gray-600 border-b">
+            <tr>
+              <th className="p-3">Ngày tạo</th>
+              <th className="p-3">Thành viên</th>
+              <th className="p-3">Danh mục</th>
+              <th className="p-3">Nội dung</th>
+              <th className="p-3 text-right">Số tiền</th>
+              <th className="p-3 text-center">Trạng thái</th>
+              <th className="p-3 text-center">Hành động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {transactions.map((t) => (
+              <tr key={t.id} className="hover:bg-gray-50">
+                <td className="p-3 text-gray-500">{formatDate(t.created_at)}</td>
+                <td className="p-3 font-medium text-gray-800">
+                  {t.profiles?.full_name || <span className="text-gray-400 italic">Chung (CLB)</span>}
+                </td>
+                <td className="p-3">
+                  <span className={`px-2 py-1 rounded text-xs ${
+                    t.financial_categories?.flow_type === 'in' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
+                  }`}>
+                    {t.financial_categories?.name}
+                  </span>
+                </td>
+                <td className="p-3 text-gray-600 max-w-xs truncate">{t.description}</td>
+                <td className={`p-3 text-right font-medium ${
+                  t.financial_categories?.flow_type === 'in' ? 'text-green-600' : 'text-orange-600'
+                }`}>
+                  {t.financial_categories?.flow_type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
+                </td>
+                <td className="p-3 text-center">
+                   <StatusBadge status={t.payment_status} />
+                </td>
+                <td className="p-3 text-center">
+                  {t.payment_status === 'pending' && (
+                    <button 
+                      onClick={() => markAsPaid(t.id)}
+                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100"
+                    >
+                      Xác nhận thu
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
+
+// Sub-components
+
+// Thay 'any' bằng Interface KPICardProps
+const KPICard = ({ title, value, color }: KPICardProps) => (
+  <div className={`p-4 rounded-xl border-l-4 bg-white shadow-sm border border-gray-100`} style={{ borderLeftColor: color }}>
+    <p className="text-gray-500 text-sm">{title}</p>
+    <p className="text-xl font-bold text-gray-800 mt-1">{value}</p>
+  </div>
+);
+
+const StatusBadge = ({ status }: { status: string }) => {
+  // 3. Khai báo kiểu Record<string, string> để fix lỗi Line 153
+  const styles: Record<string, string> = {
+    pending: 'bg-yellow-100 text-yellow-700',
+    paid: 'bg-green-100 text-green-700',
+    cancelled: 'bg-gray-100 text-gray-500',
+    rejected: 'bg-red-100 text-red-700'
+  };
+  
+  // Fallback về pending nếu status lạ
+  return <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${styles[status] || styles.pending}`}>{status}</span>
+};

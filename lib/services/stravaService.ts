@@ -410,7 +410,7 @@ export async function syncUserActivities(
       const { data: existing } = await adminSupabase
         .from("activities")
         .select("*")
-        .eq("strava_activity_id", activity.id)
+        .eq("id", activity.id)
         .limit(1)
         .maybeSingle();
       if (existing) {
@@ -425,7 +425,7 @@ export async function syncUserActivities(
         const { error: updErr } = await adminSupabase
           .from("activities")
           .update(merged)
-          .eq("strava_activity_id", activity.id);
+          .eq("id", activity.id);
 
         if (updErr) {
           serverDebug.debug(`[stravaService] Update existing activity failed ${activity.id}:`, (updErr as { message?: string }).message);
@@ -563,6 +563,7 @@ export async function syncUserActivities(
  * For race activities, determines distance (HM/FM) and checks if time is a new PB.
  * If PB detected, updates profile with pb_hm_approved/pb_fm_approved = FALSE (pending approval).
  */
+/*
 export async function checkAndUpdatePBs(userId: string, activities: StravaActivity[]) {
   if (!activities || activities.length === 0) return;
 
@@ -656,7 +657,7 @@ export async function checkAndUpdatePBs(userId: string, activities: StravaActivi
     }
   }
 }
-
+*
 /**
  * Wrapper to sync activities for the current month for a given userId.
  * - determines current month/year

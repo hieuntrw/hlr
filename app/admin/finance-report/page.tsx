@@ -1,187 +1,160 @@
-"use client";
+'use client';
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { useAuth } from "@/lib/auth/AuthContext";
-import { getEffectiveRole } from "@/lib/auth/role";
+import { useState, useEffect } from 'react';
+import { formatCurrency } from '@/lib/utils';
+// 1. Đã dùng financeService, bỏ import Download thừa
+import { financeService } from '@/lib/services/financeService';
+import { ArrowLeft, PieChart } from 'lucide-react';
+import Link from 'next/link';
 
-interface TransactionSummary {
-  type: string;
-  total: number;
-  count: number;
-}
-
-function formatCash(amount: number): string {
-  return amount.toLocaleString("vi-VN") + " ₫";
+interface CategoryReportItem {
+  category_id: string;
+  category_name: string;
+  flow_type: 'in' | 'out';
+  total_amount: number;
+  transaction_count: number;
 }
 
 export default function FinanceReportPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
-  const router = useRouter();
-  const [summary, setSummary] = useState<TransactionSummary[]>([]);
-  const [totalIncome, setTotalIncome] = useState(0);
-  const [totalExpense, setTotalExpense] = useState(0);
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [reportData, setReportData] = useState<CategoryReportItem[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const checkRole = useCallback(async () => {
-    if (!user) {
-      router.push("/debug-login");
-      return;
-    }
-    const role = getEffectiveRole(user, profile);
-    if (!role || !["admin", "mod_finance"].includes(role)) {
-      router.push("/");
-    }
-  }, [user, profile, router]);
-
-  type Transaction = { type: string; amount?: number };
-
-  const fetchReport = useCallback(async () => {
-    setLoading(true);
-
-    try {
-      const res = await fetch('/api/admin/transactions', { credentials: 'same-origin' });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => '');
-        throw new Error(txt || 'Failed to load transactions');
-      }
-      const body = await res.json().catch(() => ({ transactions: [] }));
-      const data: Transaction[] = body.transactions || [];
-
-      const grouped: { [key: string]: { total: number; count: number } } = {};
-      data.forEach((t: Transaction) => {
-        if (!grouped[t.type]) grouped[t.type] = { total: 0, count: 0 };
-        grouped[t.type].total += t.amount || 0;
-        grouped[t.type].count += 1;
-      });
-
-      const summaryArray = Object.entries(grouped).map(([type, data]) => ({ type, total: data.total, count: data.count }));
-      setSummary(summaryArray);
-
-      const income = summaryArray.filter((s) => ["fund_collection", "donation"].includes(s.type)).reduce((sum, s) => sum + s.total, 0);
-      const expense = summaryArray.filter((s) => ["expense", "fine", "reward_payout"].includes(s.type)).reduce((sum, s) => sum + s.total, 0);
-      setTotalIncome(income);
-      setTotalExpense(expense);
-    } catch (err) {
-      console.error("Error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  
+  // Danh sách năm (5 năm gần nhất)
+  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i);
 
   useEffect(() => {
-    if (authLoading || !sessionChecked) return;
-    checkRole();
-    fetchReport();
-  }, [authLoading, sessionChecked, checkRole, fetchReport]);
+    async function loadReport() {
+      setLoading(true);
+      try {
+        // 2. Sử dụng financeService thay vì gọi supabase trực tiếp
+        // Điều này fix lỗi "financeService is defined but never used"
+        const data = await financeService.getReportByCategory(year);
+        
+        if (data) {
+          // Ép kiểu dữ liệu trả về từ Supabase
+          setReportData(data as unknown as CategoryReportItem[]);
+        }
+      } catch (error) {
+        console.error("Lỗi tải báo cáo:", error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadReport();
+  }, [year]); // Bỏ supabase khỏi dependency vì financeService đã xử lý bên trong
 
-  const balance = totalIncome - totalExpense;
+  const incomeData = reportData.filter(i => i.flow_type === 'in');
+  const expenseData = reportData.filter(i => i.flow_type === 'out');
+
+  const totalIncome = incomeData.reduce((sum, i) => sum + i.total_amount, 0);
+  const totalExpense = expenseData.reduce((sum, i) => sum + i.total_amount, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="py-6 px-4 gradient-theme-primary">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold" style={{ color: "var(--color-text-inverse)" }}>📊 Báo Cáo Quỹ</h1>
-            <Link href="/admin" className="hover:opacity-80" style={{ color: "var(--color-text-inverse)" }}>
-              ← Quay lại
-            </Link>
-          </div>
+    <div className="max-w-5xl mx-auto p-6">
+      {/* HEADER */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <Link href="/admin/finance" className="flex items-center text-gray-500 hover:text-gray-800 mb-2 transition">
+            <ArrowLeft size={18} className="mr-1" /> Quay lại Dashboard
+          </Link>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <PieChart className="text-blue-600" /> Báo cáo Tài chính Chi tiết
+          </h1>
+        </div>
+        
+        {/* YEAR SELECTOR */}
+        <div className="flex items-center gap-2 bg-white border p-1 rounded-lg shadow-sm">
+          <span className="pl-3 text-sm text-gray-500 font-medium">Năm tài chính:</span>
+          <select 
+            value={year} 
+            onChange={(e) => setYear(Number(e.target.value))}
+            className="p-2 bg-transparent font-bold text-gray-800 outline-none cursor-pointer"
+          >
+            {years.map(y => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        {loading ? (
-          <div className="text-center py-12">
-            <p className="text-gray-600">Đang tải báo cáo...</p>
-          </div>
+      {loading ? (
+        <div className="text-center py-10">Đang tính toán số liệu...</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          <ReportSection 
+            title="NGUỒN THU (INCOME)" 
+            total={totalIncome} 
+            data={incomeData} 
+            colorClass="bg-green-500" 
+            headerClass="bg-green-50 text-green-800 border-green-100"
+          />
+
+          <ReportSection 
+            title="KHOẢN CHI (EXPENSE)" 
+            total={totalExpense} 
+            data={expenseData} 
+            colorClass="bg-orange-500" 
+            headerClass="bg-orange-50 text-orange-800 border-orange-100"
+          />
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+// --- SUB COMPONENTS ---
+const ReportSection = ({ 
+  title, 
+  total, 
+  data, 
+  colorClass, 
+  headerClass 
+}: { 
+  title: string, 
+  total: number, 
+  data: CategoryReportItem[], 
+  colorClass: string,
+  headerClass: string 
+}) => {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
+      <div className={`p-4 border-b flex justify-between items-center ${headerClass}`}>
+        <h3 className="font-bold">{title}</h3>
+        <span className="text-xl font-bold">{formatCurrency(total)}</span>
+      </div>
+      
+      <div className="p-4 space-y-6">
+        {data.length === 0 ? (
+          <p className="text-gray-400 text-sm text-center italic py-4">Chưa có dữ liệu.</p>
         ) : (
-          <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <p className="text-gray-600 text-sm">Thu Nhập</p>
-                <p className="text-2xl font-bold text-green-600 mt-2">{formatCash(totalIncome)}</p>
+          data.map((item) => {
+            const percent = total > 0 ? (item.total_amount / total) * 100 : 0;
+            
+            return (
+              <div key={item.category_id}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-700">{item.category_name}</span>
+                  <div className="text-right">
+                    <span className="font-bold">{formatCurrency(item.total_amount)}</span>
+                    <span className="text-gray-400 text-xs ml-2">({item.transaction_count} gd)</span>
+                  </div>
+                </div>
+                
+                <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                  <div 
+                    className={`h-2.5 rounded-full ${colorClass}`} 
+                    style={{ width: `${percent}%` }}
+                  ></div>
+                </div>
+                <p className="text-xs text-right text-gray-400 mt-1">{percent.toFixed(1)}%</p>
               </div>
-
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <p className="text-gray-600 text-sm">Chi Tiêu</p>
-                <p className="text-2xl font-bold text-red-600 mt-2">{formatCash(totalExpense)}</p>
-              </div>
-
-              <div
-                className={`rounded-lg shadow-md p-6 ${
-                  balance >= 0 ? "bg-green-50" : "bg-red-50"
-                }`}
-              >
-                <p className={`text-sm ${balance >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  Số Dư
-                </p>
-                <p
-                  className={`text-2xl font-bold mt-2 ${
-                    balance >= 0 ? "text-green-600" : "text-red-600"
-                  }`}
-                >
-                  {formatCash(balance)}
-                </p>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <p className="text-gray-600 text-sm">Tổng Giao Dịch</p>
-                <p className="text-2xl font-bold mt-2" style={{ color: "var(--color-primary)" }}>
-                  {summary.reduce((sum, s) => sum + s.count, 0)}
-                </p>
-              </div>
-            </div>
-
-            {/* Breakdown */}
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-2xl font-bold mb-4">Chi Tiết Theo Loại</h2>
-
-              <div className="space-y-4">
-                {summary.map((item) => {
-                  const typeLabels: { [key: string]: string } = {
-                    fund_collection: "Thu Quỹ",
-                    fine: "Phạt",
-                    donation: "Quyên Góp",
-                    expense: "Chi Tiêu",
-                    reward_payout: "Thưởng",
-                  };
-
-                  const percentage =
-                    (totalIncome + totalExpense) > 0
-                      ? ((item.total / (totalIncome + totalExpense)) * 100).toFixed(1)
-                      : "0";
-
-                  return (
-                    <div key={item.type} className="border-b border-gray-200 pb-4 last:border-0">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-semibold text-gray-900">
-                          {typeLabels[item.type] || item.type}
-                        </span>
-                        <div className="text-right">
-                          <p className="font-bold text-gray-900">{formatCash(item.total)}</p>
-                          <p className="text-sm text-gray-600">{item.count} giao dịch</p>
-                        </div>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="h-2 rounded-full transition-all"
-                          style={{ width: `${percentage}%`, background: "var(--color-primary)" }}
-                        ></div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-1">{percentage}% của tổng</p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
+            );
+          })
         )}
       </div>
     </div>
   );
-}
+};
