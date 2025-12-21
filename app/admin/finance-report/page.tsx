@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { getEffectiveRole } from '@/lib/auth/role';
 import { formatCurrency } from '@/lib/utils';
 // 1. Đã dùng financeService, bỏ import Download thừa
 import { financeService } from '@/lib/services/financeService';
 import { ArrowLeft, PieChart } from 'lucide-react';
 import Link from 'next/link';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 interface CategoryReportItem {
   category_id: string;
@@ -19,30 +22,46 @@ export default function FinanceReportPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [reportData, setReportData] = useState<CategoryReportItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   
   // Danh sách năm (5 năm gần nhất)
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i);
 
+  // Kiểm tra vai trò người dùng (dựa vào session) trước khi tải báo cáo
+  const checkRole = useCallback(() => {
+    if (!user) {
+      router.push('/debug-login');
+      return;
+    }
+
+    const userRole = getEffectiveRole(user);
+    if (!userRole || !["admin", "mod_finance", "mod_challenge", "mod_member"].includes(userRole)) {
+      router.push('/');
+    }
+  }, [user, router]);
+
   useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkRole();
+  }, [authLoading, sessionChecked, checkRole]);
+
+  // Load báo cáo khi session đã checked (role check will redirect if unauthorized)
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
     async function loadReport() {
       setLoading(true);
       try {
-        // 2. Sử dụng financeService thay vì gọi supabase trực tiếp
-        // Điều này fix lỗi "financeService is defined but never used"
         const data = await financeService.getReportByCategory(year);
-        
-        if (data) {
-          // Ép kiểu dữ liệu trả về từ Supabase
-          setReportData(data as unknown as CategoryReportItem[]);
-        }
+        if (data) setReportData(data as unknown as CategoryReportItem[]);
       } catch (error) {
-        console.error("Lỗi tải báo cáo:", error);
+        console.error('Lỗi tải báo cáo:', error);
       } finally {
         setLoading(false);
       }
     }
     loadReport();
-  }, [year]); // Bỏ supabase khỏi dependency vì financeService đã xử lý bên trong
+  }, [year, authLoading, sessionChecked]);
 
   const incomeData = reportData.filter(i => i.flow_type === 'in');
   const expenseData = reportData.filter(i => i.flow_type === 'out');
@@ -78,7 +97,9 @@ export default function FinanceReportPage() {
         </div>
       </div>
 
-      {loading ? (
+      {authLoading || !sessionChecked ? (
+        <div className="text-center py-10">Đang kiểm tra quyền truy cập...</div>
+      ) : loading ? (
         <div className="text-center py-10">Đang tính toán số liệu...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -130,11 +151,11 @@ const ReportSection = ({
         {data.length === 0 ? (
           <p className="text-gray-400 text-sm text-center italic py-4">Chưa có dữ liệu.</p>
         ) : (
-          data.map((item) => {
+          data.map((item, idx) => {
             const percent = total > 0 ? (item.total_amount / total) * 100 : 0;
             
             return (
-              <div key={item.category_id}>
+              <div key={`${item.category_id}-${idx}`}>
                 <div className="flex justify-between text-sm mb-1">
                   <span className="font-medium text-gray-700">{item.category_name}</span>
                   <div className="text-right">

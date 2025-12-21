@@ -37,7 +37,7 @@ interface Member {
 }
 
 export default function LuckyDrawPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [winners, setWinners] = useState<LuckyDrawWinner[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -71,13 +71,13 @@ export default function LuckyDrawPage() {
       window.location.href = '/login';
       return false;
     }
-    const resolved = getEffectiveRole(user, profile) || 'member';
-    if (!isAdminRole(resolved)) {
+    const resolved = getEffectiveRole(user) || 'member';
+    if (!isAdminRole(resolved)&& resolved !== 'mod_member') {
       window.location.href = '/';
       return false;
     }
     return true;
-  }, [user, profile]);
+  }, [user]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;

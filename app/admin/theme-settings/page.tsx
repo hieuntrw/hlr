@@ -10,7 +10,7 @@ import { defaultTheme, blueTheme, greenTheme } from "@/lib/theme/defaultTheme";
 // icons removed (unused)
 
 export default function AdminThemeSettingsPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const { theme, setTheme, applyCustomizations, resetTheme, saveUserPreference, loadThemePresets } = useTheme();
   const [saving, setSaving] = useState(false);
@@ -69,7 +69,7 @@ export default function AdminThemeSettingsPage() {
         return;
       }
 
-      const resolved = getEffectiveRole(user, profile) || 'member';
+      const resolved = getEffectiveRole(user) || 'member';
       if (!isAdminRole(resolved)) {
         router.replace("/");
         return;
@@ -80,7 +80,7 @@ export default function AdminThemeSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, profile, router]);
+  }, [user, router]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;
@@ -91,7 +91,7 @@ export default function AdminThemeSettingsPage() {
 
   // resolved role computed after session/loading to avoid premature checks
 
-  const resolvedRole = getEffectiveRole(user, profile) || 'member';
+  const resolvedRole = getEffectiveRole(user) || 'member';
   const isAdminResolved = isAdminRole(resolvedRole);
 
   const handlePresetTheme = (presetTheme: Theme) => {

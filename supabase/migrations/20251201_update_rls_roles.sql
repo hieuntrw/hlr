@@ -6,11 +6,8 @@ begin;
 -- Helper SQL expressions
 create or replace function public.has_role(target_roles text[])
 returns boolean language sql stable as $$
-  select exists (
-    select 1 from public.profiles p
-    where p.id = auth.uid()
-      and p.role = any(target_roles)
-  );
+  -- Determine the caller's role from the JWT app_metadata and check membership
+  select (auth.jwt() -> 'app_metadata' ->> 'role') = any(target_roles);
 $$;
 
 -- PROFILES

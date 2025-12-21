@@ -1,11 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { Plus, Search, Filter } from 'lucide-react';
 import { financeService } from '@/lib/services/financeService';
+import { useAuth } from "@/lib/auth/AuthContext";
+import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
+
 
 // 1. Định nghĩa Interface cho dữ liệu (Fix lỗi Line 10)
 interface TransactionWithDetails {
@@ -40,23 +44,43 @@ interface KPICardProps {
 }
 
 export default function AdminFinanceDashboard() {
-  // Thay thế <any[]> bằng <TransactionWithDetails[]>
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
+  const router = useRouter();
+  const supabase = createClientComponentClient();
+  
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
   const [stats, setStats] = useState<FundStats | null>(null);
+
+  const checkRole = useCallback(async () => {
+    if (!user) {
+      router.push('/debug-login');
+      return;
+    }
+
+    const userRole = getEffectiveRole(user);
+    if (!userRole || (!isAdminRole(userRole) && userRole !== 'mod_finance')) {
+      router.push('/');
+    }
+  }, [user, router]);
+
+  useEffect(() => {
+    if (authLoading || !sessionChecked) return;
+    checkRole();
+  }, [authLoading, sessionChecked, checkRole]);
 
   // Load toàn bộ giao dịch
   useEffect(() => {
+     setLoading(true);
+    if (authLoading || !sessionChecked) return;
     async function fetchAll() {
-      // 1. Gọi song song: Lấy Stats chuẩn + Lấy List giao dịch
       const [statsData, transRes] = await Promise.all([
         financeService.getPublicStats(),
         supabase
           .from('transactions')
           .select(`
             *,
-            profiles:user_id(full_name),
+            profiles(full_name),
             financial_categories(name, flow_type, code)
           `)
           .order('created_at', { ascending: false })
@@ -65,11 +89,10 @@ export default function AdminFinanceDashboard() {
 
       if (statsData) setStats(statsData as unknown as FundStats);
       if (transRes.data) setTransactions(transRes.data as unknown as TransactionWithDetails[]);
-      
       setLoading(false);
     }
     fetchAll();
-  }, [supabase]);
+  }, [supabase, authLoading, sessionChecked]);
 
   // Hành động xác nhận thu tiền nhanh
   const markAsPaid = async (id: string) => {
@@ -85,7 +108,7 @@ export default function AdminFinanceDashboard() {
     }
   };
 
-  if (loading) return <div className="p-8">Đang tải dashboard...</div>;
+ if (loading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">

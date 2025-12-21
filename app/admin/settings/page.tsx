@@ -13,7 +13,7 @@ interface SystemSetting {
 }
 
 export default function SettingsPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [settings, setSettings] = useState<SystemSetting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,14 +26,14 @@ export default function SettingsPage() {
       router.push("/debug-login");
       return;
     }
-    const role = getEffectiveRole(user, profile);
+    const role = getEffectiveRole(user);
     if (!isAdminRole(role || '')) {
       router.push("/");
       return;
     }
 
     fetchSettings();
-  }, [user, profile, router]);
+  }, [user, router]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;

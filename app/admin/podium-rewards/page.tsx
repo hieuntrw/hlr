@@ -48,7 +48,7 @@ interface Member {
 }
 
 export default function PodiumRewardsPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const [configs, setConfigs] = useState<PodiumConfig[]>([]);
   const [rewards, setRewards] = useState<PodiumReward[]>([]);
   const [races, setRaces] = useState<Race[]>([]);
@@ -69,13 +69,13 @@ export default function PodiumRewardsPage() {
       window.location.href = '/login';
       return;
     }
-    const resolved = getEffectiveRole(user, profile) || 'member';
+    const resolved = getEffectiveRole(user) || 'member';
     if (!isAdminRole(resolved)) {
       window.location.href = '/';
       return;
     }
     loadData();
-  }, [user, profile, authLoading, sessionChecked]);
+  }, [user, authLoading, sessionChecked]);
 
   const loadData = async () => {
     try {

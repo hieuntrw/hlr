@@ -226,7 +226,7 @@ export default function MemberFinancePage() {
                 </thead>
                 <tbody className="divide-y bg-white">
                   {publicExpenses.map((e, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
+                    <tr key={`${e.payment_date}-${e.amount}-${idx}`} className="hover:bg-gray-50">
                       <td className="p-3 text-gray-500">{formatDate(e.payment_date)}</td>
                       <td className="p-3">
                         <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">

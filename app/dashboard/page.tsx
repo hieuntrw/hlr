@@ -381,7 +381,7 @@ function DashboardContent() {
           full_name: (profileResult['full_name'] as string) ?? null,
           email: user.email ?? null,
           strava_id: null,
-          role: getEffectiveRole(user as unknown as Record<string, unknown>, profileResult) || String(profileResult['role'] ?? 'member'),
+          role: getEffectiveRole(user as unknown as Record<string, unknown>) || 'member',
           pb_5k_seconds: null,
           pb_10k_seconds: null,
           pb_half_marathon_seconds: null,
@@ -439,7 +439,7 @@ function DashboardContent() {
         full_name: profile.full_name,
         email: user.email ?? null,
         strava_id: null,
-        role: getEffectiveRole(user as unknown as Record<string, unknown>, profile as unknown as Record<string, unknown>) || profile.role || 'member',
+        role: getEffectiveRole(user as unknown as Record<string, unknown>) || 'member',
         pb_5k_seconds: null,
         pb_10k_seconds: null,
         pb_half_marathon_seconds: null,
@@ -681,7 +681,7 @@ function DashboardContent() {
                   </div>
                 ) : hallOfFame.length > 0 ? (
                   hallOfFame.map((entry) => (
-                    <div key={entry.rank} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                    <div key={`${entry.rank}-${entry.name}`} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                         entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
                         entry.rank === 2 ? "bg-gray-300 text-gray-800" :

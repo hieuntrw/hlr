@@ -172,11 +172,11 @@ export default function MembersAdminPage() {
       router.push('/debug-login');
       return;
     }
-    const role = getEffectiveRole(user, profile);
+    const role = getEffectiveRole(user);
     if (!role || !["admin", "mod_member"].includes(role)) {
       router.push('/');
     }
-  }, [user, profile, router]);
+  }, [user, router]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;

@@ -58,7 +58,9 @@ INSERT INTO public.financial_categories (name, code, flow_type, is_recurring) VA
 ('Chi Thưởng Mốc (Tiền mặt)', 'REWARD_CASH_MILESTONE', 'out', false),
 ('Chi Thưởng Podium (Tiền mặt)', 'REWARD_CASH_PODIUM', 'out', false),
 ('Chi Mua Quà/Hiện vật', 'EXPENSE_GIFT_PURCHASE', 'out', false),
-('Chi Hoạt động (Longrun)', 'EXPENSE_OPERATION', 'out', false)
+('Chi Hoạt động (Longrun)', 'EXPENSE_OPERATION', 'out', false),
+('Số dư đầu kỳ', 'OPENING_BALANCE', 'in', false, 'Tiền tồn quỹ từ năm trước chuyển sang')
+
 ON CONFLICT (code) DO NOTHING;
 
 -- =================================================================

@@ -243,7 +243,7 @@ export default function RewardMonitorPage() {
       window.location.href = "/login";
       return;
     }
-    const role = getEffectiveRole(user, profile) || "member";
+    const role = getEffectiveRole(user) || "member";
     if (!isAdminRole(role)) {
       window.location.href = "/";
       return;

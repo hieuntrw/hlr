@@ -18,7 +18,7 @@ interface FormState {
 }
 
 export default function EditChallengePage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const params = useParams();
   const id = (params && params.id) || "";
@@ -86,7 +86,7 @@ export default function EditChallengePage() {
       router.push("/debug-login");
       return;
     }
-    const resolved = getEffectiveRole(user, profile) || 'member';
+    const resolved = getEffectiveRole(user) || 'member';
     if (!isAdminRole(resolved) && resolved !== 'mod_challenge') {
       router.push('/');
       return;

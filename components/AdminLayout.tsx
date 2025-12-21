@@ -62,7 +62,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: "Báo Cáo Quỹ",
       icon: BarChart3,
       link: "/admin/finance-report",
-      requiredRoles: ["admin", "mod_finance"],
+      requiredRoles: ["admin", "mod_finance", "mod_challenge", "mod_member"],
     },
     {
       title: "Quản Lý Thử Thách",
@@ -86,7 +86,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: "Duyệt PB",
       icon: CheckCircle,
       link: "/admin/pb-approval",
-      requiredRoles: ["admin", "mod_member"],
+      requiredRoles: ["admin"],
     },
     {
       title: "Mốc Thành Tích",
@@ -98,13 +98,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       title: "Quay Số May Mắn",
       icon: Gift,
       link: "/admin/lucky-draw",
-      requiredRoles: ["admin"],
+      requiredRoles: ["admin", "mod_challenge"],
     },
     {
       title: "Theo Dõi Phần Thưởng",
       icon: Award,
       link: "/admin/reward-monitor",
-      requiredRoles: ["admin", "mod_finance"],
+      requiredRoles: ["admin", "mod_finance","mod_challenge", "mod_member"],
     },
     {
       title: "Phần Thưởng Đứng Bục",
@@ -203,7 +203,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (!profile) return null;
 
-  const resolvedRole = getEffectiveRole(user as unknown as Record<string, unknown>, authProfile as unknown as Record<string, unknown>) || profile.role || null;
+  const resolvedRole = getEffectiveRole(user as unknown as Record<string, unknown>) || null;
   const accessibleMenus = resolvedRole ? getAccessibleMenus(resolvedRole) : [];
 
   return (
@@ -265,7 +265,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
               <div className="flex-1 min-w-0">
                 <p className="font-semibold truncate" style={{ color: "var(--color-text-primary)" }}>{profile.full_name}</p>
-                <p className="text-xs font-medium" style={{ color: "var(--color-primary)" }}>{getRoleLabel(profile.role)}</p>
+                <p className="text-xs font-medium" style={{ color: "var(--color-primary)" }}>{resolvedRole ? getRoleLabel(resolvedRole) : 'Member'}</p>
               </div>
             </div>
           </div>

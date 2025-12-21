@@ -47,7 +47,7 @@ function renderRegistrationBadge(dateStr?: string | null) {
 }
 
 export default function ChallengesAdminPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,7 +66,7 @@ export default function ChallengesAdminPage() {
   const [lastGeneratedPreview, setLastGeneratedPreview] = useState("");
   // registration options were previously loaded from system settings but not used in UI
 
-  const resolvedRole = getEffectiveRole(user, profile) || 'member';
+  const resolvedRole = getEffectiveRole(user) || 'member';
   const isAdminResolved = isAdminRole(resolvedRole);
 
   // Helpers for pace display and adjustment
@@ -139,11 +139,11 @@ export default function ChallengesAdminPage() {
       return;
     }
 
-    const userRole = getEffectiveRole(user, profile);
+    const userRole = getEffectiveRole(user);
     if (!userRole || (!isAdminRole(userRole) && userRole !== 'mod_challenge')) {
       router.push('/');
     }
-  }, [user, profile, router]);
+  }, [user, router]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;

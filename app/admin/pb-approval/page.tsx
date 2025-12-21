@@ -44,7 +44,7 @@ function formatTime(seconds: number): string {
 }
 
 export default function PBApprovalPage() {
-  const { user, profile, isLoading: authLoading, sessionChecked } = useAuth();
+  const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
   const [pendingPBs, setPendingPBs] = useState<PBRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,11 +85,11 @@ export default function PBApprovalPage() {
       router.push('/debug-login');
       return;
     }
-    const role = getEffectiveRole(user, profile);
-    if (!role || (!isAdminRole(role) && role !== 'mod_member')) {
+    const role = getEffectiveRole(user);
+    if (!role || (!isAdminRole(role))) {
       router.push('/');
     }
-  }, [user, profile, router]);
+  }, [user, router]);
 
   useEffect(() => {
     if (authLoading || !sessionChecked) return;

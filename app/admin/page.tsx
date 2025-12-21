@@ -88,8 +88,8 @@ export default function AdminPage() {
         return;
       }
 
-      // Resolve canonical role (prefer server app_metadata when available)
-      const authRole = getEffectiveRole(user, profile) || "member";
+      // Resolve canonical role from server app_metadata only
+      const authRole = getEffectiveRole(user) || "member";
       console.log("[Admin Page] Auth role:", authRole);
 
       // Check if user has admin/mod permissions
@@ -137,8 +137,8 @@ export default function AdminPage() {
       }
       setLoading(true);
       try {
-        // Use canonical role resolution
-        const resolved = getEffectiveRole(user, profile) || "member";
+        // Use canonical role resolution from app_metadata only
+        const resolved = getEffectiveRole(user) || "member";
         if (profile) {
           setLocalProfile({
             id: profile.id,

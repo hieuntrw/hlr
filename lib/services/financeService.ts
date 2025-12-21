@@ -43,7 +43,7 @@ export const financeService = {
     return data;
   },
 
-  // 4. Tạo giao dịch (Dùng cho Admin hoặc Job tự động)
+  // 4. Tạo giao dịch (Dùng cho Admin hoặc Job tự động) dành cho 
   async createTransaction(
     categoryCode: string,
     amount: number,

@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await client
       .from('transactions')
-      .select('id, type, amount, payment_status, created_at')
+      .select('id, category_id, amount, payment_status, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 

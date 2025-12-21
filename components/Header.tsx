@@ -19,8 +19,8 @@ export default function Header() {
   const { user, profile, isLoading, sessionChecked } = useAuth(); // Use AuthContext instead of local state
   const authPending = isLoading || !sessionChecked;
   const loggedIn = !!user || !!profile;
-  // Prefer server-controlled `app_metadata.role`; fallback to `profiles.role` only when missing
-  const effectiveRole = getEffectiveRole(user, profile);
+  // Use server-controlled `app_metadata.role` only (no profile fallback)
+  const effectiveRole = getEffectiveRole(user);
 
   const handleLogout = async () => {
     try {

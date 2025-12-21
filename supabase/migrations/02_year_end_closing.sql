@@ -95,3 +95,27 @@ FROM public.transactions t
 JOIN public.financial_categories fc ON t.category_id = fc.id
 WHERE t.payment_status = 'paid'
 GROUP BY t.fiscal_year;
+
+CREATE OR REPLACE VIEW public.view_finance_report_by_category 
+WITH (security_invoker = true) -- Quan trọng: Dùng quyền của user đang đăng nhập
+AS
+SELECT 
+    fc.id as category_id,
+    fc.name as category_name,
+    fc.code as category_code,
+    fc.flow_type, -- 'in' (Thu) hoặc 'out' (Chi)
+    t.fiscal_year,
+    COUNT(t.id) as transaction_count, -- Đếm số giao dịch
+    COALESCE(SUM(t.amount), 0) as total_amount -- Tổng tiền
+FROM 
+    public.transactions t
+JOIN 
+    public.financial_categories fc ON t.category_id = fc.id
+WHERE 
+    t.payment_status = 'paid' -- CHỈ TÍNH TIỀN ĐÃ THỰC THU/CHI
+GROUP BY 
+    fc.id, fc.name, fc.code, fc.flow_type, t.fiscal_year;
+
+-- Bước 1.3: Cấp quyền đọc
+GRANT SELECT ON public.view_finance_report_by_category TO authenticated;
+-- =================================================================
