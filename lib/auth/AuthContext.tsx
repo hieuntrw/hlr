@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isRecord(body) && isRecord(body.profile)) {
           const p = body.profile as Record<string, unknown>;
           const full_name = typeof p.full_name === "string" ? (p.full_name as string) : null;
-          const role = typeof p.role === "string" ? (p.role as string) : getRoleFromUser(u);
+          const role = getRoleFromUser(u);
           return { id: u.id, full_name, role };
         }
       }
