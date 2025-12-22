@@ -1,7 +1,5 @@
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from "@/lib/supabase-client";
 import { TransactionMetadata } from '@/types/finance'
-
-const supabase = createClientComponentClient();
 
 // (Moved getClubBalance & createOpeningBalance into the financeService object below)
 
@@ -70,7 +68,7 @@ export const financeService = {
     return typeof value === 'number' ? value : Number(value ?? 0);
   },
 
-  // Lấy số dư quỹ cho năm (RPC -> get_club_balance)
+  // Lấy số dư quỹ hiện tại (RPC -> get_club_balance)
   async getClubBalance(year: number) {
     const { data, error } = await supabase.rpc('get_club_balance', { year_input: year });
     if (error) throw error;

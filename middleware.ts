@@ -75,7 +75,7 @@ export async function middleware(req: NextRequest) {
 
   // Try to get the user from the server client
   let getUserResult = await supabase.auth.getUser();
-  let user = getUserResult.data.user;
+  let user: any = getUserResult.data.user;
   let authError = getUserResult.error as unknown;
 
   if (authError) {
@@ -112,6 +112,50 @@ export async function middleware(req: NextRequest) {
         serverDebug.debug('[Middleware] retry user:', user?.email || 'not authenticated');
       } catch (e) {
         serverDebug.warn('[Middleware] setSession attempt failed', e);
+      }
+    }
+
+    // If setSession failed (for example refresh token rotation -> "Already Used"),
+    // try to reconstruct a minimal user identity from the `sb-session` cookie
+    // (same safe fallback used in /api/auth/whoami). This allows middleware to
+    // authorize routes based on `app_metadata.role` when the access token JWT
+    // is still valid even if refresh token cannot be used.
+    if (!user) {
+      const sess = req.cookies.get('sb-session')?.value;
+      if (sess) {
+        try {
+          const parsed = JSON.parse(decodeURIComponent(sess) || '{}') as Record<string, unknown>;
+          const accessTok = typeof parsed.access_token === 'string' ? parsed.access_token : undefined;
+          if (accessTok) {
+            const parts = accessTok.split('.');
+            if (parts.length === 3) {
+              try {
+                const payload = parts[1];
+                const padded = payload.padEnd(payload.length + (4 - (payload.length % 4)) % 4, '=');
+                const json = Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+                const obj = JSON.parse(json) as Record<string, unknown>;
+                const sub = typeof obj.sub === 'string' ? obj.sub : (typeof obj.user_id === 'string' ? obj.user_id : null);
+                if (sub) {
+                  const roleFromToken = (obj['app_metadata'] && typeof (obj['app_metadata'] as Record<string, unknown>)['role'] === 'string')
+                    ? ((obj['app_metadata'] as Record<string, unknown>)['role'] as string)
+                    : (typeof obj['role'] === 'string' ? (obj['role'] as string) : undefined);
+                  const finalRole = roleFromToken || 'member';
+                  user = {
+                    id: sub,
+                    email: null,
+                    user_metadata: {},
+                    app_metadata: { role: finalRole },
+                  } as unknown;
+                  serverDebug.debug('[Middleware] reconstructed user from sb-session, id:', sub, 'role:', finalRole);
+                }
+              } catch (e) {
+                serverDebug.warn('[Middleware] failed to decode/access token payload', String(e));
+              }
+            }
+          }
+        } catch (e) {
+          serverDebug.warn('[Middleware] failed to parse sb-session cookie', String(e));
+        }
       }
     }
 

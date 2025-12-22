@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase-client';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
@@ -18,7 +18,7 @@ interface TransactionWithDetails {
   amount: number;
   description: string;
   payment_status: string; // Hoặc 'pending' | 'paid' | ...
-  profiles?: {
+  member_info?: {
     full_name: string;
   } | null;
   financial_categories?: {
@@ -28,15 +28,6 @@ interface TransactionWithDetails {
   } | null;
 }
 
-// Interface cho Stats
-/*
-interface FundStats {
-  opening_balance: number;
-  total_revenue: number;
-  total_expense: number;
-  current_balance: number;
-}
-*/
 // 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
 interface KPICardProps {
   title: string;
@@ -47,11 +38,10 @@ interface KPICardProps {
 export default function AdminFinanceDashboard() {
   const { user, isLoading: authLoading, sessionChecked } = useAuth();
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  // use shared supabase singleton
   
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
- // const [stats, setStats] = useState<FundStats | null>(null);
   const [clubBalance, setClubBalance] = useState<number | null>(null);
   const [pendingIncome, setPendingIncome] = useState<number | null>(null);
   const [totalIncomeReal, setTotalIncomeReal] = useState<number | null>(null);
@@ -91,7 +81,7 @@ export default function AdminFinanceDashboard() {
           .from('transactions')
           .select(`
             *,
-            profiles(full_name),
+            member_info:profiles!user_id(full_name),
             financial_categories(name, flow_type, code)
           `)
           .order('created_at', { ascending: false })
@@ -114,21 +104,29 @@ export default function AdminFinanceDashboard() {
       setLoading(false);
     }
     fetchAll();
-  }, [supabase, authLoading, sessionChecked]);
+  }, [authLoading, sessionChecked]);
 
   // Hành động xác nhận thu tiền nhanh
-  const markAsPaid = async (id: string) => {
-    if(!confirm('Xác nhận đã thu tiền khoản này?')) return;
+  const markAsPaid = async (id: string, flowType: string = 'in') => {
+  // 1. Xác định câu hỏi xác nhận dựa trên loại dòng tiền
+  const actionText = flowType === 'in' 
+    ? 'đã THU TIỀN' 
+    : 'đã CHI TIỀN / TRAO GIẢI';
     
-    const { error } = await supabase
-      .from('transactions')
-      .update({ payment_status: 'paid', processed_at: new Date().toISOString() })
-      .eq('id', id);
-      
-    if (!error) {
-      setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
-    }
-  };
+  if(!confirm(`Xác nhận ${actionText} cho khoản này?`)) return;
+  
+  // 2. Gọi API update (Giữ nguyên)
+  const { error } = await supabase
+    .from('transactions')
+    .update({ payment_status: 'paid', processed_at: new Date().toISOString() })
+    .eq('id', id);
+    
+  if (!error) {
+    setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
+  } else {
+    alert("Có lỗi xảy ra, vui lòng thử lại.");
+  }
+};
 
  if (loading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
 
@@ -211,7 +209,7 @@ export default function AdminFinanceDashboard() {
               <tr key={t.id} className="hover:bg-gray-50">
                 <td className="p-3 text-gray-500">{formatDate(t.created_at)}</td>
                 <td className="p-3 font-medium text-gray-800">
-                  {t.profiles?.full_name || <span className="text-gray-400 italic">Chung (CLB)</span>}
+                  {t.member_info?.full_name || <span className="text-gray-400 italic">Chung (CLB)</span>}
                 </td>
                 <td className="p-3">
                   <span className={`px-2 py-1 rounded text-xs ${
@@ -227,15 +225,22 @@ export default function AdminFinanceDashboard() {
                   {t.financial_categories?.flow_type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
                 </td>
                 <td className="p-3 text-center">
-                   <StatusBadge status={t.payment_status} />
+                   <StatusBadge status={t.payment_status} flowType={t.financial_categories?.flow_type} />
                 </td>
                 <td className="p-3 text-center">
                   {t.payment_status === 'pending' && (
                     <button 
-                      onClick={() => markAsPaid(t.id)}
-                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100"
+                      // Truyền thêm flow_type vào hàm xử lý
+                      onClick={() => markAsPaid(t.id, t.financial_categories?.flow_type || 'in')}
+                      
+                      className={`text-xs px-2 py-1 rounded border hover:opacity-80 transition font-medium ${
+                        t.financial_categories?.flow_type === 'in'
+                          ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' // Màu xanh cho Thu
+                          : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100' // Màu cam cho Chi
+                      }`}
                     >
-                      Xác nhận thu
+                      {/* Logic hiển thị chữ trên nút */}
+                      {t.financial_categories?.flow_type === 'in' ? 'Xác nhận thu' : 'Xác nhận chi'}
                     </button>
                   )}
                 </td>
@@ -258,15 +263,52 @@ const KPICard = ({ title, value, color }: KPICardProps) => (
   </div>
 );
 
-const StatusBadge = ({ status }: { status: string }) => {
-  // 3. Khai báo kiểu Record<string, string> để fix lỗi Line 153
-  const styles: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-700',
-    paid: 'bg-green-100 text-green-700',
-    cancelled: 'bg-gray-100 text-gray-500',
-    rejected: 'bg-red-100 text-red-700'
-  };
+// Component hiển thị trạng thái (Copy đè lên cái cũ ở cuối file)
+const StatusBadge = ({ 
+  status, 
+  flowType 
+}: { 
+  status: string; 
+  flowType?: 'in' | 'out' | string; // Thêm dấu ? để không lỗi nếu dữ liệu null
+}) => {
   
-  // Fallback về pending nếu status lạ
-  return <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${styles[status] || styles.pending}`}>{status}</span>
+  // 1. Logic chọn Chữ hiển thị (Label)
+  let label = status;
+  
+  if (status === 'paid') {
+    label = 'Hoàn thành';
+  } else if (status === 'cancelled') {
+    label = 'Đã hủy';
+  } else if (status === 'pending') {
+    // Nếu là Pending, kiểm tra xem là Thu (in) hay Chi (out)
+    if (flowType === 'in') {
+      label = 'Chờ thu';   // User chưa đóng tiền
+    } else {
+      label = 'Chờ chi';   // Admin chưa chi tiền/trao giải
+    }
+  }
+
+  // 2. Logic chọn Màu sắc (Color)
+  // Mặc định là xám (cho đã hủy/unknown)
+  let colorClass = 'bg-gray-100 text-gray-500';
+
+  if (status === 'paid') {
+    colorClass = 'bg-green-100 text-green-700';
+  } else if (status === 'rejected') {
+    colorClass = 'bg-red-100 text-red-700';
+  } else if (status === 'pending') {
+    if (flowType === 'in') {
+      // Pending IN: Màu cam (Cảnh báo cần thu tiền)
+      colorClass = 'bg-orange-100 text-orange-700';
+    } else {
+      // Pending OUT: Màu xanh dương (Nhắc nhở Admin cần thực hiện chi)
+      colorClass = 'bg-blue-100 text-blue-700';
+    }
+  }
+
+  return (
+    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold uppercase whitespace-nowrap ${colorClass}`}>
+      {label}
+    </span>
+  );
 };

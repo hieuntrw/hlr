@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+// using server APIs via fetch and financeService; no direct supabase client here
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
 import { financeService } from '@/lib/services/financeService';
@@ -42,7 +42,7 @@ export default function CreateTransactionPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClientComponentClient();
+  // use shared supabase singleton
 
   const flowType = watch('flow_type');
 
@@ -68,7 +68,7 @@ export default function CreateTransactionPage() {
       }
     }
     init();
-  }, [supabase]);
+  }, []);
 
   const filteredCategories = categories.filter(c => c.flow_type === flowType);
 

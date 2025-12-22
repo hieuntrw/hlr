@@ -100,8 +100,7 @@ export default function AdminPage() {
       }
 
       // Trong fetchProfileAndStats, ưu tiên dùng profile từ AuthContext nếu có, chỉ truy vấn Supabase nếu chưa có hoặc cache hết hạn
-      // Attempt to fetch profile by UID for reliable full_name
-      try {
+            try {
         const resp = await fetch('/api/profiles/me', { credentials: 'same-origin' });
         const json = await resp.json().catch(() => null);
         if (resp.ok && json?.profile) {
@@ -284,7 +283,7 @@ export default function AdminPage() {
               <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Tổng Quỹ</h3>
               <p className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{formatCurrency(stats.totalFund)}</p>
               <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
-              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
+              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản chờ xử lý
             </p>
               
             </div>

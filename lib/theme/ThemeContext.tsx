@@ -1,6 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { useAuth } from '@/lib/auth/AuthContext';
 import { Theme } from './types';
 import { defaultTheme } from './defaultTheme';
 import { supabase } from '@/lib/supabase-client';
@@ -63,7 +64,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
       
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (user) {
         setUserId(user.id);
         
@@ -172,11 +173,24 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  const { user, sessionChecked, isLoading: authLoading } = useAuth();
+
   useEffect(() => {
-    loadThemeFromDatabase();
+    // Always load system-level settings and presets (they do not require auth)
     loadSystemSettings();
     loadThemePresetsData();
-  }, [loadThemeFromDatabase, loadSystemSettings, loadThemePresetsData]);
+
+    // If auth is still loading, wait. When sessionChecked is true and user exists,
+    // load user-specific theme from DB. If no user, mark loading false.
+    if (authLoading) return;
+
+    if (sessionChecked && user) {
+      loadThemeFromDatabase();
+    } else {
+      // No authenticated user — nothing to sync from user table
+      setLoading(false);
+    }
+  }, [authLoading, sessionChecked, user, loadThemeFromDatabase, loadSystemSettings, loadThemePresetsData]);
 
   // Apply theme to CSS variables whenever theme changes (skip if preloaded)
   useEffect(() => {

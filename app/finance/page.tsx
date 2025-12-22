@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { supabase } from '@/lib/supabase-client';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { financeService } from '@/lib/services/financeService';
 import { CreditCard, History, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -50,7 +50,6 @@ export default function MemberFinancePage() {
   const [totalExpense, setTotalExpense] = useState<number | null>(null);
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = createClientComponentClient();
 
   useEffect(() => {
     async function loadData() {
@@ -99,7 +98,7 @@ export default function MemberFinancePage() {
       }
     }
     loadData();
-  }, [supabase]); // 3. Thêm 'supabase' vào dependency array để fix lỗi eslint
+  }, []);
 
   // Tính tổng nợ (Pending + Loại là Thu)
   const totalDebt = myTrans
@@ -183,11 +182,18 @@ export default function MemberFinancePage() {
                         <p className={`font-medium ${t.flow_type === 'in' ? 'text-red-600' : 'text-green-600'}`}>
                           {t.flow_type === 'in' ? '-' : '+'}{formatCurrency(t.amount)}
                         </p>
-                        <span className={`inline-block px-2 py-0.5 text-[10px] rounded-full uppercase font-bold ${
+
+                        {/* LOGIC MỚI: Xử lý màu sắc và Chữ hiển thị */}
+                        <span className={`inline-block px-2 py-0.5 text-[10px] rounded-full uppercase font-bold mt-1 ${
                           t.payment_status === 'paid' ? 'bg-green-100 text-green-700' : 
-                          t.payment_status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-yellow-100 text-yellow-700'
+                          t.payment_status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 
+                          // Nếu là Pending: IN thì màu đỏ (cảnh báo nợ), OUT thì màu cam/xanh (đang chờ nhận)
+                          (t.flow_type === 'in' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700')
                         }`}>
-                          {t.payment_status === 'pending' ? 'Chờ đóng' : t.payment_status}
+                          {t.payment_status === 'pending' 
+                            ? (t.flow_type === 'in' ? 'Chờ đóng' : 'Chờ trao') // <--- ĐÂY LÀ CHỖ BẠN CẦN
+                            : (t.payment_status === 'paid' ? 'Hoàn thành' : 'Đã hủy')
+                          }
                         </span>
                       </div>
                     </div>
@@ -273,4 +279,5 @@ export default function MemberFinancePage() {
       )}
     </div>
   );
+  
 }
