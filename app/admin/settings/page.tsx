@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
+import { financeService } from "@/lib/services/financeService";
 
 interface SystemSetting {
   key: string;
@@ -86,6 +87,29 @@ export default function SettingsPage() {
     } catch (err) {
       console.error('Error:', err);
       alert('Có lỗi xảy ra');
+    }
+  }
+
+  // Year settlement (create opening balance)
+  const currentYear = new Date().getFullYear();
+  const [settleYear, setSettleYear] = useState<number>(currentYear - 1);
+  const [settling, setSettling] = useState(false);
+  const [settleMessage, setSettleMessage] = useState<string | null>(null);
+
+  async function handleSettle() {
+    if (!confirm(`Xác nhận quyết toán số dư cuối năm ${settleYear} thành đầu kỳ ${settleYear + 1}?`)) return;
+    setSettling(true);
+    setSettleMessage(null);
+    try {
+      await financeService.createOpeningBalance(settleYear);
+      setSettleMessage(`Đã quyết toán thành công số dư ${settleYear} → đầu kỳ ${settleYear + 1}`);
+      // refresh settings or other UI if needed
+      fetchSettings();
+    } catch (err) {
+      console.error('Quyết toán thất bại', err);
+      setSettleMessage(String(err) || 'Lỗi khi quyết toán');
+    } finally {
+      setSettling(false);
     }
   }
 
@@ -185,6 +209,8 @@ export default function SettingsPage() {
           )}
         </div>
 
+        
+
         <div className="mt-8 rounded-lg p-6 border-l-4" style={{ background: "var(--color-info-bg, #FEF3C7)", borderColor: "var(--color-primary)" }}>
           <h3 className="font-bold mb-2" style={{ color: "var(--color-text-primary)" }}>📌 Cài Đặt Hiện Có</h3>
           <ul className="text-sm space-y-1" style={{ color: "var(--color-text-secondary)" }}>
@@ -192,6 +218,42 @@ export default function SettingsPage() {
             <li>• <strong>challenge_fine_fee:</strong> Mức phạt không hoàn thành thử thách (VND)</li>
             <li>• <strong>challenge_registration_levels:</strong> Danh sách mốc (km) khả dụng khi đăng ký thử tháchphân tách bằng dấu phẩy. Ví dụ: 70,100,150,200. Các mốc này sẽ được hiển thị cho người dùng khi họ đăng ký thử thách và được chuẩn hóa (loại bỏ trùng lặp và sắp xếp tăng dần) khi lưu.</li>
           </ul>
+        </div>
+
+
+        {/* Year settlement card: quyết toán tài chính cuối năm */}
+        <div className="mt-6 rounded-lg shadow-md p-6 bg-white">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Quyết Toán Tài Chính Cuối Năm</h3>
+              <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Đưa số dư cuối năm thành đầu kỳ năm sau.</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="text-sm" style={{ color: "var(--color-text-secondary)" }}>Chọn năm để quyết toán:</label>
+            <select
+              value={settleYear}
+              onChange={(e) => setSettleYear(Number(e.target.value))}
+              className="border rounded px-2 py-1"
+            >
+              <option value={currentYear - 1}>{currentYear - 1} (Năm vừa qua)</option>
+              <option value={currentYear}>{currentYear} (Năm hiện tại)</option>
+            </select>
+
+            <button
+              onClick={handleSettle}
+              disabled={settling}
+              className="ml-auto px-4 py-2 text-white font-semibold rounded"
+              style={{ background: 'var(--color-primary)' }}
+            >
+              {settling ? 'Đang xử lý...' : 'Quyết toán'}
+            </button>
+          </div>
+
+          {settleMessage && (
+            <div className="mt-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>{settleMessage}</div>
+          )}
         </div>
 
       </div>
