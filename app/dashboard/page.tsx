@@ -1,23 +1,17 @@
 "use client";
+import { financeService } from '@/lib/services/financeService';
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 // Use server APIs instead of direct client Supabase to avoid PostgREST/Kong issues
 import { Trophy, Target, Star, Award } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { getEffectiveRole } from "@/lib/auth/role";
 import { supabase } from "@/lib/supabase-client";
 
 interface UserProfile {
   id: string;
   full_name: string | null;
-  strava_id: string | null;
-  role?: string;
-  email?: string | null;
-  pb_5k_seconds: number | null;
-  pb_10k_seconds: number | null;
-  pb_half_marathon_seconds: number | null;
-  pb_full_marathon_seconds: number | null;
+   email?: string | null;
 }
 
 interface PersonalStats {
@@ -39,9 +33,8 @@ interface HallOfFameEntry {
 
 interface FinanceStatus {
   balance: number;
-  unpaidFees: number;
-  unpaidFines: number;
   hasOutstanding: boolean;
+  pendingCount?: number;
 }
 
 interface YearlyStats {
@@ -62,6 +55,8 @@ interface Notification {
 function DashboardContent() {
   const router = useRouter();
   const { user, profile, isLoading: authLoading, sessionChecked } = useAuth(); // Thêm profile từ AuthContext
+  
+  // Services
 
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [personalStats, setPersonalStats] = useState<PersonalStats>({
@@ -76,8 +71,6 @@ function DashboardContent() {
   const [hallOfFame, setHallOfFame] = useState<HallOfFameEntry[]>([]);
   const [financeStatus, setFinanceStatus] = useState<FinanceStatus>({
     balance: 0,
-    unpaidFees: 0,
-    unpaidFines: 0,
     hasOutstanding: false,
   });
   const [yearlyStats, setYearlyStats] = useState<YearlyStats>({
@@ -253,22 +246,20 @@ function DashboardContent() {
       // Using user from AuthContext
       if (!user) return;
       try {
-        const base = typeof window !== 'undefined' ? window.location.origin : '';
-        const resp = await fetch(`${base}/api/profile/transactions`, { credentials: 'same-origin' });
-        const j = await resp.json().catch(() => null);
-        if (resp.ok && j?.ok) {
-          const summary = j.summary || { balance: 0, unpaidFees: 0, unpaidFines: 0 };
-          setFinanceStatus({
-            balance: Number(summary.balance || 0),
-            unpaidFees: Number(summary.unpaidFees || 0),
-            unpaidFines: Number(summary.unpaidFines || 0),
-            hasOutstanding: (Number(summary.unpaidFees || 0) > 0) || (Number(summary.unpaidFines || 0) > 0),
-          });
-        } else {
-          console.warn('[Dashboard] transactions API failed', j);
-        }
+        const year = new Date().getFullYear();
+        const balance = await financeService.getClubBalance(year).catch(() => 0);
+        const myFinance = await financeService.getMyFinance(user.id, year).catch(() => []);
+        const pendingCount = Array.isArray(myFinance)
+          ? myFinance.filter((r: unknown) => String(((r as Record<string, unknown>).payment_status) ?? '') === 'pending').length
+          : 0;
+
+        setFinanceStatus({
+          balance: Number(balance || 0),
+          hasOutstanding: pendingCount > 0,
+          pendingCount,
+        });
       } catch (e) {
-        console.error('[Dashboard] transactions fetch error', e);
+        console.error('[Dashboard] finance fetch error', e);
       }
     } catch (err) {
       console.error("Failed to fetch finance status:", err);
@@ -337,7 +328,7 @@ function DashboardContent() {
                  const { data: byEmail } = await supabase
                    .from("profiles")
                    .select(
-                     "id, full_name, email, phone, birth_date, avatar_url, pb_hm_seconds, pb_fm_seconds, strava_id"
+                     "id, full_name, email, birth_date, avatar_url, pb_hm_seconds, pb_fm_seconds, strava_id"
                    )
                    .eq("email", user.email)
                    .maybeSingle();
@@ -380,12 +371,7 @@ function DashboardContent() {
           id: String(profileResult['id'] ?? ''),
           full_name: (profileResult['full_name'] as string) ?? null,
           email: user.email ?? null,
-          strava_id: null,
-          role: getEffectiveRole(user as unknown as Record<string, unknown>) || 'member',
-          pb_5k_seconds: null,
-          pb_10k_seconds: null,
-          pb_half_marathon_seconds: null,
-          pb_full_marathon_seconds: null,
+        
         });
         console.log("[DEBUG] Đã set userProfile với full_name:", profileResult.full_name);
       } else {
@@ -438,12 +424,6 @@ function DashboardContent() {
         id: profile.id,
         full_name: profile.full_name,
         email: user.email ?? null,
-        strava_id: null,
-        role: getEffectiveRole(user as unknown as Record<string, unknown>) || 'member',
-        pb_5k_seconds: null,
-        pb_10k_seconds: null,
-        pb_half_marathon_seconds: null,
-        pb_full_marathon_seconds: null,
       });
       setProfileLoading(false);
     } else {
@@ -739,30 +719,17 @@ function DashboardContent() {
 
                 {financeStatus.hasOutstanding && (
                   <div>
-                    {financeStatus.unpaidFees > 0 && (
-                      <div className="flex items-center justify-between p-3 rounded-lg mb-2" style={{ background: "var(--color-bg-primary)" }}>
-                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Quỹ chưa đóng</span>
-                        <span className="font-bold" style={{ color: "var(--color-warning)" }}>
-                          {financeLoading ? (
-                            <span className="h-4 w-24 bg-gray-200 rounded animate-pulse inline-block" />
-                          ) : (
-                            financeStatus.unpaidFees.toLocaleString("vi-VN")
-                          )} đ
-                        </span>
-                      </div>
-                    )}
-                    {financeStatus.unpaidFines > 0 && (
-                      <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
-                        <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Phạt chưa đóng</span>
-                        <span className="font-bold" style={{ color: "var(--color-error)" }}>
-                          {financeLoading ? (
-                            <span className="h-4 w-24 bg-gray-200 rounded animate-pulse inline-block" />
-                          ) : (
-                            financeStatus.unpaidFines.toLocaleString("vi-VN")
-                          )} đ
-                        </span>
-                      </div>
-                    )}
+                    <div className="flex items-center justify-between p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                      <span className="text-sm" style={{ color: "var(--color-text-primary)" }}>Số giao dịch chưa đóng</span>
+                      <span className="font-bold" style={{ color: "var(--color-warning)" }}>
+                        {financeLoading ? (
+                          <span className="h-4 w-12 bg-gray-200 rounded animate-pulse inline-block" />
+                        ) : (
+                          String(financeStatus.pendingCount ?? 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-2">Vui lòng vào trang Quỹ để xem chi tiết và cập nhật thanh toán.</div>
                   </div>
                 )}
 

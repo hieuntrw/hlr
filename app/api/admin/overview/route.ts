@@ -3,6 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
+import  {financeService}  from '@/lib/services/financeService';
 
 
 export const dynamic = 'force-dynamic';
@@ -38,18 +39,12 @@ export async function GET(request: NextRequest) {
     const activeChallenges = activeChallengesResp.count ?? 0;
 
     // pending transactions count
-    const pendingResp = await client.from('transactions').select('*', { count: 'exact', head: true }).eq('payment_status', 'pending');
+    const pendingResp = await client.from('transactions').select('*', { count: 'exact', head: true }).eq('payment_status', 'pending').eq('fiscal_year', new Date().getFullYear());
     const pendingFines = pendingResp.count ?? 0;
 
-    // fund calculation from paid transactions
-    const fundDataResp = await client.from('transactions').select('amount, type').eq('payment_status', 'paid');
-    let totalFund = 0;
-    if (!fundDataResp.error && Array.isArray(fundDataResp.data)) {
-      for (const t of fundDataResp.data) {
-        if (t.type === 'fund_collection' || t.type === 'fine' || t.type === 'donation') totalFund += Number(t.amount || 0);
-        else if (t.type === 'expense' || t.type === 'reward_payout') totalFund -= Number(t.amount || 0);
-      }
-    }
+    // Prefer the financeService RPC for club balance (uses service/client RPC)
+    const totalFund = await financeService.getClubBalance(new Date().getFullYear());
+    
 
     return NextResponse.json({
       pendingMembers: 0,

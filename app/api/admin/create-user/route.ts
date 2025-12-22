@@ -89,7 +89,6 @@ export async function POST(req: NextRequest) {
       id: newUser.user.id,
       email,
       full_name: fullName,
-      role: role,
       phone_number: phoneNumber || null,
       dob: dob || null,
       gender: gender || null,

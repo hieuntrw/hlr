@@ -40,6 +40,21 @@ export async function POST(request: NextRequest) {
       res.cookies.set('sb-refresh-token', refresh, refreshOpts);
     }
 
+    // Also set a session JSON cookie to assist server-side reconstruction (matches email-login)
+    try {
+      const sessionObj = JSON.stringify({
+        access_token: access,
+        refresh_token: refresh ?? null,
+        expires_at: null,
+        token_type: 'bearer'
+      });
+      const sessOpts: Record<string, unknown> = { httpOnly: true, secure: isSecure, sameSite: 'lax', maxAge: 60 * 60 * 24 * 7, path: '/' };
+      if (envCookieDomain && envCookieDomain.length > 0) sessOpts.domain = envCookieDomain;
+      res.cookies.set('sb-session', sessionObj, sessOpts);
+    } catch (e) {
+      serverDebug.warn('[set-session] failed to set sb-session cookie', e);
+    }
+
     serverDebug.debug('[set-session] Set sb-access-token cookie preview:', (access || '').slice(0, 20) + '...');
 
     return res;

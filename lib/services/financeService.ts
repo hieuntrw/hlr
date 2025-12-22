@@ -20,7 +20,7 @@ export const financeService = {
     return data;
   },
 
-  // 1. Lấy thống kê công khai nên gọi hàm get_club_balance
+  // 1. Lấy thống kê công khai 
   async getPublicStats() {
     const { data, error } = await supabase.from('view_public_fund_stats').select('*').maybeSingle();
     if (error) throw error;
@@ -77,7 +77,18 @@ export const financeService = {
     const value = data as unknown;
     return typeof value === 'number' ? value : Number(value ?? 0);
   },
-
+/*
+  // Server-friendly helper which accepts a Supabase client (service or server client)
+  async getClubBalanceWithClient(client: any, year: number) {
+    if (!client || typeof client.rpc !== 'function') {
+      throw new Error('Invalid supabase client provided');
+    }
+    const { data, error } = await client.rpc('get_club_balance', { year_input: year });
+    if (error) throw error;
+    const value = data as unknown;
+    return typeof value === 'number' ? value : Number(value ?? 0);
+  },
+*/
   // Tạo hoặc cập nhật số dư đầu kỳ cho năm tiếp theo (RPC -> create_opening_balance)
   async createOpeningBalance(prevYear: number) {
     const { error } = await supabase.rpc('create_opening_balance', { prev_year: prevYear });

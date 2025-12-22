@@ -9,10 +9,8 @@ export async function GET() {
   try {
     const cookieStore = cookies();
 
-    // Debug: log incoming cookies
     const incoming = cookieStore.getAll().map(c => ({ name: c.name, valuePreview: c.value?.substring(0, 50) }));
     serverDebug.debug('[whoami] incoming cookies:', incoming);
-    // Also log specific auth cookie previews
     const accPreview = cookieStore.get('sb-access-token')?.value?.substring(0, 120) || null;
     const refPreview = cookieStore.get('sb-refresh-token')?.value?.substring(0, 120) || null;
     serverDebug.debug('[whoami] sb-access-token preview:', accPreview);
@@ -27,23 +25,22 @@ export async function GET() {
             return cookieStore.get(name)?.value;
           },
           set() {
-            // not used here
+            /* not used */
           },
           remove() {
-            // not used here
+            /* not used */
           },
         },
       }
     );
 
+    // Try to get user via supabase server client
     const getUserResp = await supabase.auth.getUser();
-    let user = getUserResp.data.user;
-    let error = getUserResp.error;
+    let user: unknown = getUserResp.data.user ?? null;
+    let error = getUserResp.error ?? null;
     serverDebug.debug('[whoami] initial supabase.getUser error:', error ? error.message : null);
 
-    // If supabase did not reconstruct the session from cookies, but cookies are present,
-    // initialize the server client session directly using the tokens. This is safe
-    // in a server-side context and avoids relying on unsigned JWT payload decoding.
+    // If no user but cookies exist, try to set session from token cookies and retry
     if (!user && (accPreview || refPreview)) {
       try {
         serverDebug.debug('[whoami] Attempting supabase.auth.setSession from cookies');
@@ -51,19 +48,59 @@ export async function GET() {
         const refresh = cookieStore.get('sb-refresh-token')?.value;
         if (access && refresh) {
           const setResp = await supabase.auth.setSession({ access_token: access, refresh_token: refresh });
-          serverDebug.debug('[whoami] setSession result error:', setResp.error?.message || null);
+          serverDebug.debug('[whoami] setSession result:', setResp);
         } else {
           serverDebug.warn('[whoami] incomplete auth cookies present; skipping setSession');
         }
-        // Try getUser again
         const retry = await supabase.auth.getUser();
-        user = retry.data.user;
-        error = retry.error || null;
-        serverDebug.debug('[whoami] retry supabase.getUser error:', error ? error.message : null);
+        serverDebug.debug('[whoami] retry supabase.getUser result:', retry);
+        user = retry.data.user ?? null;
+        error = retry.error ?? null;
       } catch (e) {
         serverDebug.warn('[whoami] setSession attempt failed', String(e));
       }
     }
+
+    // Final fallback: if still no user, try to parse sb-session cookie and extract id/role from JWT payload
+    if (!user) {
+      const sess = cookieStore.get('sb-session')?.value;
+      if (sess) {
+        try {
+          const parsed = JSON.parse(sess || '{}') as Record<string, unknown>;
+          const accessTok = typeof parsed.access_token === 'string' ? parsed.access_token : undefined;
+          if (accessTok) {
+            const parts = accessTok.split('.');
+            if (parts.length === 3) {
+              try {
+                const payload = parts[1];
+                const padded = payload.padEnd(payload.length + (4 - (payload.length % 4)) % 4, '=');
+                const json = Buffer.from(padded.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+                const obj = JSON.parse(json) as Record<string, unknown>;
+                const sub = typeof obj.sub === 'string' ? obj.sub : (typeof obj.user_id === 'string' ? obj.user_id : null);
+                if (sub) {
+                  const roleFromToken = (obj['app_metadata'] && typeof (obj['app_metadata'] as Record<string, unknown>)['role'] === 'string')
+                    ? ((obj['app_metadata'] as Record<string, unknown>)['role'] as string)
+                    : (typeof obj['role'] === 'string' ? (obj['role'] as string) : undefined);
+                  const finalRole = roleFromToken || 'member';
+                  user = {
+                    id: sub,
+                    email: null,
+                    user_metadata: {},
+                    app_metadata: { role: finalRole },
+                  };
+                  serverDebug.debug('[whoami] reconstructed user from sb-session, id:', sub, 'role:', finalRole);
+                }
+              } catch (e) {
+                serverDebug.warn('[whoami] failed to decode/access token payload', String(e));
+              }
+            }
+          }
+        } catch (e) {
+          serverDebug.warn('[whoami] failed to parse sb-session cookie', String(e));
+        }
+      }
+    }
+
     if (!user) {
       const msg = error ? (error.message || String(error)) : 'Auth session missing!';
       return NextResponse.json({ ok: false, error: msg, cookies: cookieStore.getAll().map(c => ({ name: c.name, preview: c.value?.substring(0, 50) })), tokenPreviews: { access: accPreview, refresh: refPreview } }, { status: 200 });

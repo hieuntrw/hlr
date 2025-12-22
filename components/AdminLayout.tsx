@@ -18,7 +18,6 @@ import {
   Settings,
   Menu,
   X,
-  LogOut,
   Home,
   Gift,
   Star,
@@ -180,15 +179,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return labels[role] || role;
   };
 
-  const handleLogout = async () => {
-    try {
-      // Ask server to clear cookies and session
-      fetch('/api/auth/logout', { method: 'POST' });
-    } catch (e) {
-      console.warn('Logout request failed', e);
-    }
-    window.location.href = "/";
-  };
+  // Sidebar no longer contains a logout action; header handles logout flow.
 
   if (loading) {
     return (
@@ -308,14 +299,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Home size={20} />
               <span>Trang Chủ</span>
             </Link>
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg font-medium transition-all"
-              style={{ color: "var(--color-error)" }}
-            >
-              <LogOut size={20} />
-              <span>Đăng Xuất</span>
-            </button>
           </div>
         </div>
       </aside>

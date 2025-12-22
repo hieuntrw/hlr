@@ -128,6 +128,21 @@ export async function POST(request: NextRequest) {
       // Attach cookie to the response
       res.cookies.set('sb-access-token', data.session.access_token, cookieOptions);
 
+      // Also set a session cookie JSON that helps server-side clients reconstruct session
+      try {
+        const sessionObj = JSON.stringify({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token ?? null,
+          expires_at: data.session.expires_at ?? null,
+          token_type: 'bearer'
+        });
+        const sessOpts: Record<string, unknown> = { httpOnly: true, secure: isSecure, sameSite: 'lax', maxAge: 60 * 60 * 24 * 7, path: '/' };
+        if (envCookieDomain && envCookieDomain.length > 0) sessOpts.domain = envCookieDomain;
+        res.cookies.set('sb-session', sessionObj, sessOpts);
+      } catch (e) {
+        serverDebug.warn('Failed to set sb-session cookie', e);
+      }
+
       // Also set refresh token
       if (data.session?.refresh_token) {
         serverDebug.debug("Setting sb-refresh-token cookie...");
@@ -178,6 +193,20 @@ export async function POST(request: NextRequest) {
           const refreshOpts: Record<string, unknown> = { httpOnly: true, secure: isSecure, sameSite: 'lax', maxAge: 60 * 60 * 24 * 30, path: '/' };
           if (envCookieDomain && envCookieDomain.length > 0) refreshOpts.domain = envCookieDomain;
           redirectResponse.cookies.set('sb-refresh-token', data.session.refresh_token, refreshOpts);
+        }
+        // Also set sb-session on redirect response
+        try {
+          const sessionObj = JSON.stringify({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token ?? null,
+            expires_at: data.session.expires_at ?? null,
+            token_type: 'bearer'
+          });
+          const sessOpts: Record<string, unknown> = { httpOnly: true, secure: isSecure, sameSite: 'lax', maxAge: 60 * 60 * 24 * 7, path: '/' };
+          if (envCookieDomain && envCookieDomain.length > 0) sessOpts.domain = envCookieDomain;
+          redirectResponse.cookies.set('sb-session', sessionObj, sessOpts);
+        } catch (e) {
+          serverDebug.warn('Failed to set sb-session on redirect', e);
         }
       }
       return redirectResponse;

@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
-    // Determine role: prefer app_metadata.role then profiles.role
+    // Determine role: prefer app_metadata.role
     let role: string | undefined = undefined;
     // Safely read `app_metadata.role` from the user object without `any` casts
     if (user && typeof user === 'object' && 'app_metadata' in user) {

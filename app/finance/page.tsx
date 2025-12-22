@@ -16,13 +16,13 @@ interface MyTransaction {
   amount: number;
   payment_status: string;
 }
-
+/*
 interface FundStats {
   current_balance: number;
   total_income: number;
   total_expense: number;
 }
-
+*/
 interface PublicExpense {
   payment_date: string;
   category_name: string;
@@ -30,6 +30,7 @@ interface PublicExpense {
   amount: number;
 }
 // 1. CẬP NHẬT INTERFACE MỚI
+/*
 interface FundStats {
   fiscal_year: number;
   opening_balance: number; // Mới
@@ -37,14 +38,17 @@ interface FundStats {
   total_expense: number;
   current_balance: number;
 }
+  */
 export default function MemberFinancePage() {
   const [activeTab, setActiveTab] = useState<'personal' | 'public'>('personal');
   
   // 2. Sử dụng Interface thay vì any[]
   const [myTrans, setMyTrans] = useState<MyTransaction[]>([]);
-  const [fundStats, setFundStats] = useState<FundStats | null>(null);
-  const [publicExpenses, setPublicExpenses] = useState<PublicExpense[]>([]);
-  
+    const [publicExpenses, setPublicExpenses] = useState<PublicExpense[]>([]);
+  const [clubBalance, setClubBalance] = useState<number | null>(null);
+   const [totalIncomeReal, setTotalIncomeReal] = useState<number | null>(null);
+  const [totalExpense, setTotalExpense] = useState<number | null>(null);
+  const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClientComponentClient();
 
@@ -54,17 +58,39 @@ export default function MemberFinancePage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Load song song dữ liệu cá nhân và công khai
-        const [trans, stats, expenses] = await Promise.all([
-          financeService.getMyFinance(user.id, new Date().getFullYear()),
-          financeService.getPublicStats(),
-          financeService.getRecentExpenses()
+        // Load dữ liệu song song: cá nhân + các báo cáo/thu/chi/số dư từ financeService
+        const year = new Date().getFullYear();
+        const [
+          trans,
+          openingBal,
+          incomeReal,
+          expense,
+          clubBal,
+          expenses,
+        ] = await Promise.all([
+          financeService.getMyFinance(user.id, year),
+          financeService.getOpeningBalance(year),
+          financeService.getTotalIncomeReal(year),
+          financeService.getTotalExpense(year),
+          financeService.getClubBalance(year),
+          financeService.getRecentExpenses(),
         ]);
 
         // Ép kiểu dữ liệu trả về từ service (nếu service trả về unknown/any)
         if (trans) setMyTrans(trans as unknown as MyTransaction[]);
-        if (stats) setFundStats(stats as unknown as FundStats);
         if (expenses) setPublicExpenses(expenses as unknown as PublicExpense[]);
+
+        
+         const opening = typeof openingBal === 'number' ? openingBal : Number(openingBal ?? 0);
+      const club = typeof clubBal === 'number' ? clubBal : Number(clubBal ?? 0);
+         const incomeNum = typeof incomeReal === 'number' ? incomeReal : Number(incomeReal ?? 0);
+      const expenseNum = typeof expense === 'number' ? expense : Number(expense ?? 0);
+
+      setOpeningBalance(opening);
+      setClubBalance(club);
+      setTotalIncomeReal(incomeNum);
+      setTotalExpense(expenseNum);
+       
         
       } catch (error) {
         console.error("Lỗi tải dữ liệu:", error);
@@ -180,7 +206,7 @@ export default function MemberFinancePage() {
             <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
               <p className="text-xs text-gray-500 font-medium uppercase">Số dư đầu năm</p>
               <p className="text-xl font-bold text-gray-700 mt-1">
-                {formatCurrency(fundStats?.opening_balance || 0)}
+                {formatCurrency(openingBalance ?? 0)}
               </p>
             </div>
 
@@ -188,7 +214,7 @@ export default function MemberFinancePage() {
             <div className="p-4 bg-white border border-green-100 rounded-xl">
               <p className="text-xs text-green-600 font-medium uppercase">Thu mới (Năm nay)</p>
               <p className="text-xl font-bold text-green-600 mt-1">
-                +{formatCurrency(fundStats?.total_revenue || 0)}
+                +{formatCurrency(totalIncomeReal ?? 0)}
               </p>
             </div>
 
@@ -196,7 +222,7 @@ export default function MemberFinancePage() {
             <div className="p-4 bg-white border border-orange-100 rounded-xl">
               <p className="text-xs text-orange-600 font-medium uppercase">Đã chi (Năm nay)</p>
               <p className="text-xl font-bold text-orange-600 mt-1">
-                -{formatCurrency(fundStats?.total_expense || 0)}
+                -{formatCurrency(totalExpense ?? 0)}
               </p>
             </div>
 
@@ -204,7 +230,7 @@ export default function MemberFinancePage() {
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl shadow-sm">
               <p className="text-xs text-blue-700 font-medium uppercase">Tồn quỹ hiện tại</p>
               <p className="text-2xl font-bold text-blue-800 mt-1">
-                {formatCurrency(fundStats?.current_balance || 0)}
+                {formatCurrency(clubBalance ?? 0)}
               </p>
             </div>
           </div>

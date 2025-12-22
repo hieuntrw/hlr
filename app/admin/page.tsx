@@ -283,9 +283,13 @@ export default function AdminPage() {
               </div>
               <h3 className="text-sm font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>Tổng Quỹ</h3>
               <p className="text-2xl font-bold" style={{ color: "var(--color-text-primary)" }}>{formatCurrency(stats.totalFund)}</p>
-              <p className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>Thu tháng này: {formatCurrency(stats.monthlyCollection)}</p>
+              <p className="text-xs mt-2" style={{ color: "var(--color-text-secondary)" }}>
+              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
+            </p>
+              
             </div>
           </Link>
+
         )}
 
         {/* Active Challenges Widget */}
@@ -304,31 +308,6 @@ export default function AdminPage() {
           </Link>
         )}
       </div>
-
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending Fines */}
-        {hasFinanceAccess && stats.pendingFines > 0 && (
-          <div className="rounded-lg shadow-md p-6" style={{ background: "var(--color-bg-secondary)" }}>
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: "var(--color-bg-primary)" }}>
-                <AlertCircle style={{ color: "var(--color-error)" }} size={20} />
-              </div>
-              <h3 className="text-lg font-bold" style={{ color: "var(--color-text-primary)" }}>Phạt Chờ Xử Lý</h3>
-            </div>
-            <p className="mb-4" style={{ color: "var(--color-text-secondary)" }}>
-              Có <strong style={{ color: "var(--color-error)" }}>{stats.pendingFines}</strong> khoản phạt đang chờ phê duyệt
-            </p>
-            <Link
-              href="/admin/finance"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
-              style={{ background: "var(--color-error)", color: "var(--color-text-inverse)" }}
-            >
-              Xử lý ngay →
-            </Link>
-          </div>
-        )}
-
         {/* System Info */}
         <div className="rounded-lg shadow-md p-6 border-l-4" style={{ background: "var(--color-bg-primary)", borderLeftColor: "var(--color-primary)" }}>
           <div className="flex items-center gap-3 mb-4">
@@ -349,7 +328,7 @@ export default function AdminPage() {
             </p>
           </div>
         </div>
-      </div>
+    
     </div>
   );
 }

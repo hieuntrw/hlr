@@ -124,7 +124,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (valid && cached?.profile) {
       setProfile(cached.profile as Profile);
       setIsLoading(false);
-      setSessionChecked(true);
+      // Do not mark sessionChecked true here; wait for `load()` to verify
+      // the actual auth session via `/api/auth/whoami` to avoid races where
+      // UI redirects run before server-side session reconstruction completes.
       void load();
     } else {
       void load();

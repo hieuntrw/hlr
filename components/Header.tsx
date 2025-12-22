@@ -32,8 +32,9 @@ export default function Header() {
         } catch {}
       }
       // Call logout API to clear cookies/session (do not await)
-      fetch('/api/auth/logout', { method: 'POST' });
-      // Redirect immediately
+      // Ensure credentials are included so browser applies Set-Cookie headers
+      try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) { console.warn('Logout fetch failed', e); }
+      // Redirect after logout
       window.location.href = '/login';
     } catch (error) {
       console.error('Logout error:', error);
@@ -223,7 +224,7 @@ export default function Header() {
                       title="Đăng xuất"
                     >
                       <LogOut size={14} />
-                      Thoát
+                        Đăng xuất
                     </button>
                   </div>
                 </div>

@@ -57,47 +57,7 @@ function LoginForm() {
 				}
 			} catch {
 			}
-			const waitForWhoami = async (timeoutMs = 2000, interval = 200) => {
-				const start = Date.now();
-				while (Date.now() - start < timeoutMs) {
-					try {
-						const who = await fetch('/api/auth/whoami', { credentials: 'same-origin' });
-						if (who.ok) {
-							const j = await who.json().catch(() => null);
-							if (j && (j as Record<string, unknown>).ok && (j as Record<string, unknown>).user) return true;
-						}
-					} catch {
-						// ignore
-					}
-					await new Promise(r => setTimeout(r, interval));
-				}
-				return false;
-			};
-
-			const sessionReady = await waitForWhoami(2000, 200);
-			if (!sessionReady) {
-				// Fallback: submit a real form so the browser performs a navigation
-				// and applies any HttpOnly Set-Cookie headers the server returns.
-				try {
-					const form = document.createElement('form');
-					form.method = 'POST';
-					form.action = `/api/auth/email-login?redirect=${encodeURIComponent(redirectTo)}`;
-					form.style.display = 'none';
-					const i1 = document.createElement('input');
-					i1.name = 'email';
-					i1.value = email;
-					form.appendChild(i1);
-					const i2 = document.createElement('input');
-					i2.name = 'password';
-					i2.value = password;
-					form.appendChild(i2);
-					document.body.appendChild(form);
-					form.submit();
-					return;
-				} catch (e) {
-					console.warn('Form-submit fallback failed, navigating anyway', e);
-				}
-			}
+			// Immediately navigate — AuthContext reads cached profile so UI becomes authenticated
 			window.location.href = redirectTo;
 		} catch (err: unknown) {
 			console.error('Login request failed', err);
