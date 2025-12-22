@@ -748,10 +748,11 @@ export default function MembersAdminPage() {
             fetchError ? (
               <div className="p-8 text-center">
                 <p className="text-red-600 mb-3">{fetchError}</p>
-                <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-2">
                   <button
                     onClick={() => fetchMembers()}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg"
+                    className="px-4 py-2 rounded-lg"
+                    style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
                   >Thử lại</button>
                   <button
                     onClick={() => { setFetchError(null); setLoading(false); }}

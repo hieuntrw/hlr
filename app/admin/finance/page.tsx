@@ -29,13 +29,14 @@ interface TransactionWithDetails {
 }
 
 // Interface cho Stats
+/*
 interface FundStats {
   opening_balance: number;
   total_revenue: number;
   total_expense: number;
   current_balance: number;
 }
-
+*/
 // 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
 interface KPICardProps {
   title: string;
@@ -50,7 +51,12 @@ export default function AdminFinanceDashboard() {
   
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<FundStats | null>(null);
+ // const [stats, setStats] = useState<FundStats | null>(null);
+  const [clubBalance, setClubBalance] = useState<number | null>(null);
+  const [pendingIncome, setPendingIncome] = useState<number | null>(null);
+  const [totalIncomeReal, setTotalIncomeReal] = useState<number | null>(null);
+  const [totalExpense, setTotalExpense] = useState<number | null>(null);
+  const [openingBalance, setOpeningBalance] = useState<number | null>(null);
 
   const checkRole = useCallback(async () => {
     if (!user) {
@@ -74,8 +80,13 @@ export default function AdminFinanceDashboard() {
      setLoading(true);
     if (authLoading || !sessionChecked) return;
     async function fetchAll() {
-      const [statsData, transRes] = await Promise.all([
-        financeService.getPublicStats(),
+      const year = new Date().getFullYear();
+      const [openingBal, clubBal, pending, incomeReal, expense, transRes] = await Promise.all([
+        financeService.getOpeningBalance(year),
+        financeService.getClubBalance(year),
+        financeService.getTotalPendingIncome(year),
+        financeService.getTotalIncomeReal(year),
+        financeService.getTotalExpense(year),
         supabase
           .from('transactions')
           .select(`
@@ -87,7 +98,18 @@ export default function AdminFinanceDashboard() {
           .limit(100)
       ]);
 
-      if (statsData) setStats(statsData as unknown as FundStats);
+      const opening = typeof openingBal === 'number' ? openingBal : Number(openingBal ?? 0);
+      const club = typeof clubBal === 'number' ? clubBal : Number(clubBal ?? 0);
+      const pendingNum = typeof pending === 'number' ? pending : Number(pending ?? 0);
+      const incomeNum = typeof incomeReal === 'number' ? incomeReal : Number(incomeReal ?? 0);
+      const expenseNum = typeof expense === 'number' ? expense : Number(expense ?? 0);
+
+     // setStats({ opening_balance: opening, total_revenue: incomeNum, total_expense: expenseNum, current_balance: club });
+      setOpeningBalance(opening);
+      setClubBalance(club);
+      setPendingIncome(pendingNum);
+      setTotalIncomeReal(incomeNum);
+      setTotalExpense(expenseNum);
       if (transRes.data) setTransactions(transRes.data as unknown as TransactionWithDetails[]);
       setLoading(false);
     }
@@ -118,9 +140,10 @@ export default function AdminFinanceDashboard() {
           <h1 className="text-2xl font-bold text-gray-800">Quản trị Tài chính</h1>
           <p className="text-gray-500">Quản lý thu chi và duyệt giao dịch</p>
         </div>
-        <Link 
-          href="/admin/finance/create" 
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition"
+        <Link
+          href="/admin/finance/create"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition"
+          style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
         >
           <Plus size={18} /> Tạo Giao dịch Mới
         </Link>
@@ -131,30 +154,30 @@ export default function AdminFinanceDashboard() {
         {/* Card 1: Tổng Quỹ (Quan trọng nhất với Admin) */}
         <div className="p-4 rounded-xl bg-blue-600 text-white shadow-md">
           <p className="text-blue-100 text-sm font-medium">TỔNG QUỸ HIỆN CÓ</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(stats?.current_balance || 0)}</p>
+          <p className="text-2xl font-bold mt-1">{formatCurrency(clubBalance ?? 0)}</p>
           <div className="mt-2 text-xs text-blue-200 flex justify-between">
-            <span>Đầu kỳ: {formatCurrency(stats?.opening_balance || 0)}</span>
+            <span>Đầu kỳ: {formatCurrency(openingBalance ?? 0)}</span>
           </div>
         </div>
 
         {/* Card 2: Nợ phải thu (Pending) - Cái này tính từ list transactions hoặc gọi API riêng */}
         <KPICard 
           title="Nợ phải thu (Pending)" 
-          value={formatCurrency(transactions.filter(t => t.payment_status === 'pending' && t.financial_categories?.flow_type === 'in').reduce((s, t) => s + t.amount, 0))} 
+          value={formatCurrency(pendingIncome ?? 0)} 
           color="red" 
         />
 
         {/* Card 3: Thu Mới (Revenue) */}
         <KPICard 
           title="Thu Mới (Trong năm)" 
-          value={formatCurrency(stats?.total_revenue || 0)} 
+          value={formatCurrency(totalIncomeReal ?? 0)} 
           color="green" 
         />
 
         {/* Card 4: Tổng Chi */}
         <KPICard 
           title="Tổng Chi (Trong năm)" 
-          value={formatCurrency(stats?.total_expense || 0)} 
+          value={formatCurrency(totalExpense ?? 0)} 
           color="orange" 
         />
       </div>

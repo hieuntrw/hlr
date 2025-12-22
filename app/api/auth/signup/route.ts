@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
     const email = typeof parsed.email === 'string' ? parsed.email : undefined;
     const password = typeof parsed.password === 'string' ? parsed.password : undefined;
     const full_name = typeof parsed.full_name === 'string' ? parsed.full_name : undefined;
-    const role = typeof parsed.role === 'string' ? parsed.role : undefined;
+    //const role = typeof parsed.role === 'string' ? parsed.role : undefined;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     serverDebug.info("Creating user:", email);
 
-    // Create user in Supabase Auth
+    // Create user in Supabase Auth kiểm tra lại role ghi vào app_metadata
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
@@ -75,12 +75,11 @@ export async function POST(request: NextRequest) {
 
     serverDebug.info("User created, creating profile:", authData.user.id);
 
-    // Create/update profile record with role
+    // Create/update profile record
     const { error: profileError } = await supabase.from("profiles").upsert({
       id: authData.user.id,
       email: email,
       full_name: full_name || email.split("@")[0],
-      role: role || "member",
       is_active: true,
       join_date: new Date().toISOString(),
     }, {

@@ -119,3 +119,91 @@ GROUP BY
 -- Bước 1.3: Cấp quyền đọc
 GRANT SELECT ON public.view_finance_report_by_category TO authenticated;
 -- =================================================================
+
+--Xóa các policy bảng transactions cũ không còn dùng nữa
+
+DROP POLICY IF EXISTS "Public View Transactions" ON transactions;
+DROP POLICY IF EXISTS "Finance read all" ON transactions;
+DROP POLICY IF EXISTS "Mod Finance Insert/Update" ON transactions;
+DROP POLICY IF EXISTS "Finance write" ON transactions;
+DROP POLICY IF EXISTS "Service Role Full Access" ON transactions;
+DROP POLICY IF EXISTS "Members read own transactions" ON transactions;
+DROP POLICY IF EXISTS "Finance update" ON transactions;
+DROP POLICY IF EXISTS "Users read own transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins and mod_finance read all transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins and mod_finance create transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins and mod_finance update transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins delete transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins read all transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins create transactions" ON transactions;
+DROP POLICY IF EXISTS "Admins update transactions" ON transactions;
+DROP POLICY IF EXISTS "admin_update_transactions" ON transactions;
+
+
+--==========================Tạo lại Policy  bảng transactions mới tối ưu ==========================
+
+
+-- 1. Cho phép Service Role (Backend) làm mọi thứ
+CREATE POLICY "Service Role Full Access"
+ON public.transactions
+FOR ALL
+TO service_role
+USING (true)
+WITH CHECK (true);
+
+-- 2. ADMIN: Quyền lực tuyệt đối (Làm gì cũng được)
+CREATE POLICY "Admin Full Access"
+ON public.transactions
+FOR ALL
+TO authenticated
+USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+)
+WITH CHECK (
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'admin'
+);
+
+-- 3. MOD FINANCE: Được Xem, Thêm, Sửa (Không được Xóa)
+-- Áp dụng cho SELECT, INSERT, UPDATE
+CREATE POLICY "Finance Mod Read Write"
+ON public.transactions
+FOR ALL
+TO authenticated
+USING (
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'mod_finance'
+  AND (current_user != 'delete_user') -- Chặn quyền DELETE bằng logic ứng dụng hoặc tách policy nếu cần kỹ hơn
+)
+WITH CHECK (
+  (auth.jwt() -> 'app_metadata' ->> 'role') = 'mod_finance'
+);
+-- Lưu ý: Policy trên cho phép cả DELETE nếu dùng FOR ALL. 
+-- Để an toàn hơn cho Finance (chặn xóa), ta nên tách riêng như sau:
+
+-- (Tối ưu lại cho Finance - Chạy cái này thay cho cái số 3 ở trên)
+CREATE POLICY "Finance Mod Manage"
+ON public.transactions
+FOR INSERT
+TO authenticated
+WITH CHECK ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'mod_finance' );
+
+CREATE POLICY "Finance Mod Update"
+ON public.transactions
+FOR UPDATE
+TO authenticated
+USING ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'mod_finance' )
+WITH CHECK ( (auth.jwt() -> 'app_metadata' ->> 'role') = 'mod_finance' );
+
+-- 4. VIEW (GỘP): Quy định ai được xem cái gì
+-- Admin/Finance: Xem tất cả.
+-- User thường: Chỉ xem của mình.
+CREATE POLICY "View Transactions Logic"
+ON public.transactions
+FOR SELECT
+TO authenticated
+USING (
+  -- Admin hoặc Finance được xem hết
+  (auth.jwt() -> 'app_metadata' ->> 'role') IN ('admin', 'mod_finance')
+  OR
+  -- User thường chỉ xem dòng có user_id trùng với mình
+  (user_id = auth.uid())
+);

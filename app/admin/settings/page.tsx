@@ -149,13 +149,14 @@ export default function SettingsPage() {
                         <div className="flex gap-2 justify-center">
                           <button
                             onClick={() => handleSave(setting.key)}
-                            className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs font-semibold rounded transition-colors"
+                            className="px-3 py-1 text-white text-xs font-semibold rounded transition-colors"
+                            style={{ background: 'var(--color-primary)' }}
                           >
                             ✓ Lưu
                           </button>
                           <button
                             onClick={() => setEditingKey(null)}
-                            className="px-3 py-1 bg-gray-400 hover:bg-gray-500 text-white text-xs font-semibold rounded transition-colors"
+                            className="px-3 py-1 bg-gray-300 hover:bg-gray-400 text-gray-800 text-xs font-semibold rounded transition-colors"
                           >
                             ✕ Hủy
                           </button>
@@ -167,9 +168,7 @@ export default function SettingsPage() {
                             setEditingValue(setting.value);
                           }}
                           className="px-3 py-1 text-white text-xs font-semibold rounded transition-colors"
-                          style={{ background: "var(--color-primary)" }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                          style={{ background: 'var(--color-primary)' }}
                         >
                           ✏️ Sửa
                         </button>

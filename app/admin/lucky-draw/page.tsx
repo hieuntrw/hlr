@@ -167,7 +167,8 @@ if (!user) return;
           </select>
           <button
             onClick={() => handleRunDraw()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+            className="px-4 py-2 rounded-lg font-medium transition"
+            style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
           >
             Quay số thử
           </button>

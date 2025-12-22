@@ -402,7 +402,8 @@ export default function AdminThemeSettingsPage() {
             <button
               onClick={handleSaveSystemSettings}
               disabled={saving}
-              className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors"
+              className="px-6 py-3 text-white rounded-lg font-semibold transition-colors"
+              style={{ background: 'var(--color-primary)' }}
             >
               {saving ? "Đang lưu..." : "💾 Lưu Cài Đặt Hệ Thống"}
             </button>

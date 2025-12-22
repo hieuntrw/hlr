@@ -681,7 +681,7 @@ function DashboardContent() {
                   </div>
                 ) : hallOfFame.length > 0 ? (
                   hallOfFame.map((entry) => (
-                    <div key={`${entry.rank}-${entry.name}`} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
+                    <div key={`${entry.rank}-${entry.name}-${entry.distance}`} className="flex items-center gap-3 p-3 rounded-lg" style={{ background: "var(--color-bg-primary)" }}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                         entry.rank === 1 ? "bg-yellow-400 text-yellow-900" :
                         entry.rank === 2 ? "bg-gray-300 text-gray-800" :

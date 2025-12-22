@@ -182,10 +182,8 @@ export default function RewardMilestonesPage() {
       </div>
       <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg font-medium transition"
-            style={{ background: "var(--color-primary)" }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition"
+            style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
           >
             <Plus size={20} />
             Thêm Mốc
@@ -274,13 +272,14 @@ export default function RewardMilestonesPage() {
             <div className="mt-4 flex gap-2">
               <button
                 onClick={handleAdd}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition"
+                className="px-4 py-2 rounded-lg font-medium transition"
+                style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
               >
                 Lưu
               </button>
               <button
                 onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg font-medium transition"
+                className="px-4 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-medium transition"
               >
                 Hủy
               </button>
@@ -424,9 +423,7 @@ export default function RewardMilestonesPage() {
                                     <div className="flex items-center justify-end gap-2">
                                       <button
                                         onClick={() => startEdit(milestone)}
-                                        style={{ color: "var(--color-primary)" }}
-                                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.7'}
-                                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                                        className="text-blue-600 hover:text-blue-800"
                                         title="Sửa"
                                       >
                                         <Edit size={18} />

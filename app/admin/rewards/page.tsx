@@ -155,10 +155,8 @@ export default function AdminRewardsPage() {
           </div>
           <button
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 px-4 py-2 text-white rounded-lg transition"
-            style={{ background: "var(--color-primary)" }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg transition"
+            style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
           >
             <Plus size={20} />
             Thêm mốc thưởng
@@ -232,10 +230,7 @@ export default function AdminRewardsPage() {
                       <td className="px-4 py-3 text-center">
                         <button
                           onClick={() => setEditing(reward.id)}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded transition mr-2"
-                          style={{ color: "var(--color-primary)" }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(var(--color-primary-rgb, 249 115 22), 0.1)'}
-                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          className="inline-flex items-center gap-1 px-3 py-1 rounded transition mr-2 text-blue-600 hover:text-blue-800"
                         >
                           <Edit size={16} />
                           Sửa

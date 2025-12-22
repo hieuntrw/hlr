@@ -48,14 +48,24 @@ export default function CreateTransactionPage() {
 
   useEffect(() => {
     async function init() {
-      const [catRes, userRes] = await Promise.all([
-        supabase.from('financial_categories').select('*'),
-        supabase.from('profiles').select('id, full_name').eq('is_active', true).order('full_name')
-      ]);
-      
-      // Cast kiểu dữ liệu trả về
-      if (catRes.data) setCategories(catRes.data as Category[]);
-      if (userRes.data) setUsers(userRes.data as Profile[]);
+      const catPromise = fetch('/api/admin/financial-categories?fields=id,name,code,flow_type', { credentials: 'same-origin' });
+      const usersPromise = fetch('/api/admin/profiles?fields=id,full_name&is_active=true', { credentials: 'same-origin' });
+
+      const [catRes, usersRes] = await Promise.all([catPromise, usersPromise]);
+
+      try {
+        const catsJson = await catRes.json();
+        if (catsJson?.data) setCategories(catsJson.data as Category[]);
+      } catch (e) {
+        console.error('Failed to parse /api/admin/financial-categories response', e);
+      }
+
+      try {
+        const usersJson = await usersRes.json();
+        if (usersJson?.data) setUsers(usersJson.data as Profile[]);
+      } catch (e) {
+        console.error('Failed to parse /api/admin/profiles response', e);
+      }
     }
     init();
   }, [supabase]);
@@ -92,8 +102,14 @@ export default function CreateTransactionPage() {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <button onClick={() => router.back()} className="flex items-center text-gray-500 hover:text-gray-800 mb-4 transition">
-        <ArrowLeft size={18} className="mr-1" /> Quay lại Dashboard
+      <button
+        type="button"
+        onClick={() => router.back()}
+        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border mb-4 transition"
+        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-primary)', background: 'transparent' }}
+        aria-label="Quay lại"
+      >
+        <ArrowLeft size={18} /> Quay lại Dashboard
       </button>
 
       <div className="bg-white rounded-2xl shadow-sm border p-6">
@@ -170,10 +186,11 @@ export default function CreateTransactionPage() {
             />
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-70"
+            className="w-full font-medium py-3 rounded-lg shadow-sm transition flex items-center justify-center gap-2 disabled:opacity-70"
+            style={{ background: 'var(--color-primary)', color: 'var(--color-text-inverse)' }}
           >
             {loading ? 'Đang xử lý...' : <><Save size={20} /> Lưu Giao dịch</>}
           </button>

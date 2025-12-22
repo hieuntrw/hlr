@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     serverDebug.debug("Login successful for:", data.user?.email);
 
-    // Get user's profile to return role information
+
     // Ensure a minimal profile row exists for this user to avoid PGRST116
     // (single() failing when 0 rows). Attempt to read existing profile first,
     // then insert a minimal one if missing.
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     try {
       const profileResp = await supabase
         .from("profiles")
-        .select("role, full_name")
+        .select("full_name")
         .eq("id", data.user.id)
         .single();
       if (profileResp.error) {
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       ok: true,
       user: {
         ...data.user,
-        role: profile?.role || ((data.user.app_metadata as unknown) as Record<string, unknown>)?.role || "member",
+        role: ((data.user.app_metadata as unknown) as Record<string, unknown>)?.role || "member",
         full_name: profile?.full_name,
       },
     };
