@@ -20,25 +20,9 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // Try to get user from auth first and reconstruct session if needed
-    let user = (await supabase.auth.getUser()).data.user;
-
-    if (!user) {
-      try {
-        const access = request.cookies.get('sb-access-token')?.value;
-        const refresh = request.cookies.get('sb-refresh-token')?.value;
-        if (access && refresh) {
-          serverDebug.debug('[profiles.me] attempting supabase.auth.setSession from cookies', { access: !!access, refresh: !!refresh });
-          const setResp = await supabase.auth.setSession({ access_token: access, refresh_token: refresh });
-          serverDebug.debug('[profiles.me] setSession result error:', setResp.error?.message || null);
-          const retry = await supabase.auth.getUser();
-          user = retry.data.user || null;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[profiles.me] session reconstruction failed', String(e));
-      }
-    }
-
+    // Reconstruct session/user using shared helper (handles sb-session fallback)
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     if (!user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
     // Determine role: prefer app_metadata.role

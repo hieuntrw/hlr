@@ -26,28 +26,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     );
 
-    // Ensure session is reconstructed from cookies so RLS sees the member (if any)
-    async function ensureUserFromCookies() {
-      const first = await supabaseAuth.auth.getUser();
-      if (first.data.user) return first.data.user;
-      try {
-        const access = request.cookies.get('sb-access-token')?.value;
-        const refresh = request.cookies.get('sb-refresh-token')?.value;
-        if (access && refresh) {
-          serverDebug.debug('[participants.route] attempting supabase.auth.setSession from cookies', { access: !!access, refresh: !!refresh });
-          const setResp = await supabaseAuth.auth.setSession({ access_token: access, refresh_token: refresh });
-          serverDebug.debug('[participants.route] setSession result error:', setResp.error?.message || null);
-          const retry = await supabaseAuth.auth.getUser();
-          if (retry.data.user) return retry.data.user;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[participants.route] session reconstruction failed', String(e));
-      }
-      return null;
-    }
-
-    // Try to initialize user from cookies so subsequent queries respect RLS
-    await ensureUserFromCookies();
+    // Try to initialize user/session from cookies so subsequent queries respect RLS
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    // We don't need the reconstructed user object here, calling the helper
+    // will attempt setSession on the `supabaseAuth` client when possible.
+    void await getUserFromAuthClient(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     // Ensure challenge exists
     const { data: challengeRow, error: challengeErr } = await supabaseAuth

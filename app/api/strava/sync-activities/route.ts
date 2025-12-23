@@ -41,39 +41,11 @@ export async function POST(request: NextRequest) {
   );
 
   try {
-    // Get authenticated user
-    const getUserRes = await supabase.auth.getUser();
-    let user = getUserRes.data?.user ?? null;
-    const userError = getUserRes.error;
-
-    // If no user from the SDK, attempt to reconstruct session from sb cookies
-    if (userError || !user) {
-      try {
-        const acc = cookieStore.get('sb-access-token')?.value;
-        const ref = cookieStore.get('sb-refresh-token')?.value;
-        serverDebug.debug('[Strava Sync] supabase.getUser returned empty, sb-access-token present:', !!acc, 'sb-refresh-token present:', !!ref);
-        if (acc && ref) {
-          try {
-            await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-            const retry = await supabase.auth.getUser();
-            if (retry?.data?.user) {
-              serverDebug.debug('[Strava Sync] Session reconstructed from cookies, user:', retry.data.user.id);
-            } else {
-              serverDebug.warn('[Strava Sync] Reconstruction attempted but no user after setSession');
-            }
-            // overwrite user variable for subsequent logic
-            user = retry?.data?.user ?? null;
-          } catch (e: unknown) {
-            serverDebug.warn('[Strava Sync] session reconstruction failed', String(e));
-          }
-        }
-      } catch (e) {
-        serverDebug.warn('[Strava Sync] cookie inspection failed', String(e));
-      }
-    }
-
+    // Reconstruct session/user using shared helper (handles sb-session fallback)
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => cookieStore.get(name)?.value);
     if (!user) {
-      serverDebug.error('[Strava Sync] User not authenticated after reconstruction:', userError);
+      serverDebug.error('[Strava Sync] User not authenticated after reconstruction');
       return NextResponse.json({ error: 'User not authenticated' }, { status: 401 });
     }
 

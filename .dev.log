@@ -1,0 +1,107 @@
+
+> Hai Lang Runners@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.33
+  - Local:        http://localhost:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 1496ms
+ ✓ Compiled /api/finance/recent-expenses in 232ms (29 modules)
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 319ms
+ ✓ Compiled /api/finance/my in 186ms (105 modules)
+ GET /api/finance/my?year=2025 200 in 297ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 30ms
+ GET /api/finance/my?year=2025 200 in 18ms
+ ✓ Compiled in 148ms (105 modules)
+[api/finance/my] error ReferenceError: Cannot access 'year' before initialization
+ GET /api/finance/my?year=2025&__debug=1 500 in 42ms
+[api/finance/my] error ReferenceError: Cannot access 'year' before initialization
+ GET /api/finance/my?year=2025&__debug=1 500 in 20ms
+ ✓ Compiled in 77ms (103 modules)
+ GET /api/finance/my?year=2025&__debug=1 200 in 28ms
+ GET /api/finance/my?year=2025&__debug=1 200 in 9ms
+ GET /api/finance/my?year=2025&__debug=1 200 in 10ms
+ GET /api/finance/my?year=2025 200 in 15ms
+ ✓ Compiled in 146ms (103 modules)
+ GET /api/finance/my?year=2025 200 in 18ms
+ GET /api/finance/my?year=2025 200 in 17ms
+ ✓ Compiled in 116ms (103 modules)
+ GET /api/finance/my?year=2025&__debug=1 200 in 59ms
+ ✓ Compiled in 105ms (103 modules)
+ ✓ Compiled in 60ms (103 modules)
+[api/finance/my] svc response status= 200 error= null dataType= array
+[api/finance/my] sendJson len= 62
+ GET /api/finance/my?year=2025 200 in 21ms
+ ✓ Compiled in 47ms (103 modules)
+ ✓ Compiled in 10ms
+ ✓ Compiled /api/finance/my in 61ms (103 modules)
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025&__debug=1 200 in 91ms
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025 200 in 20ms
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025&__debug=1 200 in 10ms
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025 200 in 11ms
+ ✓ Compiled in 14ms
+ ✓ Compiled /api/finance/my in 88ms (103 modules)
+ GET /api/finance/my?year=2025&__diag=1 200 in 213ms
+ GET /api/finance/my?year=2025&__diag=1 200 in 11ms
+ GET /api/finance/my?year=2025&__diag=1 200 in 11ms
+ ✓ Compiled in 11ms
+ ✓ Compiled /api/finance/my in 105ms (103 modules)
+ GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 201ms
+ GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 18ms
+ ✓ Compiled in 54ms (103 modules)
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025 200 in 21ms
+ GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025 200 in 11ms
+ GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
+[api/finance/my] svc response status= 200 error= null dataType= array
+ GET /api/finance/my?year=2025 200 in 9ms
+ GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
+ ✓ Compiled in 2s (103 modules)
+ GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 34ms
+ GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 401 in 14ms
+ GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 401 in 10ms
+ ✓ Compiled in 85ms (103 modules)
+ ✓ Compiled in 14ms
+ ✓ Compiled /api/finance/recent-expenses in 144ms (29 modules)
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 178ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 11ms
+ ✓ Compiled /api/finance/my in 54ms (105 modules)
+ GET /api/finance/my?year=2025 401 in 102ms
+ GET /api/finance/my?year=2025 401 in 11ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 12ms
+ GET /api/finance/my?year=2025 401 in 7ms
+ GET /api/finance/my?year=2025&__diag=1 401 in 8ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 36ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 11ms
+ GET /api/finance/my?year=2025 401 in 10ms
+ ✓ Compiled in 1265ms (203 modules)
+ ✓ Compiled in 89ms (203 modules)

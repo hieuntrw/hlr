@@ -5,6 +5,12 @@ import { TransactionMetadata } from '@/types/finance'
 
 
 export const financeService = {
+  // Type guards for supabase responses
+  
+  
+  // (internal helpers)
+  
+  
  
 // Hàm mới: Lấy báo cáo theo danh mục và năm
   async getReportByCategory(year: number) {
@@ -35,9 +41,50 @@ export const financeService = {
 
   // 2. Lấy danh sách chi tiêu công khai
   async getRecentExpenses() {
-    const { data, error } = await supabase.from('view_public_recent_expenses').select('*');
-    if (error) throw error;
-    return data;
+    // Try client-side supabase first, with retries in case session is not ready.
+    async function tryClient() {
+      const { data, error } = await supabase.from('view_public_recent_expenses').select('*');
+      return { data, error };
+    }
+
+    // Retry helper
+    async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 250): Promise<T> {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          return await fn();
+        } catch (e) {
+          lastErr = e;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(res => setTimeout(res, delayMs * (i + 1)));
+        }
+      }
+      throw lastErr;
+    }
+
+    try {
+      const res = await retry(() => tryClient());
+      if (res && typeof res === 'object') {
+        const rec = res as unknown as Record<string, unknown>;
+        if (rec.error) throw rec.error;
+        if (rec.data) return rec.data;
+      }
+    } catch (e) {
+      // fallthrough to server fallback
+      console.warn('[financeService] client recent-expenses retry failed, falling back to server', String(e));
+    }
+
+    // Server fallback (use server route which uses service role)
+    try {
+      const r = await fetch('/api/finance/recent-expenses', { credentials: 'include' });
+      if (!r.ok) throw new Error(`server fallback failed ${r.status}`);
+      const body = await r.json();
+      return body.data ?? [];
+    } catch (e) {
+      console.error('[financeService] recent-expenses fallback error', String(e));
+      throw e;
+    }
   },
 
   // Tổng thu thực tế trong năm (loại bỏ OPENING_BALANCE)
@@ -50,14 +97,52 @@ export const financeService = {
 
   // 3. Lấy tài chính cá nhân
   async getMyFinance(userId: string, year: number) {
-    const { data, error } = await supabase
-      .from('view_my_finance_status')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('fiscal_year', year)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return data;
+    // Client attempt with retry
+    async function tryClient() {
+      return supabase
+        .from('view_my_finance_status')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('fiscal_year', year)
+        .order('created_at', { ascending: false });
+    }
+
+    async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 250): Promise<T> {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          return await fn();
+        } catch (e) {
+          lastErr = e;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(res => setTimeout(res, delayMs * (i + 1)));
+        }
+      }
+      throw lastErr;
+    }
+
+    try {
+      const res = await retry(() => tryClient());
+      if (res && typeof res === 'object') {
+        const rec = res as unknown as Record<string, unknown>;
+        if (rec.error) throw rec.error;
+        if (rec.data) return rec.data;
+      }
+    } catch (e) {
+      console.warn('[financeService] client getMyFinance retry failed, falling back to server', String(e));
+    }
+
+    // Server fallback
+    try {
+      const r = await fetch(`/api/finance/my?year=${encodeURIComponent(String(year))}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(`server fallback failed ${r.status}`);
+      const body = await r.json();
+      return body.data ?? [];
+    } catch (e) {
+      console.error('[financeService] getMyFinance fallback error', String(e));
+      throw e;
+    }
   },
 
   // Tổng phải thu (pending) trong năm

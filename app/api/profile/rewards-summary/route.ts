@@ -13,22 +13,9 @@ export async function GET(request: NextRequest) {
       { cookies: { get(name: string) { return request.cookies.get(name)?.value; }, set() {}, remove() {} } }
     );
 
-    // Reconstruct session if needed
-    let { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      try {
-        const acc = request.cookies.get('sb-access-token')?.value;
-        const ref = request.cookies.get('sb-refresh-token')?.value;
-        if (acc && ref) {
-          await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-          const retry = await supabase.auth.getUser();
-          user = retry.data.user;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[profile.rewards-summary] session reconstruction failed', String(e));
-      }
-    }
-
+    // Reconstruct session if needed using shared helper
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
 
     // Fetch profile row

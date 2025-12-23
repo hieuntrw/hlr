@@ -61,39 +61,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get current session user
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    serverDebug.debug("[Strava Connect Callback] Current user (initial):", user?.id, user?.email);
-
-    // If no user from initial getUser(), try to reconstruct session from sb- cookies
-    if (userError || !user) {
-      serverDebug.debug('[Strava Connect Callback] No user from getUser(), attempting session reconstruction from cookies');
-      try {
-        const acc = cookieStore.get('sb-access-token')?.value;
-        const ref = cookieStore.get('sb-refresh-token')?.value;
-        serverDebug.debug('[Strava Connect Callback] sb-access-token present:', !!acc, 'sb-refresh-token present:', !!ref);
-        if (acc && ref) {
-          await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-          const retry = await supabase.auth.getUser();
-          if (retry?.data?.user) {
-            serverDebug.debug('[Strava Connect Callback] Session reconstructed, user:', retry.data.user.id);
-          }
-        }
-      } catch (reconErr: unknown) {
-        serverDebug.warn('[Strava Connect Callback] session reconstruction failed', String(reconErr));
-      }
-    }
-
-    const {
-      data: { user: finalUser },
-    } = await supabase.auth.getUser();
-
-    serverDebug.debug('[Strava Connect Callback] Current user (after reconstruction):', finalUser?.id, finalUser?.email);
-
+    // Reconstruct session/user using shared helper (handles sb-session fallback)
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const finalUser = await getUserFromAuthClient(supabase, (name: string) => cookieStore.get(name)?.value);
+    serverDebug.debug('[Strava Connect Callback] Reconstructed user:', finalUser?.id, finalUser?.email);
     if (!finalUser) {
       serverDebug.error('[Strava Connect Callback] User not authenticated after reconstruction');
       return NextResponse.redirect(new URL('/login?error=Please login first&redirect=/profile', requestUrl.origin));

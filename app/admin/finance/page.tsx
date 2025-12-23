@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/lib/supabase-client';
+// supabase client not used in admin page anymore; server APIs handle transactions
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
 import { Plus, Search, Filter } from 'lucide-react';
-import { financeService } from '@/lib/services/financeService';
+// financeService not needed for totals here; using server totals endpoint
 import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
@@ -61,38 +61,29 @@ export default function AdminFinanceDashboard() {
   }, [user, router]);
 
   useEffect(() => {
-    if (authLoading || !sessionChecked) return;
+    if (authLoading || !sessionChecked || !user) return;
     checkRole();
-  }, [authLoading, sessionChecked, checkRole]);
+  }, [authLoading, sessionChecked, checkRole, user]);
 
   // Load toàn bộ giao dịch
   useEffect(() => {
-     setLoading(true);
-    if (authLoading || !sessionChecked) return;
+    if (authLoading || !sessionChecked || !user) return;
+    setLoading(true);
     async function fetchAll() {
       const year = new Date().getFullYear();
-      const [openingBal, clubBal, pending, incomeReal, expense, transRes] = await Promise.all([
-        financeService.getOpeningBalance(year),
-        financeService.getClubBalance(year),
-        financeService.getTotalPendingIncome(year),
-        financeService.getTotalIncomeReal(year),
-        financeService.getTotalExpense(year),
-        supabase
-          .from('transactions')
-          .select(`
-            *,
-            member_info:profiles!user_id(full_name),
-            financial_categories(name, flow_type, code)
-          `)
-          .order('created_at', { ascending: false })
-          .limit(100)
+      const [totalsResp, transResp] = await Promise.all([
+        fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' }),
+        fetch(`/api/finance/transactions?year=${year}&limit=100`, { credentials: 'include' }),
       ]);
 
-      const opening = typeof openingBal === 'number' ? openingBal : Number(openingBal ?? 0);
-      const club = typeof clubBal === 'number' ? clubBal : Number(clubBal ?? 0);
-      const pendingNum = typeof pending === 'number' ? pending : Number(pending ?? 0);
-      const incomeNum = typeof incomeReal === 'number' ? incomeReal : Number(incomeReal ?? 0);
-      const expenseNum = typeof expense === 'number' ? expense : Number(expense ?? 0);
+      const totalsBody = await (totalsResp.ok ? totalsResp.json() : Promise.resolve({ ok: false }));
+      const totals = totalsBody?.totals ?? null;
+
+      const opening = totals ? Number(totals.openingBalance ?? 0) : 0;
+      const club = totals ? Number(totals.clubBalance ?? 0) : 0;
+      const pendingNum = totals ? Number(totals.pendingIncome ?? 0) : 0;
+      const incomeNum = totals ? Number(totals.totalIncomeReal ?? 0) : 0;
+      const expenseNum = totals ? Number(totals.totalExpense ?? 0) : 0;
 
      // setStats({ opening_balance: opening, total_revenue: incomeNum, total_expense: expenseNum, current_balance: club });
       setOpeningBalance(opening);
@@ -100,11 +91,13 @@ export default function AdminFinanceDashboard() {
       setPendingIncome(pendingNum);
       setTotalIncomeReal(incomeNum);
       setTotalExpense(expenseNum);
-      if (transRes.data) setTransactions(transRes.data as unknown as TransactionWithDetails[]);
+      const transBody = await (transResp.ok ? transResp.json() : Promise.resolve({ ok: false }));
+      const transData = transBody?.data ?? [];
+      if (Array.isArray(transData)) setTransactions(transData as unknown as TransactionWithDetails[]);
       setLoading(false);
     }
     fetchAll();
-  }, [authLoading, sessionChecked]);
+  }, [authLoading, sessionChecked, user]);
 
   // Hành động xác nhận thu tiền nhanh
   const markAsPaid = async (id: string, flowType: string = 'in') => {
@@ -116,15 +109,22 @@ export default function AdminFinanceDashboard() {
   if(!confirm(`Xác nhận ${actionText} cho khoản này?`)) return;
   
   // 2. Gọi API update (Giữ nguyên)
-  const { error } = await supabase
-    .from('transactions')
-    .update({ payment_status: 'paid', processed_at: new Date().toISOString() })
-    .eq('id', id);
-    
-  if (!error) {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
-  } else {
-    alert("Có lỗi xảy ra, vui lòng thử lại.");
+  try {
+    const r = await fetch('/api/finance/transactions', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, updates: { payment_status: 'paid', processed_at: new Date().toISOString() } }),
+    });
+    const body = await (r.ok ? r.json() : Promise.resolve({ ok: false, error: 'request failed' }));
+    if (body && body.ok) {
+      setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
+    } else {
+      alert('Có lỗi xảy ra, vui lòng thử lại.');
+    }
+  } catch (e) {
+    console.error('markAsPaid error', String(e));
+    alert('Có lỗi xảy ra, vui lòng thử lại.');
   }
 };
 

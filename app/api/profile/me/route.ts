@@ -33,35 +33,11 @@ export async function GET() {
       }
     );
 
-    // Try to get server-side user
-    const initialGet = await supabase.auth.getUser();
-    let user = initialGet.data.user;
-    const error = initialGet.error;
-    serverDebug.debug('[profile.me] supabase.auth.getUser returned user:', !!user, 'error:', error?.message || null);
-    // If no user but cookies present, try setSession
-    const acc = cookieStore.get('sb-access-token')?.value;
-    const ref = cookieStore.get('sb-refresh-token')?.value;
-    if (!user && acc && ref) {
-      try {
-        serverDebug.debug('[profile.me] attempting supabase.auth.setSession from cookies');
-        const setResp = await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-        serverDebug.debug('[profile.me] setSession error:', setResp.error?.message || null);
-        const retry = await supabase.auth.getUser();
-        // overwrite user variable for subsequent logic
-        // prefer using the retry response directly
-        user = retry.data.user;
-        serverDebug.debug('[profile.me] retry supabase.getUser returned user:', !!user, 'error:', retry.error?.message || null);
-      } catch (e: unknown) {
-        serverDebug.warn('[profile.me] setSession failed', String(e));
-      }
-    }
-
-    if (error) {
-      return NextResponse.json({ ok: false, error: error.message }, { status: 200 });
-    }
-
+    // Reconstruct session/user using shared helper (handles sb-session fallback)
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => cookieStore.get(name)?.value);
     if (!user) {
-      serverDebug.debug('[profile.me] no user after setSession retry');
+      serverDebug.debug('[profile.me] no user after reconstruction');
       return NextResponse.json({ ok: false, error: 'No user' }, { status: 401 });
     }
 
@@ -106,23 +82,9 @@ export async function PATCH(request: Request) {
       }
     );
 
-    // Reconstruct session if necessary
-    const initialPatchGet = await supabase.auth.getUser();
-    let user = initialPatchGet.data.user;
-    const error = initialPatchGet.error;
-    const acc2 = cookieStore.get('sb-access-token')?.value;
-    const ref2 = cookieStore.get('sb-refresh-token')?.value;
-    if (!user && acc2 && ref2) {
-      try {
-        await supabase.auth.setSession({ access_token: acc2, refresh_token: ref2 });
-        const retry = await supabase.auth.getUser();
-        user = retry.data.user;
-      } catch (e: unknown) {
-        serverDebug.warn('[profile.me.patch] setSession failed', String(e));
-      }
-    }
-
-    if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 200 });
+    // Reconstruct session/user using shared helper
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => cookieStore.get(name)?.value);
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 401 });
 
     // Whitelist updatable fields from client

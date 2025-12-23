@@ -32,31 +32,8 @@ export async function GET() {
       }
     );
 
-    const initial = await supabase.auth.getUser();
-    let user = initial.data.user;
-    let error: unknown = initial.error;
-
-    const acc = cookieStore.get('sb-access-token')?.value;
-    const ref = cookieStore.get('sb-refresh-token')?.value;
-    if (!user && (acc || ref)) {
-      try {
-        if (acc && ref) {
-          await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-          const retry = await supabase.auth.getUser();
-          user = retry.data.user;
-          error = retry.error;
-        } else {
-          serverDebug.debug('[profile.rewards] incomplete auth cookies; skipping setSession');
-        }
-      } catch (e: unknown) {
-        serverDebug.debug('[profile.rewards] setSession failed', String(e));
-      }
-    }
-
-    if (error) {
-      const msg = (error as { message?: string }).message ?? String(error);
-      return NextResponse.json({ ok: false, error: msg }, { status: 200 });
-    }
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => cookieStore.get(name)?.value);
     if (!user) return NextResponse.json({ ok: false, error: 'No user' }, { status: 401 });
 
     // Aggregate from the canonical reward tables: milestone, podium, lucky draws.

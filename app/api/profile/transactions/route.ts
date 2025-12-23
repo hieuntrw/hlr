@@ -21,21 +21,9 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    // Reconstruct session if needed
-    let user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      try {
-        const acc = request.cookies.get('sb-access-token')?.value;
-        const ref = request.cookies.get('sb-refresh-token')?.value;
-        if (acc && ref) {
-          await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-          user = (await supabase.auth.getUser()).data.user;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[profile.transactions] session reconstruction failed', String(e));
-      }
-    }
-
+    // Reconstruct session/user using shared helper
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
 
     // Use service-role client for transactions query to avoid evaluation of

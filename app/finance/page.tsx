@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase-client';
+// supabase client not used directly in this component
+import { useAuth } from '@/lib/auth/AuthContext';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import { financeService } from '@/lib/services/financeService';
+// Use server APIs for member finance to avoid client-side session race
+// financeService no longer required for totals (server endpoint used)
 import { CreditCard, History, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 // 1. Định nghĩa các Interface để thay thế 'any'
@@ -50,40 +52,44 @@ export default function MemberFinancePage() {
   const [totalExpense, setTotalExpense] = useState<number | null>(null);
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const { user, sessionChecked } = useAuth();
 
   useEffect(() => {
     async function loadData() {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!sessionChecked) return;
+        if (!user) { setLoading(false); return; }
 
         // Load dữ liệu song song: cá nhân + các báo cáo/thu/chi/số dư từ financeService
         const year = new Date().getFullYear();
-        const [
-          trans,
-          openingBal,
-          incomeReal,
-          expense,
-          clubBal,
-          expenses,
-        ] = await Promise.all([
-          financeService.getMyFinance(user.id, year),
-          financeService.getOpeningBalance(year),
-          financeService.getTotalIncomeReal(year),
-          financeService.getTotalExpense(year),
-          financeService.getClubBalance(year),
-          financeService.getRecentExpenses(),
+        // Call server endpoints for member-specific and public lists to avoid
+        // client-side supabase session race conditions.
+        const [transResp, totalsResp, expensesResp] = await Promise.all([
+          fetch(`/api/finance/my?year=${year}`, { credentials: 'include' }),
+          fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' }),
+          fetch('/api/finance/recent-expenses', { credentials: 'include' }),
         ]);
 
+        const transBody = await (transResp.ok ? transResp.json() : Promise.resolve({ ok: false }));
+        const transData: unknown = transBody.data ?? transBody.transactions ?? [];
+
+        const totalsBody = await (totalsResp.ok ? totalsResp.json() : Promise.resolve({ ok: false }));
+        const totals = (totalsBody && totalsBody.totals) ? totalsBody.totals : null;
+
+        const expensesBody = await (expensesResp.ok ? expensesResp.json() : Promise.resolve({ ok: false }));
+        const expensesData: unknown = expensesBody.data ?? [];
+
         // Ép kiểu dữ liệu trả về từ service (nếu service trả về unknown/any)
-        if (trans) setMyTrans(trans as unknown as MyTransaction[]);
-        if (expenses) setPublicExpenses(expenses as unknown as PublicExpense[]);
+        if (Array.isArray(transData)) setMyTrans(transData as MyTransaction[]);
+        else setMyTrans([]);
+        if (Array.isArray(expensesData)) setPublicExpenses(expensesData as PublicExpense[]);
+        else setPublicExpenses([]);
 
         
-         const opening = typeof openingBal === 'number' ? openingBal : Number(openingBal ?? 0);
-      const club = typeof clubBal === 'number' ? clubBal : Number(clubBal ?? 0);
-         const incomeNum = typeof incomeReal === 'number' ? incomeReal : Number(incomeReal ?? 0);
-      const expenseNum = typeof expense === 'number' ? expense : Number(expense ?? 0);
+        const opening = totals ? Number(totals.openingBalance ?? 0) : 0;
+        const club = totals ? Number(totals.clubBalance ?? 0) : 0;
+        const incomeNum = totals ? Number(totals.totalIncomeReal ?? 0) : 0;
+        const expenseNum = totals ? Number(totals.totalExpense ?? 0) : 0;
 
       setOpeningBalance(opening);
       setClubBalance(club);
@@ -98,7 +104,7 @@ export default function MemberFinancePage() {
       }
     }
     loadData();
-  }, []);
+  }, [sessionChecked, user]);
 
   // Tính tổng nợ (Pending + Loại là Thu)
   const totalDebt = myTrans

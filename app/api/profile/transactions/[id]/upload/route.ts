@@ -28,20 +28,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     );
 
-    let user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      try {
-        const acc = request.cookies.get('sb-access-token')?.value;
-        const ref = request.cookies.get('sb-refresh-token')?.value;
-        if (acc && ref) {
-          await supabase.auth.setSession({ access_token: acc, refresh_token: ref });
-          user = (await supabase.auth.getUser()).data.user;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[profile.transactions.upload] session reconstruction failed', String(e));
-      }
-    }
-
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {

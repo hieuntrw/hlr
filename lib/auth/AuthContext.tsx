@@ -99,6 +99,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
 
+      // If whoami returned a reconstructed user but the browser supabase client
+      // still has no session, try to restore a minimal session using the
+      // `sb-access-token` cookie so client PostgREST requests are authorized.
+      if (!resolved) {
+        // no-op
+      } else {
+        try {
+          const clientUser = await supabase.auth.getUser();
+          if (!clientUser.data.user) {
+            const r = await fetch('/api/auth/restore', { credentials: 'same-origin' });
+            if (r.ok) {
+              const body = await r.json().catch(() => null);
+              if (isRecord(body) && typeof body.access_token === 'string') {
+                try {
+                  await supabase.auth.setSession({ access_token: body.access_token, refresh_token: typeof body.refresh_token === 'string' ? body.refresh_token : '' });
+                } catch {
+                  // ignore setSession failures; we'll still use reconstructed user
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (!mounted.current) return;
       setUser(resolved);
       if (!resolved) { setProfile(null); clearCachedAuth(); return; }
@@ -132,6 +158,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       void load();
     }
 
+    // Allow unused first param from Supabase callback
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted.current) return;
       if (!session) {

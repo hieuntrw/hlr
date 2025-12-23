@@ -33,26 +33,10 @@ export async function GET(request: NextRequest) {
     // the server to return the personal list when the request carries a
     // valid session (credentials: 'same-origin'). If no session exists we
     // fall back to the public listing below.
+    // Use shared helper to reconstruct user from cookies or sb-session when needed
     async function ensureUserFromCookies() {
-      const first = await supabase.auth.getUser();
-      if (first.data.user) return first.data.user;
-
-      // Try to initialize session from HttpOnly cookies (sb-access-token / sb-refresh-token)
-      try {
-        const access = request.cookies.get('sb-access-token')?.value;
-        const refresh = request.cookies.get('sb-refresh-token')?.value;
-        if (access && refresh) {
-          serverDebug.debug('[challenges.route] attempting supabase.auth.setSession from cookies', { access: !!access, refresh: !!refresh });
-          const setResp = await supabase.auth.setSession({ access_token: access, refresh_token: refresh });
-          serverDebug.debug('[challenges.route] setSession result error:', setResp.error?.message || null);
-          const retry = await supabase.auth.getUser();
-          if (retry.data.user) return retry.data.user;
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[challenges.route] session reconstruction failed', String(e));
-      }
-
-      return null;
+      const { getUserFromAuthClient } = await import('@/lib/server-auth');
+      return await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     }
 
     if (!my && myParam === null) {

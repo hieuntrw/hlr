@@ -27,10 +27,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     );
 
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    if (userError || !user) {
-      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
-    }
+    // Reconstruct session/user using shared helper (handles sb-session fallback)
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    if (!user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
     const user_id = user.id;
 

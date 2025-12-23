@@ -1,22 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import type { SupabaseClient } from '@supabase/supabase-js';
+// (removed unused type import)
 
 export const dynamic = 'force-dynamic';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-
-
-async function ensureAdmin(supabaseAuth: SupabaseClient) {
-  const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-  if (userError || !user) throw { status: 401, message: 'Không xác thực' };
-
-  // Prefer role from JWT app_metadata; fallback to profiles.role is not available after migration
-  const sessionAppMeta = (user as unknown as { app_metadata?: Record<string, unknown> })?.app_metadata;
-  const role = sessionAppMeta && typeof sessionAppMeta === 'object' ? (sessionAppMeta as Record<string, unknown>)['role'] as string | undefined : undefined;
-  if (!role || !['admin', 'mod_race'].includes(role)) throw { status: 403, message: 'Không có quyền' };
-  return { user, role };
-}
 
 function timeToSeconds(t: string): number {
   const parts = t.split(":").map((p) => parseInt(p || "0", 10));
@@ -42,7 +30,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const { ensureAdmin } = await import('@/lib/server-auth');
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value, ['admin','mod_race']);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -162,7 +151,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    const { ensureAdmin } = await import('@/lib/server-auth');
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value, ['admin','mod_race']);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });

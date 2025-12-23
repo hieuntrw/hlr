@@ -32,18 +32,18 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Check current user's role
-    const userRes = await supabaseAuth.auth.getUser();
-    const user = userRes.data.user;
-    if (userRes.error || !user) {
-      serverDebug.warn('[Update User API] Auth error', userRes.error);
-      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
-    }
-
-    const currentUserRole = (user.app_metadata as Record<string, unknown> | undefined)?.role as string | undefined;
-    if (currentUserRole !== 'admin') {
-      serverDebug.warn('[Update User API] Not admin, role:', currentUserRole);
-      return NextResponse.json({ error: 'Chỉ admin được phép' }, { status: 403 });
+    // Ensure caller is admin via shared helper (handles sb-session fallback)
+    try {
+      const { ensureAdmin } = await import('@/lib/server-auth');
+      const result = await ensureAdmin(supabaseAuth, (name: string) => req.cookies.get(name)?.value, ['admin']);
+      serverDebug.debug('[Update User API] Current user:', result.user?.email);
+      serverDebug.debug('[Update User API] Current user role (app_metadata):', result.role);
+    } catch (e: unknown) {
+      const err = e as Record<string, unknown> | null;
+      serverDebug.warn('[Update User API] ensureAdmin failed', err);
+      const status = err && typeof err['status'] === 'number' ? (err['status'] as number) : 401;
+      const message = err && typeof err['message'] === 'string' ? (err['message'] as string) : 'Không xác thực';
+      return NextResponse.json({ error: message }, { status });
     }
 
     if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 });

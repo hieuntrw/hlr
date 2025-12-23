@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import serverDebug from '@/lib/server-debug'
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 export async function POST(req: NextRequest) {
   try {
@@ -41,21 +42,18 @@ export async function POST(req: NextRequest) {
       }
     );
 
-    // Kiểm tra quyền admin từ session hiện tại
-    const { data: { user }, error: userError } = await supabaseAuth.auth.getUser();
-    
-    serverDebug.debug("[Create User API] Current user:", user?.email);
-    serverDebug.debug("[Create User API] Current user role (app_metadata):", (user?.app_metadata as Record<string, unknown>)?.role);
-
-    if (userError || !user) {
-      serverDebug.error("[Create User API] Auth error:", userError);
-      return NextResponse.json({ error: "Không xác thực" }, { status: 401 });
-    }
-
-    const currentUserRole = (user.app_metadata as Record<string, unknown>)?.role as string | undefined;
-    if (currentUserRole !== "admin") {
-      serverDebug.warn("[Create User API] Not admin, role:", currentUserRole);
-      return NextResponse.json({ error: "Chỉ admin được phép" }, { status: 403 });
+    // Ensure caller is admin via shared helper (handles sb-session fallback)
+    try {
+      const { ensureAdmin } = await import('@/lib/server-auth');
+      const result = await ensureAdmin(supabaseAuth, (name: string) => req.cookies.get(name)?.value, ['admin']);
+      serverDebug.debug('[Create User API] Current user:', result.user?.email);
+      serverDebug.debug('[Create User API] Current user role (app_metadata):', result.role);
+    } catch (e: unknown) {
+      const err = e as unknown as Record<string, unknown>;
+      serverDebug.warn('[Create User API] ensureAdmin failed', err);
+      const status = (err as Record<string, any>)?.status ?? 401;
+      const message = (err as Record<string, any>)?.message ?? 'Không xác thực';
+      return NextResponse.json({ error: message }, { status });
     }
 
     // Tạo service role client để tạo user mới

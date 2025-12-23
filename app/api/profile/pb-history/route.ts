@@ -25,21 +25,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Ensure user session reconstructed from cookies if needed
-    let user = (await supabase.auth.getUser()).data.user;
-    if (!user) {
-      try {
-        const access = request.cookies.get('sb-access-token')?.value;
-        const refresh = request.cookies.get('sb-refresh-token')?.value;
-        if (access && refresh) {
-          await supabase.auth.setSession({ access_token: access, refresh_token: refresh });
-          user = (await supabase.auth.getUser()).data.user;
-        }
-      } catch (e) {
-        serverDebug.warn('[pb-history] session reconstruction failed', String(e));
-      }
-    }
-
+    // Reconstruct session/user using shared helper
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
     if (!user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
     // Attach user_id if missing to ensure records belong to the authenticated user

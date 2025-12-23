@@ -42,38 +42,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       serverDebug.debug('[join.route] could not read raw Cookie header', e);
     }
 
-    const firstGet = await supabaseAuth.auth.getUser();
-    let user = firstGet.data.user;
-    const initialError = firstGet.error;
-    serverDebug.debug('[join.route] supabaseAuth.auth.getUser result - user present:', !!user, 'error:', initialError?.message || null);
-
-    // If no user reconstructed but cookies are present, try to initialize session
-    if (!user) {
-      try {
-        const accPreview = request.cookies.get('sb-access-token')?.value?.substring(0, 120) || null;
-        const refPreview = request.cookies.get('sb-refresh-token')?.value?.substring(0, 120) || null;
-        serverDebug.debug('[join.route] attempt setSession from cookies previews:', { access: !!accPreview, refresh: !!refPreview });
-        const access = request.cookies.get('sb-access-token')?.value;
-        const refresh = request.cookies.get('sb-refresh-token')?.value;
-        if (access && refresh) {
-          const setResp = await supabaseAuth.auth.setSession({ access_token: access, refresh_token: refresh });
-          serverDebug.debug('[join.route] setSession result error:', setResp.error?.message || null);
-          const retry = await supabaseAuth.auth.getUser();
-          serverDebug.debug('[join.route] retry supabaseAuth.getUser result - user present:', !!retry.data.user, 'error:', retry.error?.message || null);
-          if (retry.data.user) {
-            // use reconstructed user
-            user = retry.data.user;
-          } else {
-            return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
-          }
-        } else {
-          return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
-        }
-      } catch (e: unknown) {
-        serverDebug.warn('[join.route] setSession attempt failed', String(e));
-        return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
-      }
-    }
+    const { getUserFromAuthClient } = await import('@/lib/server-auth');
+    const user = await getUserFromAuthClient(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    if (!user) return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
 
     const rawBody = (await request.json()) as unknown;
     const parsedBody = (typeof rawBody === 'object' && rawBody) ? rawBody as Record<string, unknown> : {};
