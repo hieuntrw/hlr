@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from "react";
 import { Activity, Calendar, MapPin, Medal, Star, User, Lightbulb } from "lucide-react";
 import PRIcon from '@/components/PRIcon';
 import Image from "next/image";
-import { supabase } from "@/lib/supabase-client";
 
 
 interface Race {
@@ -127,14 +126,7 @@ export default function RacesPage() {
     fetchRaces();
   }, []);
 
-  // Helper: wrap a promise with a timeout so UI doesn't hang indefinitely
-  function withTimeout<T = unknown>(p: Promise<T>, ms = 10000): Promise<T> {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const timeout = new Promise<never>((_, rej) => {
-      timer = setTimeout(() => rej(new Error('Request timed out')), ms);
-    });
-    return Promise.race([p, timeout]).finally(() => { if (timer) clearTimeout(timer); });
-  }
+  // (removed unused withTimeout helper — using fetch with timeouts instead)
 
   const fetchTokenRef = useRef<number | null>(null);
   const isFetchingRef = useRef(false);
@@ -209,64 +201,39 @@ export default function RacesPage() {
     setResultsLoading(true);
 
     try {
-      // Fetch race results for this race
-      console.log('[Races] fetchResults start', race.id);
-      const q2 = supabase
-        .from("race_results")
-        .select(
-          `
-          id,
-          user_id,
-          distance,
-          chip_time_seconds,
-          podium_config_id,
-          is_pr,
-          profiles(full_name, avatar_url)
-        `
-        )
-        .eq("race_id", race.id)
-        .order("chip_time_seconds", { ascending: true });
+      // Fetch race results and rewards via server APIs (service-role)
+      try {
+        const [resResults, resRewards] = await Promise.all([
+          fetch(`/api/races/${encodeURIComponent(race.id)}/results`, { credentials: 'same-origin' }),
+          fetch(`/api/races/${encodeURIComponent(race.id)}/rewards`, { credentials: 'same-origin' }),
+        ]);
 
-      const { data: resultsData, error: resultsError } = await withTimeout(Promise.resolve(q2), 15000);
-      console.log('[Races] fetchResults returned', { resultsCount: Array.isArray(resultsData) ? resultsData.length : 0, resultsError });
+        if (!resResults.ok) {
+          console.error('[Races] failed to fetch results', await resResults.text().catch(() => null));
+        } else {
+          const jr = await resResults.json().catch(() => null);
+          const resultsData = jr?.data ?? [];
+          const formatted = (Array.isArray(resultsData) ? resultsData : []).map((rec: Record<string, unknown>) => ({
+            id: String(rec.id ?? ''),
+            user_id: String(rec.user_id ?? ''),
+            distance: String(rec.distance ?? ''),
+            chip_time_seconds: Number(rec.chip_time_seconds ?? 0),
+            podium_config_id: rec.podium_config_id ?? undefined,
+            is_pr: Boolean(rec.is_pr),
+            profile: rec.profiles ?? undefined,
+          } as RaceResult));
+          setRaceResults(formatted);
+        }
 
-      if (resultsError) {
-        console.error("Error fetching results:", resultsError);
-        return;
+        if (!resRewards.ok) {
+          console.error('[Races] failed to fetch rewards', await resRewards.text().catch(() => null));
+        } else {
+          const jr2 = await resRewards.json().catch(() => null);
+          setRewards(jr2?.data ?? []);
+        }
+      } catch (e) {
+        console.error('Unexpected error fetching race data via API', e);
       }
-
-      const formatted = (Array.isArray(resultsData) ? resultsData : []).map((rec: unknown) => {
-        const r = (rec as Record<string, unknown>) || {};
-        return {
-          id: String(r.id ?? ''),
-          user_id: String(r.user_id ?? ''),
-          distance: String(r.distance ?? ''),
-          chip_time_seconds: Number(r.chip_time_seconds ?? 0),
-          podium_config_id: (r.podium_config_id as string) ?? undefined,
-          is_pr: Boolean(r.is_pr),
-          profile: (r.profiles as RaceResult['profile']) ?? undefined,
-        } as RaceResult;
-      });
-
-      setRaceResults(formatted);
-
-      // Fetch reward definitions
-      const q3 = supabase
-        .from("reward_definitions")
-        .select(
-          "id, category, type, condition_value, condition_label, prize_description, cash_amount"
-        )
-        .order("category", { ascending: true })
-        .order("priority_level", { ascending: true });
-
-      const { data: rewardsData, error: rewardsError } = await withTimeout(Promise.resolve(q3), 10000);
-
-      if (rewardsError) {
-        console.error("Error fetching rewards:", rewardsError);
-        return;
-      }
-
-      setRewards(rewardsData || []);
     } catch (err) {
       console.error("Unexpected error:", err);
     } finally {

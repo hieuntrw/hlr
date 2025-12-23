@@ -1,7 +1,7 @@
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import serverDebug from './server-debug';
 
-async function decodeSbSessionCookie(raw?: string) {
+export async function decodeSbSessionCookie(raw?: string) {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(decodeURIComponent(raw) || '{}') as Record<string, unknown>;

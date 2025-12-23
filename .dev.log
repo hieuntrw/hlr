@@ -7,101 +7,689 @@
   - Environments: .env.local
 
  ✓ Starting...
- ✓ Ready in 1496ms
- ✓ Compiled /api/finance/recent-expenses in 232ms (29 modules)
+ ✓ Ready in 2.1s
+ ○ Compiling / ...
+ ✓ Compiled / in 5.6s (742 modules)
+[Home] Render - authLoading: true user: undefined
+ GET / 200 in 5980ms
+ ○ Compiling /api/auth/whoami ...
+ ✓ Compiled /api/auth/whoami in 1135ms (472 modules)
+ ✓ Compiled (494 modules)
+[whoami] incoming cookies: [
+  {
+    name: 'sb-access-token',
+    valuePreview: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1O'
+  },
+  {
+    name: 'sb-session',
+    valuePreview: '{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV'
+  },
+  { name: 'sb-refresh-token', valuePreview: 'n7bzq4ppwg3m' }
+]
+[whoami] sb-access-token preview: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWN
+[whoami] sb-refresh-token preview: n7bzq4ppwg3m
+[whoami] initial supabase.getUser error: Auth session missing!
+[whoami] Attempting supabase.auth.setSession from cookies
+ GET /api/theme/presets 200 in 1694ms
+ GET /api/system-theme-settings 200 in 1706ms
+ GET /api/system-theme-settings 200 in 42ms
+ GET /api/theme/presets 200 in 52ms
+ GET /api/system-theme-settings 200 in 35ms
+ GET /api/theme/presets 200 in 35ms
+[whoami] setSession result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    },
+    session: {
+      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDgyODA3LCJpYXQiOjE3NjY0NzkyMDcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.aq98k3Ui5pkLGxUMJ05hlZHAKHETcsPqn3dS6E2uQrk',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 1766482807,
+      refresh_token: 'qhwgg3sfcqyp',
+      user: [Object]
+    }
+  },
+  error: null
+}
+[whoami] retry supabase.getUser result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    }
+  },
+  error: null
+}
+ GET /api/auth/whoami 200 in 1979ms
+[whoami] incoming cookies: [
+  {
+    name: 'sb-access-token',
+    valuePreview: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1O'
+  },
+  {
+    name: 'sb-session',
+    valuePreview: '{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV'
+  },
+  { name: 'sb-refresh-token', valuePreview: 'n7bzq4ppwg3m' }
+]
+[whoami] sb-access-token preview: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWN
+[whoami] sb-refresh-token preview: n7bzq4ppwg3m
+[whoami] initial supabase.getUser error: Auth session missing!
+[whoami] Attempting supabase.auth.setSession from cookies
+[whoami] setSession result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    },
+    session: {
+      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDgyODA4LCJpYXQiOjE3NjY0NzkyMDgsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.uG3UBrjPCEHz2uAxb665q5__1XkM8ReANGOjqyFmbqw',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 1766482808,
+      refresh_token: 'qhwgg3sfcqyp',
+      user: [Object]
+    }
+  },
+  error: null
+}
+ ✓ Compiled /api/auth/restore in 221ms (496 modules)
+ GET /api/auth/restore 200 in 309ms
+[whoami] retry supabase.getUser result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    }
+  },
+  error: null
+}
+ GET /api/auth/whoami 200 in 368ms
+ ✓ Compiled /api/profiles/[id] in 185ms (498 modules)
+ GET /api/theme/presets 200 in 378ms
+ GET /api/auth/restore 200 in 408ms
+ GET /api/system-theme-settings 200 in 435ms
+ GET /api/theme/presets 200 in 48ms
+ GET /api/system-theme-settings 200 in 58ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 1114ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 67ms
+ ○ Compiling /api/theme/user ...
+ ✓ Compiled /api/theme/user in 938ms (893 modules)
+ GET /api/theme/presets 200 in 987ms
+ GET /api/system-theme-settings 200 in 988ms
+ GET /api/theme/user?userId=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 1074ms
+ ✓ Compiled /api/challenges in 201ms (513 modules)
+ ✓ Compiled (518 modules)
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient attempting setSession from cookies
+ GET /api/hall-of-fame 200 in 603ms
+ GET /api/hall-of-fame 200 in 601ms
+getUserFromAuthClient setSession error: null
+getUserFromAuthClient setSession error: null
+ GET /api/profile/participations?year=2025 200 in 615ms
+ GET /api/challenges?my=true 200 in 633ms
+ GET /api/challenges?my=true 200 in 630ms
+ GET /api/profile/participations?year=2025 200 in 1085ms
+ ✓ Compiled /api/profile/challenge-summary in 3.5s (520 modules)
+ GET /api/profile/challenge-summary 200 in 2532ms
+ GET /api/profile/challenge-summary 200 in 3636ms
+ ✓ Compiled /api/profile/rewards-summary in 238ms (522 modules)
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+getUserFromAuthClient setSession error: null
+ GET /api/profile/rewards-summary?start=2025-01-01&end=2025-12-31 200 in 376ms
+ GET /api/profile/rewards-summary?start=2025-01-01&end=2025-12-31 200 in 389ms
+ GET /api/profile/participations?year=2025 401 in 25ms
+ ✓ Compiled /rewards in 442ms (918 modules)
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+ GET /api/profile/rewards-summary 200 in 76ms
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+ GET /api/profile/rewards-summary 200 in 69ms
+ ✓ Compiled /api/admin/profiles in 130ms (532 modules)
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 2
+ GET /api/admin/profiles 401 in 162ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 0
+ GET /api/admin/profiles 401 in 23ms
+ ✓ Compiled /api/admin/member-rewards in 129ms (534 modules)
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 169ms
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 8ms
+ ✓ Compiled /finance in 183ms (922 modules)
+ ✓ Compiled /api/finance/recent-expenses in 111ms (527 modules)
+ ✓ Compiled (531 modules)
 [api/finance/recent-expenses] handler start
 [api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
 [api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 319ms
- ✓ Compiled /api/finance/my in 186ms (105 modules)
- GET /api/finance/my?year=2025 200 in 297ms
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 30ms
- GET /api/finance/my?year=2025 200 in 18ms
- ✓ Compiled in 148ms (105 modules)
-[api/finance/my] error ReferenceError: Cannot access 'year' before initialization
- GET /api/finance/my?year=2025&__debug=1 500 in 42ms
-[api/finance/my] error ReferenceError: Cannot access 'year' before initialization
- GET /api/finance/my?year=2025&__debug=1 500 in 20ms
- ✓ Compiled in 77ms (103 modules)
- GET /api/finance/my?year=2025&__debug=1 200 in 28ms
- GET /api/finance/my?year=2025&__debug=1 200 in 9ms
- GET /api/finance/my?year=2025&__debug=1 200 in 10ms
- GET /api/finance/my?year=2025 200 in 15ms
- ✓ Compiled in 146ms (103 modules)
- GET /api/finance/my?year=2025 200 in 18ms
- GET /api/finance/my?year=2025 200 in 17ms
- ✓ Compiled in 116ms (103 modules)
- GET /api/finance/my?year=2025&__debug=1 200 in 59ms
- ✓ Compiled in 105ms (103 modules)
- ✓ Compiled in 60ms (103 modules)
+ GET /api/finance/recent-expenses 200 in 228ms
 [api/finance/my] svc response status= 200 error= null dataType= array
-[api/finance/my] sendJson len= 62
+ GET /api/finance/my?year=2025 200 in 241ms
+ GET /api/finance/totals?year=2025 200 in 239ms
+[api/finance/recent-expenses] handler start
+[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
+[api/finance/recent-expenses] supabase status: 200
+ GET /api/finance/recent-expenses 200 in 16ms
+[api/finance/my] svc response status= 200 error= null dataType= array
  GET /api/finance/my?year=2025 200 in 21ms
- ✓ Compiled in 47ms (103 modules)
- ✓ Compiled in 10ms
- ✓ Compiled /api/finance/my in 61ms (103 modules)
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025&__debug=1 200 in 91ms
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025 200 in 20ms
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025&__debug=1 200 in 10ms
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025 200 in 11ms
- ✓ Compiled in 14ms
- ✓ Compiled /api/finance/my in 88ms (103 modules)
- GET /api/finance/my?year=2025&__diag=1 200 in 213ms
- GET /api/finance/my?year=2025&__diag=1 200 in 11ms
- GET /api/finance/my?year=2025&__diag=1 200 in 11ms
- ✓ Compiled in 11ms
- ✓ Compiled /api/finance/my in 105ms (103 modules)
- GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 201ms
- GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 18ms
- ✓ Compiled in 54ms (103 modules)
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025 200 in 21ms
- GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025 200 in 11ms
- GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
-[api/finance/my] svc response status= 200 error= null dataType= array
- GET /api/finance/my?year=2025 200 in 9ms
- GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 10ms
- ✓ Compiled in 2s (103 modules)
- GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 403 in 34ms
- GET /api/finance/my?year=2025&user_id=588b890b-ce25-4318-b82f-25a9b6cf71c5 401 in 14ms
- GET /api/finance/my?year=2025&__diag=1&target_user=588b890b-ce25-4318-b82f-25a9b6cf71c5 401 in 10ms
- ✓ Compiled in 85ms (103 modules)
- ✓ Compiled in 14ms
- ✓ Compiled /api/finance/recent-expenses in 144ms (29 modules)
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 178ms
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 11ms
- ✓ Compiled /api/finance/my in 54ms (105 modules)
- GET /api/finance/my?year=2025 401 in 102ms
- GET /api/finance/my?year=2025 401 in 11ms
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 12ms
- GET /api/finance/my?year=2025 401 in 7ms
- GET /api/finance/my?year=2025&__diag=1 401 in 8ms
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 36ms
-[api/finance/recent-expenses] handler start
-[api/finance/recent-expenses] restUrl: http://localhost:8000/rest/v1/view_public_recent_expenses?select=*&order=payment_date.desc&limit=50
-[api/finance/recent-expenses] supabase status: 200
- GET /api/finance/recent-expenses 200 in 11ms
- GET /api/finance/my?year=2025 401 in 10ms
- ✓ Compiled in 1265ms (203 modules)
- ✓ Compiled in 89ms (203 modules)
+ GET /api/finance/totals?year=2025 200 in 21ms
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+ GET /api/profile/rewards-summary 200 in 77ms
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 1
+ GET /api/admin/profiles 401 in 19ms
+ GET /api/profile/rewards-summary 200 in 37ms
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 24ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 1
+ GET /api/admin/profiles 401 in 18ms
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 11ms
+ GET /rewards 200 in 90ms
+ ✓ Compiled /api/auth/whoami in 103ms (524 modules)
+ ✓ Compiled (533 modules)
+[whoami] incoming cookies: [
+  {
+    name: 'sb-access-token',
+    valuePreview: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1O'
+  },
+  {
+    name: 'sb-session',
+    valuePreview: '{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV'
+  },
+  { name: 'sb-refresh-token', valuePreview: 'n7bzq4ppwg3m' }
+]
+[whoami] sb-access-token preview: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWN
+[whoami] sb-refresh-token preview: n7bzq4ppwg3m
+[whoami] initial supabase.getUser error: Auth session missing!
+[whoami] Attempting supabase.auth.setSession from cookies
+ GET /api/theme/presets 200 in 281ms
+ GET /api/system-theme-settings 200 in 285ms
+ GET /api/theme/presets 200 in 22ms
+ GET /api/system-theme-settings 200 in 24ms
+ GET /api/theme/presets 200 in 17ms
+ GET /api/system-theme-settings 200 in 18ms
+[whoami] setSession result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    },
+    session: {
+      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDgyODkwLCJpYXQiOjE3NjY0NzkyOTAsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.t8zrUbD8w1lUZYXINhuudRHOiHXHUvsPZtkCFw-vqa8',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 1766482890,
+      refresh_token: 'qhwgg3sfcqyp',
+      user: [Object]
+    }
+  },
+  error: null
+}
+[whoami] retry supabase.getUser result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    }
+  },
+  error: null
+}
+ GET /api/auth/whoami 200 in 388ms
+[whoami] incoming cookies: [
+  {
+    name: 'sb-access-token',
+    valuePreview: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1O'
+  },
+  {
+    name: 'sb-session',
+    valuePreview: '{"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXV'
+  },
+  { name: 'sb-refresh-token', valuePreview: 'n7bzq4ppwg3m' }
+]
+[whoami] sb-access-token preview: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWN
+[whoami] sb-refresh-token preview: n7bzq4ppwg3m
+[whoami] initial supabase.getUser error: Auth session missing!
+[whoami] Attempting supabase.auth.setSession from cookies
+[whoami] setSession result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    },
+    session: {
+      access_token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDgyODkwLCJpYXQiOjE3NjY0NzkyOTAsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.t8zrUbD8w1lUZYXINhuudRHOiHXHUvsPZtkCFw-vqa8',
+      token_type: 'bearer',
+      expires_in: 3600,
+      expires_at: 1766482890,
+      refresh_token: 'qhwgg3sfcqyp',
+      user: [Object]
+    }
+  },
+  error: null
+}
+ ✓ Compiled /api/auth/restore in 90ms (535 modules)
+ GET /api/auth/restore 200 in 117ms
+[whoami] retry supabase.getUser result: {
+  data: {
+    user: {
+      id: '588b890b-ce25-4318-b82f-25a9b6cf71c5',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'tranchihieu.it@gmail.com',
+      email_confirmed_at: '2025-12-02T07:13:24.553492Z',
+      phone: '',
+      confirmed_at: '2025-12-02T07:13:24.553492Z',
+      last_sign_in_at: '2025-12-23T06:39:17.585607Z',
+      app_metadata: [Object],
+      user_metadata: [Object],
+      identities: [],
+      created_at: '2025-12-02T07:13:24.53993Z',
+      updated_at: '2025-12-23T07:37:18.029072Z',
+      is_anonymous: false
+    }
+  },
+  error: null
+}
+ GET /api/auth/whoami 200 in 149ms
+ ✓ Compiled /api/profiles/[id] in 86ms (537 modules)
+ GET /api/theme/presets 200 in 178ms
+ GET /api/system-theme-settings 200 in 181ms
+ GET /api/auth/restore 200 in 157ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 209ms
+ GET /api/theme/presets 200 in 27ms
+ ✓ Compiled /api/theme/user in 105ms (539 modules)
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+ GET /api/system-theme-settings 200 in 235ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 228ms
+ GET /api/theme/presets 200 in 220ms
+ GET /api/profile/rewards-summary 200 in 253ms
+ GET /api/theme/user?userId=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 259ms
+ GET /api/system-theme-settings 200 in 29ms
+getUserFromAuthClient attempting setSession from cookies
+getUserFromAuthClient setSession error: null
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 0
+ GET /api/admin/profiles 401 in 17ms
+ GET /api/profile/rewards-summary 200 in 37ms
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 11ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+Exception in admin profiles list { status: 401, message: 'Không xác thực' }
+[admin/profiles] duration_ms: 1
+ GET /api/admin/profiles 401 in 10ms
+ensureAdmin: starting
+ensureAdmin: unauthenticated
+GET /api/admin/member-rewards exception { status: 401, message: 'Không xác thực' }
+ GET /api/admin/member-rewards 401 in 9ms
+ ✓ Compiled /middleware in 461ms (158 modules)
+
+[Middleware] ===== NEW REQUEST =====
+[Middleware] Path: /admin
+[Middleware] Raw Cookie header: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.ODup1r-WRJzGtNPBaak_OOShzmKVVLVJsSiiuJ4jhac; sb-session=%7B%22access_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOns
+[Middleware] All cookies count: 3
+[Middleware] Auth cookies found: sb-access-token, sb-session, sb-refresh-token
+[Middleware] Auth error: Auth session missing!
+[Middleware] User: not authenticated
+[Middleware] User app_metadata: undefined
+[Middleware] No user from supabase.auth.getUser(). Cookie previews: {
+  accessPreview: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWN',
+  refreshPreview: 'n7bzq4ppwg3m'
+}
+[Middleware] x-forwarded-proto: http
+[Middleware] host: localhost:3000
+[Middleware] rawCookieHeader length: 1578
+[Middleware] Attempting supabase.auth.setSession from cookies
+[Middleware] Cookie set: sb-localhost-auth-token
+[Middleware] setSession result error: null
+[Middleware] setSession attempt failed [TypeError: Cannot read properties of null (reading 'message')]
+[Middleware] User role (app_metadata only): admin
+ ✓ Compiled /admin in 206ms (967 modules)
+
+[Middleware] ===== NEW REQUEST =====
+[Middleware] Path: /admin
+[Middleware] Raw Cookie header: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdLCJyb2xlIjoiYWRtaW4ifSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwiZnVsbE5hbWUiOiJUcuG6p24gQ2jDrSBIaeG6v3UifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc2NjQ3MTk1N31dLCJzZXNzaW9uX2lkIjoiNDhjYWRjNjAtZmRiZi00OTI5LWE3ZDgtNDliMWM4ZWRiZmJlIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.ODup1r-WRJzGtNPBaak_OOShzmKVVLVJsSiiuJ4jhac; sb-session=%7B%22access_token%22%3A%22eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOns
+[Middleware] All cookies count: 4
+[Middleware] Auth cookies found: sb-access-token, sb-session, sb-refresh-token, sb-localhost-auth-token
+[Middleware] Cookie get: sb-localhost-auth-token = base64-eyJhY2Nlc3Nfd...
+[Middleware] Cookie get: sb-localhost-auth-token = base64-eyJhY2Nlc3Nfd...
+[Middleware] Cookie get: sb-localhost-auth-token = base64-eyJhY2Nlc3Nfd...
+[Middleware] Cookie get: sb-localhost-auth-token = base64-eyJhY2Nlc3Nfd...
+[Middleware] User: tranchihieu.it@gmail.com
+[Middleware] User app_metadata: { provider: 'email', providers: [ 'email' ], role: 'admin' }
+[Middleware] User role (app_metadata only): admin
+ ✓ Compiled /api/admin/overview in 116ms (560 modules)
+ensureAdmin: starting
+ensureAdmin: cookie preview: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIj
+ GET /api/admin/overview 200 in 208ms
+ensureAdmin: starting
+ensureAdmin: cookie preview: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIj
+ GET /api/admin/overview 200 in 11ms
+ ✓ Compiled /api/profile/participations in 88ms (562 modules)
+ GET /api/profile/participations?year=2025 401 in 111ms
+ GET /api/auth/restore 404 in 18ms
+ GET /api/profile/participations?year=2025 401 in 13ms
+ensureAdmin: starting
+ensureAdmin: cookie preview: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIj
+ GET /api/admin/overview 200 in 64ms
+ GET /api/system-theme-settings 200 in 70ms
+ GET /api/theme/presets 200 in 68ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 60ms
+ GET /api/system-theme-settings 200 in 63ms
+ensureAdmin: starting
+ensureAdmin: cookie preview: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIj
+ GET /api/admin/overview 200 in 72ms
+ GET /api/theme/presets 200 in 83ms
+ GET /api/system-theme-settings 200 in 65ms
+ensureAdmin: starting
+ensureAdmin: cookie preview: {"access_token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIj
+ GET /api/admin/overview 200 in 64ms
+ GET /api/theme/presets 200 in 67ms
+ GET /api/theme/user?userId=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 90ms
+ ○ Compiling /races ...
+ ✓ Compiled /races in 680ms (989 modules)
+ ✓ Compiled /api/races in 252ms (573 modules)
+ GET /api/races 200 in 304ms
+ GET /api/profile/rewards-summary 200 in 281ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+[admin/profiles] GET success count= 27 duration_ms: 6
+ GET /api/admin/profiles 200 in 47ms
+ensureAdmin: starting
+GET member-rewards: loading all tabs { user: '588b890b-ce25-4318-b82f-25a9b6cf71c5', hasService: true }
+ GET /api/profile/rewards-summary 200 in 139ms
+GET member-rewards: table counts {
+  member_milestone_rewards: 23,
+  member_podium_rewards: 0,
+  lucky_draw_winners: 0,
+  member_star_awards: 0
+}
+GET member-rewards: sample milestone row {
+  sample: {
+    id: '6346388c-b14e-497e-9e14-1a174babb250',
+    member_id: '90c89e22-efce-46be-b44e-5a2ab7105e4b',
+    race_id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+    race_result_id: '76890392-e80f-4c5d-b76e-40bcae322398',
+    status: 'pending',
+    achieved_time_seconds: 7185,
+    reward_description: 'KNC khung kính A5',
+    cash_amount: 0,
+    related_transaction_id: null,
+    created_at: '2025-12-18T07:49:12.808437+00:00',
+    profiles: { email: 'njnnguyen92@gmail.com', full_name: 'Nguyễn Đạo Nam' },
+    reward_milestones: {
+      id: '3c1ec685-c9aa-4c14-9501-7d8dd9880435',
+      race_type: 'HM',
+      milestone_name: 'SUB200',
+      reward_description: 'KNC khung kính A5'
+    },
+    races: {
+      id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+      name: 'Tràng An Marathon 2025'
+    }
+  }
+}
+ GET /api/admin/member-rewards 200 in 84ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+[admin/profiles] GET success count= 27 duration_ms: 4
+ GET /api/admin/profiles 200 in 29ms
+ensureAdmin: starting
+GET member-rewards: loading all tabs { user: '588b890b-ce25-4318-b82f-25a9b6cf71c5', hasService: true }
+GET member-rewards: table counts {
+  member_milestone_rewards: 23,
+  member_podium_rewards: 0,
+  lucky_draw_winners: 0,
+  member_star_awards: 0
+}
+GET member-rewards: sample milestone row {
+  sample: {
+    id: '6346388c-b14e-497e-9e14-1a174babb250',
+    member_id: '90c89e22-efce-46be-b44e-5a2ab7105e4b',
+    race_id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+    race_result_id: '76890392-e80f-4c5d-b76e-40bcae322398',
+    status: 'pending',
+    achieved_time_seconds: 7185,
+    reward_description: 'KNC khung kính A5',
+    cash_amount: 0,
+    related_transaction_id: null,
+    created_at: '2025-12-18T07:49:12.808437+00:00',
+    profiles: { email: 'njnnguyen92@gmail.com', full_name: 'Nguyễn Đạo Nam' },
+    reward_milestones: {
+      id: '3c1ec685-c9aa-4c14-9501-7d8dd9880435',
+      race_type: 'HM',
+      milestone_name: 'SUB200',
+      reward_description: 'KNC khung kính A5'
+    },
+    races: {
+      id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+      name: 'Tràng An Marathon 2025'
+    }
+  }
+}
+ GET /api/admin/member-rewards 200 in 49ms
+[whoami] incoming cookies: [ { name: 'sb-refresh-token', valuePreview: 'tj2btw4tm5nd' } ]
+[whoami] sb-access-token preview: null
+[whoami] sb-refresh-token preview: tj2btw4tm5nd
+[whoami] initial supabase.getUser error: Auth session missing!
+[whoami] Attempting supabase.auth.setSession from cookies
+[whoami] incomplete auth cookies present; skipping setSession
+[whoami] retry supabase.getUser result: {
+  data: { user: null },
+  error: AuthSessionMissingError: Auth session missing!
+      at eval (webpack-internal:///(rsc)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:1283:59)
+      at SupabaseAuthClient._useSession (webpack-internal:///(rsc)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:1171:26)
+      at async SupabaseAuthClient._getUser (webpack-internal:///(rsc)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:1275:20)
+      at async eval (webpack-internal:///(rsc)/./node_modules/@supabase/auth-js/dist/module/GoTrueClient.js:1259:20) {
+    __isAuthError: true,
+    status: 400,
+    code: undefined
+  }
+}
+ GET /api/auth/whoami 200 in 19ms
+ GET /api/profile/participations?year=2025 401 in 17ms
+<w> [webpack.cache.PackFileCacheStrategy] Serializing big strings (129kiB) impacts deserialization performance (consider using Buffer instead and decode when needed)
+ GET /api/system-theme-settings 200 in 20ms
+ GET /api/theme/presets 200 in 26ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 31ms
+ GET /api/system-theme-settings 200 in 34ms
+ GET /api/theme/presets 200 in 36ms
+ GET /api/system-theme-settings 200 in 33ms
+ GET /api/theme/presets 200 in 33ms
+ GET /api/theme/user?userId=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 46ms
+ GET /api/profile/rewards-summary 200 in 82ms
+[admin/profiles] GET start { url: 'http://localhost:3000/api/admin/profiles' }
+[admin/profiles] request headers cookie: sb-access-token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI1ODhiODkwYi1jZTI1LTQzMTgtYjgyZi0yNWE5YjZjZjcxYzUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY2NDc1NTU3LCJpYXQiOjE3NjY0NzE5NTcsImVtYWlsIjoidHJhbmNoaWhpZXUuaXRAZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInB
+ensureAdmin: starting
+[admin/profiles] GET success count= 27 duration_ms: 2
+ GET /api/admin/profiles 200 in 14ms
+ensureAdmin: starting
+GET member-rewards: loading all tabs { user: '588b890b-ce25-4318-b82f-25a9b6cf71c5', hasService: true }
+GET member-rewards: table counts {
+  member_milestone_rewards: 23,
+  member_podium_rewards: 0,
+  lucky_draw_winners: 0,
+  member_star_awards: 0
+}
+GET member-rewards: sample milestone row {
+  sample: {
+    id: '6346388c-b14e-497e-9e14-1a174babb250',
+    member_id: '90c89e22-efce-46be-b44e-5a2ab7105e4b',
+    race_id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+    race_result_id: '76890392-e80f-4c5d-b76e-40bcae322398',
+    status: 'pending',
+    achieved_time_seconds: 7185,
+    reward_description: 'KNC khung kính A5',
+    cash_amount: 0,
+    related_transaction_id: null,
+    created_at: '2025-12-18T07:49:12.808437+00:00',
+    profiles: { email: 'njnnguyen92@gmail.com', full_name: 'Nguyễn Đạo Nam' },
+    reward_milestones: {
+      id: '3c1ec685-c9aa-4c14-9501-7d8dd9880435',
+      race_type: 'HM',
+      milestone_name: 'SUB200',
+      reward_description: 'KNC khung kính A5'
+    },
+    races: {
+      id: '57e5c6b7-474b-4e0b-8247-5914c3ff2ec7',
+      name: 'Tràng An Marathon 2025'
+    }
+  }
+}
+ GET /api/admin/member-rewards 200 in 43ms
+ ✓ Compiled /api/challenges in 102ms (552 modules)
+ ✓ Compiled (554 modules)
+ GET /api/hall-of-fame 200 in 239ms
+ GET /api/hall-of-fame 200 in 238ms
+ GET /api/challenges?my=true 200 in 256ms
+ GET /api/challenges?my=true 200 in 256ms
+ GET /api/profile/participations?year=2025 200 in 259ms
+ GET /api/profile/participations?year=2025 200 in 30ms
+ ✓ Compiled /api/profile/challenge-summary in 100ms (556 modules)
+ GET /api/profile/challenge-summary 200 in 84ms
+ GET /api/profile/challenge-summary 200 in 131ms
+ GET /api/profile/rewards-summary?start=2025-01-01&end=2025-12-31 200 in 42ms
+ GET /api/profile/rewards-summary?start=2025-01-01&end=2025-12-31 200 in 44ms
+ GET /api/system-theme-settings 200 in 21ms
+ GET /api/theme/presets 200 in 24ms
+ GET /api/profiles/588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 34ms
+ GET /api/system-theme-settings 200 in 36ms
+ GET /api/theme/presets 200 in 37ms
+ GET /api/challenges?my=true 200 in 37ms
+ GET /api/hall-of-fame 200 in 42ms
+ GET /api/system-theme-settings 200 in 40ms
+ GET /api/theme/presets 200 in 47ms
+ GET /api/theme/user?userId=588b890b-ce25-4318-b82f-25a9b6cf71c5 200 in 57ms
+ GET /api/profile/participations?year=2025 200 in 64ms
+ GET /api/profile/challenge-summary 200 in 21ms
+ GET /api/profile/rewards-summary?start=2025-01-01&end=2025-12-31 200 in 42ms

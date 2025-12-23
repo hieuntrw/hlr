@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
 import ensureAdmin from '@/lib/server-auth';
 
@@ -34,15 +34,13 @@ export async function GET(request: NextRequest) {
 
     await ensureAdmin(supabaseAuth);
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+    let service;
+    try {
+      service = getSupabaseServiceClient();
+    } catch (e) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured', e);
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
-
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
 
     // Optional query param `fields` to control selected columns (comma separated)
     const url = new URL(request.url);

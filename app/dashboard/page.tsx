@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 // Use server APIs instead of direct client Supabase to avoid PostgREST/Kong issues
 import { Trophy, Target, Star, Award } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
-import { supabase } from "@/lib/supabase-client";
 
 interface UserProfile {
   id: string;
@@ -272,49 +271,52 @@ function DashboardContent() {
   const fetchYearlyStats = useCallback(async () => {
     try {
       setYearlyStatsLoading(true);
-      // Using user from AuthContext
       if (!user) return;
 
       const year = new Date().getFullYear();
       const startDate = `${year}-01-01`;
       const endDate = `${year}-12-31`;
 
-      // Get all participations for this year
-       const { data: participations } = await supabase
-         .from("challenge_participants")
-         .select("actual_km, status, challenge_id, challenges(start_date)")
-         .eq("user_id", user.id);
+      const base = typeof window !== 'undefined' ? window.location.origin : '';
+      const resp = await fetch(`${base}/api/profile/participations?year=${encodeURIComponent(String(year))}`, { credentials: 'same-origin' });
+      const j = await resp.json().catch(() => null);
+      const participations = resp.ok && j?.ok ? j.data : [];
 
-      if (participations) {
-         const filtered = (participations || []).filter((p: unknown) => {
-           const pi = p as Record<string, unknown>;
-           const ch = pi.challenges as Record<string, unknown> | undefined;
-           if (!ch || !ch.start_date) return false;
-           const sd = String(ch.start_date).slice(0, 10);
-           return sd >= startDate && sd <= endDate;
-         });
-         const totalKm = filtered.reduce((sum, p) => sum + (Number(p.actual_km) || 0), 0);
-        const challengesJoined = participations.length;
-        const challengesCompleted = participations.filter((p) => p.status === "completed").length;
+      // Prefer viewer: if the server returned aggregated yearly stats (viewer), use it
+      if (Array.isArray(participations) && participations.length > 0 && 'total_actual_km' in (participations[0] as Record<string, unknown>)) {
+        const row = participations[0] as Record<string, unknown>;
+        const totalKm = Number(row.total_actual_km ?? 0) || 0;
 
-        // Get total stars via server summary endpoint (avoids direct PostgREST queries)
+        let challengesJoined = 0;
+        let challengesCompleted = 0;
+        try {
+          const respSummary = await fetch(`${base}/api/profile/challenge-summary`, { credentials: 'same-origin', cache: 'no-store' });
+          const j3 = await respSummary.json().catch(() => null);
+          if (respSummary.ok && j3?.ok && j3.data) {
+            const s = j3.data as Record<string, unknown>;
+            challengesJoined = Number(s.total_challenges_joined ?? 0);
+            challengesCompleted = Number(s.total_challenges_completed ?? 0);
+          }
+        } catch (e) {
+          console.error('[Dashboard] challenge-summary fetch error', e);
+        }
+
         let totalStars = 0;
         try {
-          const base = typeof window !== 'undefined' ? window.location.origin : '';
-          const resp = await fetch(`${base}/api/profile/rewards-summary?start=${startDate}&end=${endDate}`, { credentials: 'same-origin', cache: 'no-store' });
-          const j = await resp.json().catch(() => null);
-          if (resp.ok && j?.ok) {
-            totalStars = Number(j.star_total || 0);
-          } else {
-            console.warn('[Dashboard] rewards-summary API failed', j);
-          }
+          const resp2 = await fetch(`${base}/api/profile/rewards-summary?start=${startDate}&end=${endDate}`, { credentials: 'same-origin', cache: 'no-store' });
+          const j2 = await resp2.json().catch(() => null);
+          if (resp2.ok && j2?.ok) totalStars = Number(j2.star_total || 0);
         } catch (e) {
           console.error('[Dashboard] rewards-summary fetch error', e);
         }
+
         setYearlyStats({ totalKm: Math.round(totalKm), totalStars, challengesJoined, challengesCompleted });
+        return;
       }
+
+     
     } catch (err) {
-      console.error("Failed to fetch yearly stats:", err);
+      console.error('Failed to fetch yearly stats:', err);
     } finally {
       setYearlyStatsLoading(false);
     }
@@ -325,43 +327,26 @@ function DashboardContent() {
       if (!user) return;
       // Prefer lookup by email (more reliable across migrations), then by id.
       if (user.email) {
-                 const { data: byEmail } = await supabase
-                   .from("profiles")
-                   .select(
-                     "id, full_name, email, birth_date, avatar_url, pb_hm_seconds, pb_fm_seconds, strava_id"
-                   )
-                   .eq("email", user.email)
-                   .maybeSingle();
-                 if (byEmail) return byEmail;
-               }
+        try {
+          const base = typeof window !== 'undefined' ? window.location.origin : '';
+          const respByEmail = await fetch(`${base}/api/profiles/by-email?email=${encodeURIComponent(String(user.email))}`, { credentials: 'same-origin' });
+          const byEmailJson = await respByEmail.json().catch(() => null);
+          if (respByEmail.ok && byEmailJson?.ok && byEmailJson.profile) return byEmailJson.profile;
+        } catch {
+          // ignore
+        }
+      }
       console.log("[DEBUG] User ID:", user.id, "Email:", user.email);
 
-      // Truy vấn bảng profiles theo user.id (trường id của bảng profiles tương ứng với auth user id)
-      // Nếu không tìm thấy bằng id thì fallback sang tìm bằng email.
+      // Query profile by user id via server API
       let profileResult: Record<string, unknown> | null = null;
-
-      const { data: profileById, error: errById } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (errById) console.warn('[DEBUG] Error fetching profile by id', errById);
-
-      if (profileById) {
-        profileResult = profileById as Record<string, unknown>;
-      } else if (user.email) {
-        const { data: profileByEmail, error: errByEmail } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .eq("email", user.email)
-          .maybeSingle();
-
-        if (errByEmail) console.warn('[DEBUG] Error fetching profile by email', errByEmail);
-
-        if (profileByEmail) {
-          profileResult = profileByEmail as Record<string, unknown>;
-        }
+      try {
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+        const respById = await fetch(`${base}/api/profiles/${encodeURIComponent(user.id)}`, { credentials: 'same-origin' });
+        const byIdJson = await respById.json().catch(() => null);
+        if (respById.ok && byIdJson?.profile) profileResult = byIdJson.profile;
+      } catch {
+        // ignore
       }
 
       console.log("[DEBUG] Profile lookup result:", profileResult);

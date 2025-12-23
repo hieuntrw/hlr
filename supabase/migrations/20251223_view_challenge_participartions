@@ -1,0 +1,55 @@
+--Hàm tạo view tổng hợp số KM thực tế và mục tiêu theo năm cho mỗi người dùng
+CREATE OR REPLACE VIEW public.view_user_yearly_km_stats 
+WITH (security_invoker = true) -- Bảo mật
+AS
+SELECT 
+    cp.user_id,
+    -- Lấy năm dựa trên ngày kết thúc thử thách (Fiscal Year)
+    EXTRACT(YEAR FROM c.end_date)::integer as report_year,
+    -- Tổng số KM thực tế đạt được
+    COALESCE(SUM(cp.actual_km), 0) as total_actual_km,
+    -- Tổng số KM mục tiêu đã đăng ký
+    COALESCE(SUM(cp.target_km), 0) as total_target_km
+FROM 
+    public.challenge_participants cp
+JOIN 
+    public.challenges c ON cp.challenge_id = c.id
+GROUP BY 
+    cp.user_id, 
+    EXTRACT(YEAR FROM c.end_date);
+
+-- Cấp quyền
+GRANT SELECT ON public.view_user_yearly_km_stats TO authenticated;
+
+----Hàm tạo view tóm tắt tham gia thử thách cho mỗi người dùng
+CREATE OR REPLACE VIEW public.view_user_challenge_summary 
+WITH (security_invoker = true)
+AS
+SELECT 
+    user_id,
+    -- 1. Tổng thử thách đã tham gia
+    COUNT(*) as total_challenges_joined,
+    
+    -- 2. Tổng thử thách đã hoàn thành (Dựa trên status hoặc cờ completed)
+    COUNT(*) FILTER (WHERE status = 'completed' OR completed = true) as total_challenges_completed,
+    
+    -- 3. Tổng thử thách thất bại
+    COUNT(*) FILTER (WHERE status = 'failed') as total_challenges_failed,
+
+    -- 4. Tỉ lệ hoàn thành (%)
+    CASE 
+        WHEN COUNT(*) > 0 THEN 
+            ROUND((COUNT(*) FILTER (WHERE status = 'completed')::numeric / COUNT(*) * 100), 2)
+        ELSE 0 
+    END as completion_rate_percent,
+
+    -- 5. Tổng KM tích lũy trọn đời (All time)
+    COALESCE(SUM(actual_km), 0) as lifetime_km
+
+FROM 
+    public.challenge_participants
+GROUP BY 
+    user_id;
+
+-- Cấp quyền
+GRANT SELECT ON public.view_user_challenge_summary TO authenticated;

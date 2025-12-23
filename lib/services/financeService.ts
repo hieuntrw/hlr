@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase-client";
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import { TransactionMetadata } from '@/types/finance'
 
 // (Moved getClubBalance & createOpeningBalance into the financeService object below)
@@ -14,7 +15,8 @@ export const financeService = {
  
 // Hàm mới: Lấy báo cáo theo danh mục và năm
   async getReportByCategory(year: number) {
-    const { data, error } = await supabase
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client
       .from('view_finance_report_by_category')
       .select('*')
       .eq('fiscal_year', year)
@@ -26,14 +28,16 @@ export const financeService = {
 
   // 1. Lấy thống kê công khai 
   async getPublicStats() {
-    const { data, error } = await supabase.from('view_public_fund_stats').select('*').maybeSingle();
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client.from('view_public_fund_stats').select('*').maybeSingle();
     if (error) throw error;
     return data;
   },
 
   // Tổng chi trong năm (RPC -> get_total_expense)
   async getTotalExpense(year: number) {
-    const { data, error } = await supabase.rpc('get_total_expense', { year_input: year });
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client.rpc('get_total_expense', { year_input: year });
     if (error) throw error;
     const value = data as unknown;
     return typeof value === 'number' ? value : Number(value ?? 0);
@@ -43,7 +47,7 @@ export const financeService = {
   async getRecentExpenses() {
     // Try client-side supabase first, with retries in case session is not ready.
     async function tryClient() {
-      const { data, error } = await supabase.from('view_public_recent_expenses').select('*');
+      const { data, error } = await (typeof window === 'undefined' ? getSupabaseServiceClient() : supabase).from('view_public_recent_expenses').select('*');
       return { data, error };
     }
 
@@ -89,7 +93,8 @@ export const financeService = {
 
   // Tổng thu thực tế trong năm (loại bỏ OPENING_BALANCE)
   async getTotalIncomeReal(year: number) {
-    const { data, error } = await supabase.rpc('get_total_income_real', { year_input: year });
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client.rpc('get_total_income_real', { year_input: year });
     if (error) throw error;
     const value = data as unknown;
     return typeof value === 'number' ? value : Number(value ?? 0);
@@ -99,7 +104,7 @@ export const financeService = {
   async getMyFinance(userId: string, year: number) {
     // Client attempt with retry
     async function tryClient() {
-      return supabase
+      return (typeof window === 'undefined' ? getSupabaseServiceClient() : supabase)
         .from('view_my_finance_status')
         .select('*')
         .eq('user_id', userId)
@@ -147,7 +152,8 @@ export const financeService = {
 
   // Tổng phải thu (pending) trong năm
   async getTotalPendingIncome(year: number) {
-    const { data, error } = await supabase.rpc('get_total_pending_income', { year_input: year });
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client.rpc('get_total_pending_income', { year_input: year });
     if (error) throw error;
     const value = data as unknown;
     return typeof value === 'number' ? value : Number(value ?? 0);
@@ -155,7 +161,8 @@ export const financeService = {
 
   // Lấy số dư quỹ hiện tại (RPC -> get_club_balance)
   async getClubBalance(year: number) {
-    const { data, error } = await supabase.rpc('get_club_balance', { year_input: year });
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client.rpc('get_club_balance', { year_input: year });
     if (error) throw error;
     const value = data as unknown;
     return typeof value === 'number' ? value : Number(value ?? 0);
@@ -174,7 +181,8 @@ export const financeService = {
 */
   // Tạo hoặc cập nhật số dư đầu kỳ cho năm tiếp theo (RPC -> create_opening_balance)
   async createOpeningBalance(prevYear: number) {
-    const { error } = await supabase.rpc('create_opening_balance', { prev_year: prevYear });
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { error } = await client.rpc('create_opening_balance', { prev_year: prevYear });
     if (error) throw error;
     return { success: true };
   },
@@ -182,7 +190,8 @@ export const financeService = {
   // Lấy số dư đầu kỳ (OPENING_BALANCE) cho năm
   async getOpeningBalance(year: number) {
     type TxRow = { amount: number | string | null };
-    const { data, error } = await supabase
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data, error } = await client
       .from('transactions')
       .select('amount, financial_categories(code)')
       .eq('fiscal_year', year)
@@ -204,7 +213,8 @@ export const financeService = {
     metadata: TransactionMetadata = {}
   ) {
     // Lấy ID danh mục
-    const { data: cat } = await supabase
+    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
+    const { data: cat } = await client
       .from('financial_categories')
       .select('id')
       .eq('code', categoryCode)
@@ -213,7 +223,7 @@ export const financeService = {
     if (!cat) throw new Error('Danh mục không tồn tại');
 
     // Insert
-    return await supabase.from('transactions').insert({
+    return await (typeof window === 'undefined' ? getSupabaseServiceClient() : supabase).from('transactions').insert({
       category_id: cat.id,
       user_id: userId,
       amount: amount,

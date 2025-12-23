@@ -1,4 +1,5 @@
-import { supabase } from "@/lib/supabase-client";
+import { getSupabaseServiceClient } from "@/lib/supabase-service-client";
+const supabase = getSupabaseServiceClient();
 import serverDebug from "@/lib/server-debug";
 import {
   refreshStravaToken as oauthRefreshStravaToken,

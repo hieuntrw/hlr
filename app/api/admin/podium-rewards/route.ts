@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
 
 export const dynamic = 'force-dynamic';
 
-async function getServiceClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
-}
+// use service-role factory for privileged server-side queries
 
 export async function GET(request: NextRequest) {
   try {
-    const service = await getServiceClient();
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, { cookies: { get(n: string) { return request.cookies.get(n)?.value }, set() {}, remove() {} } });
 
     // configs
@@ -20,8 +16,14 @@ export async function GET(request: NextRequest) {
 
     // rewards (use service client if available to bypass RLS)
     let rewards = null;
-    if (service) {
-      const { data } = await service.from('member_podium_rewards').select('*, race:races(id,name,date,location), member:profiles(full_name,email)').order('created_at', { ascending: false });
+    let serviceClient = null;
+    try {
+      serviceClient = getSupabaseServiceClient();
+    } catch {
+      serviceClient = null;
+    }
+    if (serviceClient) {
+      const { data } = await serviceClient.from('member_podium_rewards').select('*, race:races(id,name,date,location), member:profiles(full_name,email)').order('created_at', { ascending: false });
       rewards = data;
     } else {
       const { data } = await supabase.from('member_podium_rewards').select('*, race:races(id,name,date,location), member:profiles(full_name,email)').order('created_at', { ascending: false });
@@ -33,8 +35,8 @@ export async function GET(request: NextRequest) {
 
     // members (use service client if possible)
     let members = null;
-    if (service) {
-      const { data } = await service.from('profiles').select('id,full_name,email').order('full_name', { ascending: true });
+    if (serviceClient) {
+      const { data } = await serviceClient.from('profiles').select('id,full_name,email').order('full_name', { ascending: true });
       members = data;
     } else {
       const { data } = await supabase.from('profiles').select('id,full_name,email').order('full_name', { ascending: true });

@@ -4,7 +4,6 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useAuth } from '@/lib/auth/AuthContext';
 import { Theme } from './types';
 import { defaultTheme } from './defaultTheme';
-import { supabase } from '@/lib/supabase-client';
 
 interface ThemeContextType {
   theme: Theme;
@@ -56,82 +55,55 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
   const [themePresets, setThemePresets] = useState<Theme[]>([]);
   // system settings are loaded for potential side-effects but not stored in React state
 
-  // Load theme from database (for sync only, not for initial display)
-  const loadThemeFromDatabase = React.useCallback(async () => {
+  // Load theme from server APIs (for sync only, not for initial display)
+  const loadThemeFromDatabase = React.useCallback(async (authUser: { id: string } | null) => {
     try {
-      // Theme and dark mode are already initialized from localStorage
-      // This function only syncs with database for updates
-      
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = authUser;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      setUserId(user.id);
 
-      if (user) {
-        setUserId(user.id);
-        
-        // Try to load user's theme preference from database
-        const { data: preference, error } = await supabase
-          .from('user_theme_preferences')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-
-        if (preference && !error) {
-          setUseSystemThemeState(preference.use_system_theme ?? true);
-          
-          let dbTheme: Theme | null = null;
-          
-          if (preference.use_system_theme) {
-            // Load system default theme
-            const { data: systemSettings } = await supabase
-              .from('system_theme_settings')
-              .select('default_theme_id')
-              .single();
-            
-            if (systemSettings?.default_theme_id) {
-              const { data: themePreset } = await supabase
-                .from('theme_presets')
-                .select('*')
-                .eq('id', systemSettings.default_theme_id)
-                .single();
-              
-              if (themePreset) {
-                dbTheme = convertPresetToTheme(themePreset);
+      // Fetch user preference from server API
+      try {
+        const prefRes = await fetch(`/api/theme/user?userId=${encodeURIComponent(user.id)}`, { credentials: 'same-origin' });
+        if (prefRes.ok) {
+          const prefJson = await prefRes.json().catch(() => null);
+          const preference = prefJson?.data ?? null;
+          if (preference) {
+            setUseSystemThemeState(preference.use_system_theme ?? true);
+            let dbTheme: Theme | null = null;
+            if (preference.use_system_theme) {
+              // Load system default preset from server
+              const presetRes = await fetch('/api/theme/presets', { credentials: 'same-origin' });
+              if (presetRes.ok) {
+                const pj = await presetRes.json().catch(() => null);
+                const presets = pj?.data ?? [];
+                const systemPreset = (presets as Array<Record<string, unknown>>).find((p) => p.id === preference.theme_id) ?? presets[0] ?? null;
+                if (systemPreset) dbTheme = convertPresetToTheme(systemPreset);
               }
+            } else {
+              dbTheme = mergeThemeCustomizations(
+                defaultTheme,
+                preference.custom_colors as Record<string, unknown> | undefined,
+                preference.custom_fonts as Record<string, unknown> | undefined,
+                preference.custom_spacing as Record<string, unknown> | undefined
+              );
             }
-          } else {
-            // Merge user customizations with base theme
-            dbTheme = mergeThemeCustomizations(
-              defaultTheme,
-              preference.custom_colors as Record<string, unknown> | undefined,
-              preference.custom_fonts as Record<string, unknown> | undefined,
-              preference.custom_spacing as Record<string, unknown> | undefined
-            );
-          }
-          
-          // Compare with localStorage (not React state) to prevent unnecessary updates
-          // This prevents flickering when DB theme matches localStorage but React state might be stale
-          if (dbTheme) {
-            const localStorageTheme = typeof window !== 'undefined' 
-              ? localStorage.getItem('currentTheme') 
-              : null;
-            
-            const localThemeColors = localStorageTheme 
-              ? JSON.stringify(JSON.parse(localStorageTheme).colors)
-              : null;
-            
-            const dbThemeColors = JSON.stringify(dbTheme.colors);
-            
-            // Only update if DB theme differs from localStorage
-            if (localThemeColors !== dbThemeColors) {
-              setThemeState(dbTheme);
+
+            if (dbTheme) {
+              const localStorageTheme = typeof window !== 'undefined' ? localStorage.getItem('currentTheme') : null;
+              const localThemeColors = localStorageTheme ? JSON.stringify(JSON.parse(localStorageTheme).colors) : null;
+              const dbThemeColors = JSON.stringify(dbTheme.colors);
+              if (localThemeColors !== dbThemeColors) setThemeState(dbTheme);
             }
-          }
-          
-          // Sync dark mode from database
-          if (preference.dark_mode_enabled !== darkMode) {
-            setDarkMode(preference.dark_mode_enabled || false);
+
+            if (preference.dark_mode_enabled !== darkMode) setDarkMode(preference.dark_mode_enabled || false);
           }
         }
+      } catch (err) {
+        console.warn('[Theme] failed to load user preference via API', err);
       }
     } catch (error) {
       console.error('Error loading theme:', error);
@@ -142,13 +114,9 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
   const loadSystemSettings = React.useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('system_theme_settings')
-        .select('*')
-        .single();
-      
-      if (data && !error) {
-        // system settings loaded if needed; currently no-op
+      const res = await fetch('/api/system-theme-settings', { credentials: 'same-origin' });
+      if (res.ok) {
+        // no-op for now
       }
     } catch (error) {
       console.error('Error loading system settings:', error);
@@ -157,17 +125,12 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
 
   const loadThemePresetsData = React.useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('theme_presets')
-        .select('*')
-        .eq('is_active', true)
-        .order('is_system', { ascending: false })
-        .order('usage_count', { ascending: false });
-      
-      if (data && !error) {
-        const themes = (data as Array<Record<string, unknown>>).map(convertPresetToTheme);
-        setThemePresets(themes);
-      }
+      const res = await fetch('/api/theme/presets', { credentials: 'same-origin' });
+      if (!res.ok) return;
+      const j = await res.json().catch(() => null);
+      const data = j?.data ?? [];
+      const themes = (data as Array<Record<string, unknown>>).map(convertPresetToTheme);
+      setThemePresets(themes);
     } catch (error) {
       console.error('Error loading theme presets:', error);
     }
@@ -185,7 +148,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     if (authLoading) return;
 
     if (sessionChecked && user) {
-      loadThemeFromDatabase();
+      loadThemeFromDatabase(user);
     } else {
       // No authenticated user — nothing to sync from user table
       setLoading(false);
@@ -267,29 +230,25 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
-      const preference: Record<string, unknown> = {
-        user_id: userId,
+      const preferencePayload: Record<string, unknown> = {
         theme_id: theme.id,
         custom_colors: useSystemTheme ? null : theme.colors,
         custom_fonts: useSystemTheme ? null : theme.fonts,
         custom_spacing: useSystemTheme ? null : theme.spacing,
         dark_mode_enabled: darkMode,
         use_system_theme: useSystemTheme,
-        updated_at: new Date().toISOString(),
       };
 
-      const { error } = await supabase
-        .from('user_theme_preferences')
-        .upsert(preference, { onConflict: 'user_id' });
-
-      if (error) {
-        console.error('Error saving theme preference:', error);
-        throw error;
-      }
-      
-      // Update theme preset usage count
-      if (theme.id && !useSystemTheme) {
-        await supabase.rpc('increment_theme_usage', { theme_id: theme.id });
+      const res = await fetch('/api/theme/user', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, preference: preferencePayload }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        console.error('Error saving theme preference via API:', j);
+        throw new Error('Save preference failed');
       }
     } catch (error) {
       console.error('Failed to save theme preference:', error);
@@ -305,7 +264,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     setUseSystemThemeState(use);
     if (use) {
       // Reload system default theme
-      loadThemeFromDatabase();
+      loadThemeFromDatabase(user);
     }
   };
 
