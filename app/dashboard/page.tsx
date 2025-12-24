@@ -1,5 +1,5 @@
 "use client";
-import { financeService } from '@/lib/services/financeService';
+// financeService replaced by same-origin server APIs
 
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -185,7 +185,7 @@ function DashboardContent() {
         if (!current) {
           // Not joined or no challenge this month
           // Try to fetch public challenge name for display
-          const pubResp = await fetch(`${base}/api/challenges`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+          const pubResp = await fetch(`${base}/api/challenges`, { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' });
           let pubName = 'Chưa có thử thách tháng này';
           if (pubResp.ok) {
             const pubJson = await pubResp.json().catch(() => null);
@@ -246,10 +246,36 @@ function DashboardContent() {
       if (!user) return;
       try {
         const year = new Date().getFullYear();
-        const balance = await financeService.getClubBalance(year).catch(() => 0);
-        const myFinance = await financeService.getMyFinance(user.id, year).catch(() => []);
+        const base = typeof window !== 'undefined' ? window.location.origin : '';
+
+        // Club balance / totals
+        let balance = 0;
+        try {
+          const resp = await fetch(`${base}/api/finance/totals?year=${encodeURIComponent(String(year))}`, { credentials: 'same-origin', cache: 'no-store' });
+          const jb = await resp.json().catch(() => null);
+          if (resp.ok) {
+            // server returns { ok: true, totals: { clubBalance, ... } }
+            // keep a fallback to the older top-level key if present
+            balance = Number(jb?.totals?.clubBalance ?? jb?.clubBalance ?? 0) || 0;
+          }
+        } catch (e) {
+          console.error('[Dashboard] finance totals fetch error', e);
+        }
+
+        // My finance items
+        let myFinance: unknown[] = [];
+        try {
+          const resp = await fetch(`${base}/api/finance/my?year=${encodeURIComponent(String(year))}`, { credentials: 'same-origin', cache: 'no-store' });
+          const jm = await resp.json().catch(() => null);
+          if (resp.ok) {
+            myFinance = Array.isArray(jm?.data) ? jm.data : (Array.isArray(jm) ? jm : (jm?.items ?? []));
+          }
+        } catch (e) {
+          console.error('[Dashboard] my finance fetch error', e);
+        }
+
         const pendingCount = Array.isArray(myFinance)
-          ? myFinance.filter((r: unknown) => String(((r as Record<string, unknown>).payment_status) ?? '') === 'pending').length
+          ? myFinance.filter((r: unknown) => String(((r as Record<string, unknown>)['payment_status'] ?? '')).toLowerCase() === 'pending').length
           : 0;
 
         setFinanceStatus({

@@ -4,8 +4,16 @@ import serverDebug from './server-debug';
 export async function decodeSbSessionCookie(raw?: string) {
   if (!raw) return null;
   try {
-    const parsed = JSON.parse(decodeURIComponent(raw) || '{}') as Record<string, unknown>;
-    const accessTok = typeof parsed.access_token === 'string' ? parsed.access_token : undefined;
+    // support either a URL-encoded JSON session payload (sb-session)
+    // or a raw JWT access token (sb-access-token)
+    let accessTok: string | undefined;
+    const maybe = decodeURIComponent(raw);
+    if (maybe.includes('.') && maybe.split('.').length === 3) {
+      accessTok = maybe; // raw JWT
+    } else {
+      const parsed = JSON.parse(maybe || '{}') as Record<string, unknown>;
+      accessTok = typeof parsed.access_token === 'string' ? parsed.access_token : undefined;
+    }
     if (!accessTok) return null;
     const parts = accessTok.split('.');
     if (parts.length !== 3) return null;
@@ -47,7 +55,11 @@ export async function getUserFromAuthClient(
       if (access && refresh) {
         serverDebug.debug('getUserFromAuthClient attempting setSession from cookies');
         const setResp = await supabaseAuth.auth.setSession({ access_token: access, refresh_token: refresh });
-        serverDebug.debug('getUserFromAuthClient setSession error:', setResp.error?.message ?? null);
+        if (setResp.error) {
+          serverDebug.debug('getUserFromAuthClient setSession error:', setResp.error.message ?? String(setResp.error));
+        } else {
+          serverDebug.debug('getUserFromAuthClient setSession succeeded');
+        }
         try {
           const retry = await supabaseAuth.auth.getUser();
           if (retry?.data?.user) return retry.data.user as User;

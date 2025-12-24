@@ -3,7 +3,7 @@ import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
-import  {financeService}  from '@/lib/services/financeService';
+// use internal totals API instead of calling financeService RPC directly
 
 
 export const dynamic = 'force-dynamic';
@@ -42,8 +42,24 @@ export async function GET(request: NextRequest) {
     const pendingResp = await client.from('transactions').select('*', { count: 'exact', head: true }).eq('payment_status', 'pending').eq('fiscal_year', new Date().getFullYear());
     const pendingFines = pendingResp.count ?? 0;
 
-    // Prefer the financeService RPC for club balance (uses service/client RPC)
-    const totalFund = await financeService.getClubBalance(new Date().getFullYear());
+    // Fetch club balance from internal totals API so logic is centralized
+    let totalFund = 0;
+    try {
+      const origin = new URL(request.url).origin;
+      const totalsResp = await fetch(`${origin}/api/finance/totals?year=${new Date().getFullYear()}`, {
+        headers: { cookie: request.headers.get('cookie') || '' },
+        cache: 'no-store',
+      });
+      if (totalsResp.ok) {
+        const body = await totalsResp.json().catch(() => null);
+        const totals = body?.totals ?? null;
+        totalFund = Number(totals?.clubBalance ?? totals?.club_balance ?? 0) || 0;
+      } else {
+        serverDebug.warn('[admin/overview] /api/finance/totals responded non-OK', { status: totalsResp.status });
+      }
+    } catch (err) {
+      serverDebug.error('[admin/overview] failed to fetch /api/finance/totals', err);
+    }
     
 
     return NextResponse.json({

@@ -1,16 +1,25 @@
 import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import { cookies } from 'next/headers';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    if (!url) return NextResponse.json({ ok: false, error: 'Missing SUPABASE URL' }, { status: 500 });
+    // Require session cookie presence before using service-role queries
+    const cookieStore = cookies();
+    const hasAuth = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAuth) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
 
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const client = serviceKey ? createClient(url, serviceKey) : createClient(url, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    // Use service role client for server-side queries
+    let client;
+    try {
+      client = getSupabaseServiceClient();
+    } catch (e) {
+      serverDebug.error('[profiles.id] missing service role config', String(e));
+      return NextResponse.json({ ok: false, error: 'Server misconfiguration' }, { status: 500 });
+    }
 
     const { data, error } = await client.from('profiles').select('id, full_name').eq('id', params.id).maybeSingle();
     if (error) {

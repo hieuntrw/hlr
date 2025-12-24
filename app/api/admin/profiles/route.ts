@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     let service;
     try {

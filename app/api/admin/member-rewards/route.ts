@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
   try {
     const supabaseAuth = supabaseServerClient(request);
     // ensure admin/mod_finance via shared helper (throws if not allowed)
-    const { user } = await ensureAdmin(supabaseAuth);
+    const { user } = await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     // Prefer service role client when available for full visibility; otherwise use authenticated client
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -237,7 +237,7 @@ export async function PUT(request: NextRequest) {
   // Deliver single or multiple reward rows.
   try {
     const supabaseAuth = supabaseServerClient(request);
-    const { user } = await ensureAdmin(supabaseAuth);
+    const { user } = await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)

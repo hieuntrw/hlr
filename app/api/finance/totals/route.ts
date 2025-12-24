@@ -1,7 +1,22 @@
 import { getSupabaseServiceClient } from '@/lib/supabase-service-client';
+import { cookies } from 'next/headers';
+import { decodeSbSessionCookie } from '@/lib/server-auth';
 
 export async function GET(req: Request) {
   try {
+    // Require an auth cookie to be present before allowing service-role queries.
+    const cookieStore = cookies();
+    const hasAccess = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAccess) {
+      return new Response(JSON.stringify({ ok: false, error: 'Không xác thực' }), { status: 401, headers: { 'content-type': 'application/json' } });
+    }
+
+    // Try to reconstruct a minimal user from the `sb-session` or raw access token.
+    const sbRaw = cookieStore.get('sb-session')?.value ?? cookieStore.get('sb-access-token')?.value;
+    const reconstructed = await decodeSbSessionCookie(sbRaw);
+    if (!reconstructed) {
+      return new Response(JSON.stringify({ ok: false, error: 'Không xác thực' }), { status: 401, headers: { 'content-type': 'application/json' } });
+    }
     const url = new URL(req.url);
     const yearParam = url.searchParams.get('year') ?? String(new Date().getFullYear());
     const year = Number(yearParam) || new Date().getFullYear();
@@ -16,14 +31,14 @@ export async function GET(req: Request) {
     ]);
 
     const openingRes = await svc
-      .from('transactions')
-      .select('amount, financial_categories(code)')
+      .from('view_finance_report_by_category')
+      .select('total_amount, category_code')
       .eq('fiscal_year', year)
-      .eq('payment_status', 'paid')
-      .eq('financial_categories.code', 'OPENING_BALANCE');
+      .eq('category_code', 'OPENING_BALANCE')
+      .maybeSingle();
 
-    const openingRows = openingRes.data as Array<{ amount: number | string | null }> | null;
-    const openingBalance = (openingRows ?? []).reduce((s, r) => s + Number(r.amount ?? 0), 0);
+    const openingRow = openingRes.data as { total_amount: number | string | null } | null;
+    const openingBalance = Number(openingRow?.total_amount ?? 0);
 
     const toNumber = (r: unknown) => {
       try {

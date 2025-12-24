@@ -54,6 +54,109 @@ export default function MemberFinancePage() {
   const [loading, setLoading] = useState(true);
   const { user, sessionChecked } = useAuth();
 
+  // Helper: normalize and map transactions rows to PublicExpense with diagnostics
+  const mapTransactionsToExpenses = (rowsIn: Record<string, unknown>[]) => {
+    const rows = rowsIn ?? [];
+    const total = rows.length;
+    let outCandidates = 0;
+    let paidCount = 0;
+    const mapped: PublicExpense[] = [];
+
+    for (const row of rows) {
+      const fc = row.financial_categories as any;
+
+      // Extract category id from several possible shapes
+      let categoryId: unknown = undefined;
+      if (fc && typeof fc === 'object') {
+        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = fc[0].id ?? fc[0].category_id ?? fc[0].financial_category_id;
+        else if (!Array.isArray(fc)) categoryId = fc.id ?? fc.category_id ?? fc.financial_category_id;
+      }
+      if (categoryId === undefined) categoryId = row.category_id ?? row.financial_category_id ?? row.categoryId;
+
+      // Extract category name
+      let categoryName = '';
+      if (fc && typeof fc === 'object') {
+        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String(fc[0].name ?? fc[0].title ?? '');
+        else if (!Array.isArray(fc)) categoryName = String(fc.name ?? fc.title ?? '');
+      }
+      if (!categoryName) categoryName = String(row.category_name ?? row.category ?? '');
+
+      // Flow and status (normalize various shapes)
+      const flow = String(row.flow_type ?? row.flow ?? (fc && (fc.flow_type ?? (Array.isArray(fc) ? fc[0]?.flow_type : undefined))) ?? '').toLowerCase();
+      const rawStatus = row.payment_status ?? row.status ?? row.status_name ?? row.paymentStatus ?? row.transaction_status ?? null;
+      let payment_status = '';
+      if (rawStatus === null || rawStatus === undefined) payment_status = '';
+      else if (typeof rawStatus === 'string') payment_status = rawStatus.toLowerCase();
+      else if (typeof rawStatus === 'number') payment_status = String(rawStatus);
+      else if (typeof rawStatus === 'boolean') payment_status = rawStatus ? 'paid' : 'pending';
+      const amount = Number(row.amount ?? row.value ?? 0) || 0;
+      const payment_date = String(row.processed_at ?? row.payment_date ?? row.created_at ?? '');
+
+      if (flow === 'out') outCandidates++;
+
+      // Determine paid status from multiple possible representations
+      const paidValues = new Set(['paid', 'completed', 'settled', 'success', 'confirmed', 'done']);
+      const numericPaid = payment_status === '1' || payment_status === 'true';
+      const boolPaid = Boolean(row.paid === true || row.is_paid === true || row.payment_confirmed === true);
+      const isPaid = paidValues.has(payment_status) || numericPaid || boolPaid;
+      if (isPaid) paidCount++;
+
+      if (flow === 'out' && isPaid && categoryId) {
+        mapped.push({ payment_date, category_name: categoryName, description: row.description ? String(row.description) : null, amount });
+      }
+    }
+
+    console.log('[MemberFinance] mapping diagnostics (normalized):', { total, outCandidates, paidCount, mappedCount: mapped.length });
+
+    if (mapped.length > 0) return mapped;
+
+    // If we had out candidates but no mapped rows, log those raw rows for inspection
+    if (outCandidates > 0 && mapped.length === 0) {
+      try {
+        const outRows = rowsIn
+          .map(r => r as Record<string, unknown>)
+          .filter(row => {
+            const fc = row.financial_categories as any;
+            const flow = String(row.flow_type ?? row.flow ?? (fc && (fc.flow_type ?? (Array.isArray(fc) ? fc[0]?.flow_type : undefined))) ?? '').toLowerCase();
+            return flow === 'out';
+          })
+          .slice(0, 5);
+        console.log('[MemberFinance] out-candidate sample rows (unmapped):', JSON.stringify(outRows, null, 2));
+      } catch (e) {
+        console.log('[MemberFinance] failed logging out-candidates', e);
+      }
+    }
+
+    // fallback: include paid items with amount>0 and category id if any
+    const fallback = rows
+      .filter((row) => {
+        const payment_status = String(row.payment_status ?? row.status ?? '').toLowerCase();
+        const amount = Number(row.amount ?? row.value ?? 0) || 0;
+        // detect category id similarly
+        const fc = row.financial_categories as any;
+        let categoryId: unknown = undefined;
+        if (fc && typeof fc === 'object') {
+          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = fc[0].id ?? fc[0].category_id ?? fc[0].financial_category_id;
+          else if (!Array.isArray(fc)) categoryId = fc.id ?? fc.category_id ?? fc.financial_category_id;
+        }
+        if (categoryId === undefined) categoryId = row.category_id ?? row.financial_category_id ?? row.categoryId;
+        return payment_status === 'paid' && amount > 0 && Boolean(categoryId);
+      })
+      .map((row) => {
+        const fc = row.financial_categories as any;
+        let categoryName = '';
+        if (fc && typeof fc === 'object') {
+          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String(fc[0].name ?? fc[0].title ?? '');
+          else if (!Array.isArray(fc)) categoryName = String(fc.name ?? fc.title ?? '');
+        }
+        if (!categoryName) categoryName = String(row.category_name ?? row.category ?? '');
+        return { payment_date: String(row.processed_at ?? row.payment_date ?? row.created_at ?? ''), category_name: categoryName, description: row.description ? String(row.description) : null, amount: Number(row.amount ?? row.value ?? 0) || 0 };
+      });
+
+    console.log('[MemberFinance] fallback mapped count (normalized):', fallback.length, fallback.slice(0, 3));
+    return fallback;
+  };
+
   useEffect(() => {
     async function loadData() {
       try {
@@ -62,12 +165,10 @@ export default function MemberFinancePage() {
 
         // Load dữ liệu song song: cá nhân + các báo cáo/thu/chi/số dư từ financeService
         const year = new Date().getFullYear();
-        // Call server endpoints for member-specific and public lists to avoid
-        // client-side supabase session race conditions.
-        const [transResp, totalsResp, expensesResp] = await Promise.all([
+        // Call server endpoints for member-specific lists and totals only.
+        const [transResp, totalsResp] = await Promise.all([
           fetch(`/api/finance/my?year=${year}`, { credentials: 'include' }),
           fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' }),
-          fetch('/api/finance/recent-expenses', { credentials: 'include' }),
         ]);
 
         const transBody = await (transResp.ok ? transResp.json() : Promise.resolve({ ok: false }));
@@ -76,14 +177,19 @@ export default function MemberFinancePage() {
         const totalsBody = await (totalsResp.ok ? totalsResp.json() : Promise.resolve({ ok: false }));
         const totals = (totalsBody && totalsBody.totals) ? totalsBody.totals : null;
 
-        const expensesBody = await (expensesResp.ok ? expensesResp.json() : Promise.resolve({ ok: false }));
-        const expensesData: unknown = expensesBody.data ?? [];
+        // Public transactions are loaded only when the user opens the public tab.
+        const expensesData: unknown = [];
 
         // Ép kiểu dữ liệu trả về từ service (nếu service trả về unknown/any)
         if (Array.isArray(transData)) setMyTrans(transData as MyTransaction[]);
         else setMyTrans([]);
-        if (Array.isArray(expensesData)) setPublicExpenses(expensesData as PublicExpense[]);
-        else setPublicExpenses([]);
+        if (Array.isArray(expensesData)) {
+          console.log('[MemberFinance] mapped publicExpenses count:', (expensesData as unknown[]).length, expensesData);
+          setPublicExpenses(expensesData as PublicExpense[]);
+        } else {
+          console.log('[MemberFinance] mapped publicExpenses empty or invalid:', expensesData);
+          setPublicExpenses([]);
+        }
 
         
         const opening = totals ? Number(totals.openingBalance ?? 0) : 0;
@@ -95,8 +201,7 @@ export default function MemberFinancePage() {
       setClubBalance(club);
       setTotalIncomeReal(incomeNum);
       setTotalExpense(expenseNum);
-       
-        
+              
       } catch (error) {
         console.error("Lỗi tải dữ liệu:", error);
       } finally {
@@ -105,6 +210,49 @@ export default function MemberFinancePage() {
     }
     loadData();
   }, [sessionChecked, user]);
+
+  // Fetch public expenses when user switches to the public tab (in case initial load skipped)
+  useEffect(() => {
+    if (activeTab !== 'public') return;
+    if (!sessionChecked) return;
+    if (!user) return;
+    if (publicExpenses.length > 0) {
+      console.debug('[MemberFinance] publicExpenses already loaded, skipping fetch');
+      return;
+    }
+
+    async function loadPublicOnly() {
+      console.debug('[MemberFinance] loading public expenses (tab switch)');
+      try {
+        const year = new Date().getFullYear();
+        const resp = await fetch(`/api/finance/transactions?year=${year}&limit=500`, { credentials: 'include' });
+        if (!resp.ok) {
+          const txt = await resp.text().catch(() => '');
+          console.error('[MemberFinance] /api/finance/transactions failure', resp.status, txt);
+          setPublicExpenses([]);
+          return;
+        }
+        const body = await resp.json().catch(() => ({ ok: false }));
+        const raw: unknown = (body as Record<string, unknown>)?.data ?? [];
+        if (!Array.isArray(raw)) {
+          console.debug('[MemberFinance] public fetch returned non-array', raw);
+          setPublicExpenses([]);
+          return;
+        }
+
+        console.debug('[MemberFinance] raw expenses count (tab fetch):', raw.length, (raw as unknown[]).slice(0,3));
+
+        const mapped = mapTransactionsToExpenses(raw as Record<string, unknown>[]);
+        console.log('[MemberFinance] mapped publicExpenses (tab fetch) count:', mapped.length, (mapped as PublicExpense[]).slice(0,3));
+        setPublicExpenses(mapped as PublicExpense[]);
+      } catch (err) {
+        console.error('[MemberFinance] error loading public expenses (tab fetch)', err);
+        setPublicExpenses([]);
+      }
+    }
+
+    void loadPublicOnly();
+  }, [activeTab, sessionChecked, user, publicExpenses.length]);
 
   // Tính tổng nợ (Pending + Loại là Thu)
   const totalDebt = myTrans
@@ -120,7 +268,7 @@ export default function MemberFinancePage() {
       {/* TABS SWITCHER */}
       <div className="flex p-1 bg-gray-100 rounded-lg w-fit">
         <button
-          onClick={() => setActiveTab('personal')}
+          onClick={() => { console.log('[MemberFinance] switch tab: personal'); setActiveTab('personal'); }}
           className={`px-4 py-2 rounded-md text-sm font-medium transition ${
             activeTab === 'personal' ? 'bg-white shadow text-blue-600' : 'text-gray-500'
           }`}
@@ -128,7 +276,7 @@ export default function MemberFinancePage() {
           Của tôi
         </button>
         <button
-          onClick={() => setActiveTab('public')}
+          onClick={() => { console.log('[MemberFinance] switch tab: public'); setActiveTab('public'); }}
           className={`px-4 py-2 rounded-md text-sm font-medium transition ${
             activeTab === 'public' ? 'bg-white shadow text-blue-600' : 'text-gray-500'
           }`}
@@ -253,32 +401,36 @@ export default function MemberFinancePage() {
               <TrendingUp size={20} /> Hoạt động chi tiêu gần đây
             </h3>
             <div className="overflow-hidden border rounded-xl shadow-sm">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-500 border-b">
-                  <tr>
-                    <th className="p-3 font-medium">Ngày</th>
-                    <th className="p-3 font-medium">Hạng mục</th>
-                    <th className="p-3 font-medium">Nội dung chi</th>
-                    <th className="p-3 font-medium text-right">Số tiền</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y bg-white">
-                  {publicExpenses.map((e, idx) => (
-                    <tr key={`${e.payment_date}-${e.amount}-${idx}`} className="hover:bg-gray-50">
-                      <td className="p-3 text-gray-500">{formatDate(e.payment_date)}</td>
-                      <td className="p-3">
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">
-                          {e.category_name}
-                        </span>
-                      </td>
-                      <td className="p-3 text-gray-800">{e.description}</td>
-                      <td className="p-3 text-right font-medium text-orange-600">
-                        -{formatCurrency(e.amount)}
-                      </td>
+              {publicExpenses.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">Chưa có hoạt động chi tiêu gần đây.</div>
+              ) : (
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-50 text-gray-500 border-b">
+                    <tr>
+                      <th className="p-3 font-medium">Ngày</th>
+                      <th className="p-3 font-medium">Hạng mục</th>
+                      <th className="p-3 font-medium">Nội dung chi</th>
+                      <th className="p-3 font-medium text-right">Số tiền</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y bg-white">
+                    {publicExpenses.map((e, idx) => (
+                      <tr key={`${e.payment_date}-${e.amount}-${idx}`} className="hover:bg-gray-50">
+                        <td className="p-3 text-gray-500">{formatDate(e.payment_date)}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-600">
+                            {e.category_name}
+                          </span>
+                        </td>
+                        <td className="p-3 text-gray-800">{e.description}</td>
+                        <td className="p-3 text-right font-medium text-orange-600">
+                          -{formatCurrency(e.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>

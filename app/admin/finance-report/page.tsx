@@ -21,6 +21,7 @@ interface CategoryReportItem {
 export default function FinanceReportPage() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [reportData, setReportData] = useState<CategoryReportItem[]>([]);
+  const [clubBalance, setClubBalance] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const { user, isLoading: authLoading, sessionChecked } = useAuth();
@@ -54,6 +55,12 @@ export default function FinanceReportPage() {
       try {
         const data = await financeService.getReportByCategory(year);
         if (data) setReportData(data as unknown as CategoryReportItem[]);
+        try {
+          const cb = await financeService.getClubBalance(year);
+          setClubBalance(cb);
+        } catch (err) {
+          console.error('Lỗi tải số dư quỹ:', err);
+        }
       } catch (error) {
         console.error('Lỗi tải báo cáo:', error);
       } finally {
@@ -103,6 +110,17 @@ export default function FinanceReportPage() {
         <div className="text-center py-10">Đang tính toán số liệu...</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-2xl shadow-sm border p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold">Số dư hiện tại</h3>
+                <p className="text-sm text-gray-500">Số dư quỹ của câu lạc bộ</p>
+              </div>
+              <div className={`text-2xl font-bold ${clubBalance !== null ? (clubBalance > 0 ? 'text-green-600' : clubBalance < 0 ? 'text-red-600' : 'text-gray-700') : 'text-gray-700'}`}>
+                {formatCurrency(clubBalance ?? 0)}
+              </div>
+            </div>
+          </div>
           
           <ReportSection 
             title="NGUỒN THU (INCOME)" 

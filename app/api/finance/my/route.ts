@@ -73,7 +73,7 @@ export async function GET(req: Request) {
           .select('*')
           .eq('user_id', diagUserId)
           .eq('fiscal_year', year)
-          .order('created_at', { ascending: false })
+          .order('payment_status', { ascending: false })
           .limit(10);
 
         const { data: viewSample, error: viewErr } = await svc
@@ -127,6 +127,7 @@ export async function GET(req: Request) {
         .select('*')
         .eq('user_id', targetUserId)
         .eq('fiscal_year', year)
+        .order('payment_status', { ascending: false })
         .order('created_at', { ascending: false });
 
       console.log('[api/finance/my] svc response status=', status, 'error=', String(error), 'dataType=', Array.isArray(data) ? 'array' : typeof data);
@@ -177,6 +178,7 @@ export async function GET(req: Request) {
               .select('id:user_id, amount, description, created_at, payment_status, fiscal_year, period_month, processed_at, category_id')
               .eq('user_id', userId)
               .eq('fiscal_year', year)
+              .order('payment_status', { ascending: false })
               .order('created_at', { ascending: false })
               .limit(50);
 
