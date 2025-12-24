@@ -63,26 +63,26 @@ export default function MemberFinancePage() {
     const mapped: PublicExpense[] = [];
 
     for (const row of rows) {
-      const fc = row.financial_categories as any;
+      const fc = row.financial_categories as Record<string, unknown> | Array<Record<string, unknown>> | null;
 
       // Extract category id from several possible shapes
       let categoryId: unknown = undefined;
       if (fc && typeof fc === 'object') {
-        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = fc[0].id ?? fc[0].category_id ?? fc[0].financial_category_id;
-        else if (!Array.isArray(fc)) categoryId = fc.id ?? fc.category_id ?? fc.financial_category_id;
+        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = (fc[0] as Record<string, unknown>).id ?? (fc[0] as Record<string, unknown>).category_id ?? (fc[0] as Record<string, unknown>).financial_category_id;
+        else if (!Array.isArray(fc)) categoryId = (fc as Record<string, unknown>).id ?? (fc as Record<string, unknown>).category_id ?? (fc as Record<string, unknown>).financial_category_id;
       }
       if (categoryId === undefined) categoryId = row.category_id ?? row.financial_category_id ?? row.categoryId;
 
       // Extract category name
       let categoryName = '';
       if (fc && typeof fc === 'object') {
-        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String(fc[0].name ?? fc[0].title ?? '');
-        else if (!Array.isArray(fc)) categoryName = String(fc.name ?? fc.title ?? '');
+        if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String((fc[0] as Record<string, unknown>).name ?? (fc[0] as Record<string, unknown>).title ?? '');
+        else if (!Array.isArray(fc)) categoryName = String((fc as Record<string, unknown>).name ?? (fc as Record<string, unknown>).title ?? '');
       }
       if (!categoryName) categoryName = String(row.category_name ?? row.category ?? '');
 
       // Flow and status (normalize various shapes)
-      const flow = String(row.flow_type ?? row.flow ?? (fc && (fc.flow_type ?? (Array.isArray(fc) ? fc[0]?.flow_type : undefined))) ?? '').toLowerCase();
+      const flow = String(row.flow_type ?? row.flow ?? (fc && ((Array.isArray(fc) ? (fc[0] as Record<string, unknown>)['flow_type'] : (fc as Record<string, unknown>)['flow_type']) ?? undefined)) ?? '').toLowerCase();
       const rawStatus = row.payment_status ?? row.status ?? row.status_name ?? row.paymentStatus ?? row.transaction_status ?? null;
       let payment_status = '';
       if (rawStatus === null || rawStatus === undefined) payment_status = '';
@@ -116,8 +116,8 @@ export default function MemberFinancePage() {
         const outRows = rowsIn
           .map(r => r as Record<string, unknown>)
           .filter(row => {
-            const fc = row.financial_categories as any;
-            const flow = String(row.flow_type ?? row.flow ?? (fc && (fc.flow_type ?? (Array.isArray(fc) ? fc[0]?.flow_type : undefined))) ?? '').toLowerCase();
+            const fc = row.financial_categories as Record<string, unknown> | Record<string, unknown>[] | null;
+            const flow = String(row.flow_type ?? row.flow ?? (fc && ((Array.isArray(fc) ? (fc[0] as Record<string, unknown>)['flow_type'] : (fc as Record<string, unknown>)['flow_type']) ?? undefined)) ?? '').toLowerCase();
             return flow === 'out';
           })
           .slice(0, 5);
@@ -133,21 +133,21 @@ export default function MemberFinancePage() {
         const payment_status = String(row.payment_status ?? row.status ?? '').toLowerCase();
         const amount = Number(row.amount ?? row.value ?? 0) || 0;
         // detect category id similarly
-        const fc = row.financial_categories as any;
+        const fc = row.financial_categories as Record<string, unknown> | Record<string, unknown>[] | null;
         let categoryId: unknown = undefined;
         if (fc && typeof fc === 'object') {
-          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = fc[0].id ?? fc[0].category_id ?? fc[0].financial_category_id;
-          else if (!Array.isArray(fc)) categoryId = fc.id ?? fc.category_id ?? fc.financial_category_id;
+          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryId = (fc[0] as Record<string, unknown>).id ?? (fc[0] as Record<string, unknown>).category_id ?? (fc[0] as Record<string, unknown>).financial_category_id;
+          else if (!Array.isArray(fc)) categoryId = (fc as Record<string, unknown>).id ?? (fc as Record<string, unknown>).category_id ?? (fc as Record<string, unknown>).financial_category_id;
         }
         if (categoryId === undefined) categoryId = row.category_id ?? row.financial_category_id ?? row.categoryId;
         return payment_status === 'paid' && amount > 0 && Boolean(categoryId);
       })
       .map((row) => {
-        const fc = row.financial_categories as any;
+        const fc = row.financial_categories as Record<string, unknown> | Record<string, unknown>[] | null;
         let categoryName = '';
         if (fc && typeof fc === 'object') {
-          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String(fc[0].name ?? fc[0].title ?? '');
-          else if (!Array.isArray(fc)) categoryName = String(fc.name ?? fc.title ?? '');
+          if (Array.isArray(fc) && fc.length > 0 && fc[0] && typeof fc[0] === 'object') categoryName = String((fc[0] as Record<string, unknown>).name ?? (fc[0] as Record<string, unknown>).title ?? '');
+          else if (!Array.isArray(fc)) categoryName = String((fc as Record<string, unknown>).name ?? (fc as Record<string, unknown>).title ?? '');
         }
         if (!categoryName) categoryName = String(row.category_name ?? row.category ?? '');
         return { payment_date: String(row.processed_at ?? row.payment_date ?? row.created_at ?? ''), category_name: categoryName, description: row.description ? String(row.description) : null, amount: Number(row.amount ?? row.value ?? 0) || 0 };

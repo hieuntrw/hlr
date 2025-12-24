@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
 
@@ -10,9 +10,13 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -24,12 +28,9 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
 
-    const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-      : null;
-
+    const service = getSupabaseServiceClient();
     const client = service || supabaseAuth;
 
     const url = new URL(request.url);
@@ -74,9 +75,13 @@ export async function GET(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -87,8 +92,7 @@ export async function PUT(request: NextRequest) {
         },
       }
     );
-
-    const { user } = await ensureAdmin(supabaseAuth);
+    const { user } = await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || !body.id || !body.action) return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
@@ -96,10 +100,7 @@ export async function PUT(request: NextRequest) {
     const id = String(body.id);
     const action = String(body.action);
 
-    const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-      : null;
-
+    const service = getSupabaseServiceClient();
     const client = service || supabaseAuth;
 
     if (action === 'approve') {

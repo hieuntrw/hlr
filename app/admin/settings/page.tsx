@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
-import { financeService } from "@/lib/services/financeService";
+// Create opening balance via server API
 
 interface SystemSetting {
   key: string;
@@ -101,10 +101,20 @@ export default function SettingsPage() {
     setSettling(true);
     setSettleMessage(null);
     try {
-      await financeService.createOpeningBalance(settleYear);
-      setSettleMessage(`Đã quyết toán thành công số dư ${settleYear} → đầu kỳ ${settleYear + 1}`);
-      // refresh settings or other UI if needed
-      fetchSettings();
+      const res = await fetch('/api/finance/totals', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ prev_year: settleYear }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        console.error('Quyết toán thất bại', res.status, json);
+        setSettleMessage(`Lỗi khi quyết toán: ${res.status}`);
+      } else {
+        setSettleMessage(`Đã quyết toán thành công số dư ${settleYear} → đầu kỳ ${settleYear + 1}`);
+        fetchSettings();
+      }
     } catch (err) {
       console.error('Quyết toán thất bại', err);
       setSettleMessage(String(err) || 'Lỗi khi quyết toán');

@@ -7,9 +7,13 @@ import ensureAdmin from '@/lib/server-auth';
 
 export async function POST(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -21,7 +25,7 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const { user } = await ensureAdmin(supabaseAuth);
+    const { user } = await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, registration_deadline, min_pace_seconds, max_pace_seconds, min_km, description, require_map } = body;

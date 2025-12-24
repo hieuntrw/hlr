@@ -24,9 +24,13 @@ export async function POST(req: NextRequest) {
 
     // Create server client to get current user session
     const response = NextResponse.next();
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {

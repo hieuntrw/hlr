@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
 
@@ -10,9 +10,15 @@ export async function GET(request: NextRequest) {
   const start = Date.now();
   serverDebug.debug('[admin/financial-categories] GET start', { url: request.url });
   try {
+    // Ensure service role is configured and the caller is an admin/mod via cookie
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
+
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -24,17 +30,10 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    // Prefer the shared service-client helper for consistency
+    const service = getSupabaseServiceClient();
 
     const url = new URL(request.url);
     const fields = url.searchParams.get('fields') || '*';

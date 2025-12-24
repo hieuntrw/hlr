@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import Link from 'next/link';
-import { Plus, Search, Filter } from 'lucide-react';
+import { Plus } from 'lucide-react';
 // financeService not needed for totals here; using server totals endpoint
 import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
@@ -26,6 +26,7 @@ interface TransactionWithDetails {
     flow_type: 'in' | 'out';
     code: string;
   } | null;
+  fiscal_year?: number | null;
 }
 
 // 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
@@ -33,6 +34,7 @@ interface KPICardProps {
   title: string;
   value: string | number;
   color: string;
+  active?: boolean;
 }
 
 export default function AdminFinanceDashboard() {
@@ -42,11 +44,19 @@ export default function AdminFinanceDashboard() {
   
   const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const pageSize = 50;
+  const [hasMore, setHasMore] = useState(true);
+  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterFlow, setFilterFlow] = useState<string>('');
   const [clubBalance, setClubBalance] = useState<number | null>(null);
-  const [pendingIncome, setPendingIncome] = useState<number | null>(null);
-  const [totalIncomeReal, setTotalIncomeReal] = useState<number | null>(null);
-  const [totalExpense, setTotalExpense] = useState<number | null>(null);
+  const [pendingTotal, setPendingTotal] = useState<number | null>(null);
+  const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
+  const [expenseTotal, setExpenseTotal] = useState<number | null>(null);
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
+  const [excludeOpening, setExcludeOpening] = useState(false);
+  const [selectedKPI, setSelectedKPI] = useState<'pending' | 'income' | 'expense' | null>(null);
 
   const checkRole = useCallback(async () => {
     if (!user) {
@@ -71,33 +81,70 @@ export default function AdminFinanceDashboard() {
     setLoading(true);
     async function fetchAll() {
       const year = new Date().getFullYear();
-      const [totalsResp, transResp] = await Promise.all([
-        fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' }),
-        fetch(`/api/finance/transactions?year=${year}&limit=100`, { credentials: 'include' }),
-      ]);
-
+      const totalsResp = await fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' });
       const totalsBody = await (totalsResp.ok ? totalsResp.json() : Promise.resolve({ ok: false }));
       const totals = totalsBody?.totals ?? null;
-
       const opening = totals ? Number(totals.openingBalance ?? 0) : 0;
       const club = totals ? Number(totals.clubBalance ?? 0) : 0;
-      const pendingNum = totals ? Number(totals.pendingIncome ?? 0) : 0;
-      const incomeNum = totals ? Number(totals.totalIncomeReal ?? 0) : 0;
-      const expenseNum = totals ? Number(totals.totalExpense ?? 0) : 0;
-
-     // setStats({ opening_balance: opening, total_revenue: incomeNum, total_expense: expenseNum, current_balance: club });
+      const pending = totals ? Number(totals.pendingIncome ?? 0) : 0;
+      const income = totals ? Number(totals.totalIncomeReal ?? 0) : 0;
+      const expense = totals ? Number(totals.totalExpense ?? 0) : 0;
       setOpeningBalance(opening);
       setClubBalance(club);
-      setPendingIncome(pendingNum);
-      setTotalIncomeReal(incomeNum);
-      setTotalExpense(expenseNum);
-      const transBody = await (transResp.ok ? transResp.json() : Promise.resolve({ ok: false }));
-      const transData = transBody?.data ?? [];
-      if (Array.isArray(transData)) setTransactions(transData as unknown as TransactionWithDetails[]);
+      setPendingTotal(pending);
+      setIncomeTotal(income);
+      setExpenseTotal(expense);
+
+      // fetch first page of transactions (no year filter)
+      await fetchTransactions(0, false);
       setLoading(false);
     }
     fetchAll();
   }, [authLoading, sessionChecked, user]);
+
+  // load more transactions when scrolling near bottom
+  const buildQuery = (off = 0, overrides?: { status?: string; flow?: string; excludeOpening?: boolean }) => {
+    const qs = new URLSearchParams();
+    qs.set('limit', String(pageSize));
+    qs.set('offset', String(off));
+    const status = overrides?.status ?? filterStatus;
+    const flow = overrides?.flow ?? filterFlow;
+    const excl = overrides?.excludeOpening ?? excludeOpening;
+    if (status) qs.set('status', status);
+    if (flow) qs.set('flow_type', flow);
+    if (excl) qs.set('exclude_category_code', 'OPENING_BALANCE');
+    return qs.toString();
+  };
+
+  const fetchTransactions = async (off = 0, append = false, overrides?: { status?: string; flow?: string; excludeOpening?: boolean }) => {
+    if (loadingMore) return;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    try {
+      const resp = await fetch(`/api/finance/transactions?${buildQuery(off, overrides)}`, { credentials: 'include' });
+      const body = await (resp.ok ? resp.json() : Promise.resolve({ ok: false }));
+      const rows = Array.isArray(body?.data) ? (body.data as TransactionWithDetails[]) : [];
+      if (rows.length > 0) {
+        if (append) setTransactions(prev => [...prev, ...rows]);
+        else setTransactions(rows);
+        setOffset(off + rows.length);
+        setHasMore(rows.length >= pageSize);
+      } else {
+        if (!append) setTransactions([]);
+        setHasMore(false);
+      }
+    } catch (e) {
+      console.error('fetchTransactions error', e);
+    } finally {
+      if (append) setLoadingMore(false);
+      else setLoading(false);
+    }
+  };
+
+  const loadMore = () => {
+    if (!hasMore || loadingMore) return;
+    fetchTransactions(offset, true);
+  };
 
   // Hành động xác nhận thu tiền nhanh
   const markAsPaid = async (id: string, flowType: string = 'in') => {
@@ -127,6 +174,21 @@ export default function AdminFinanceDashboard() {
     alert('Có lỗi xảy ra, vui lòng thử lại.');
   }
 };
+
+  // KPI numbers are provided by `/api/finance/totals` (stored in pendingTotal, incomeTotal, expenseTotal)
+
+  // Server-side filtered transactions are stored in `transactions`
+  const displayedTransactions = transactions;
+
+  // Debounce search/filter changes
+  useEffect(() => {
+    const t = setTimeout(() => {
+      // reset offset and fetch fresh
+      fetchTransactions(0, false);
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterStatus, filterFlow, excludeOpening]);
 
  if (loading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
 
@@ -159,40 +221,43 @@ export default function AdminFinanceDashboard() {
         </div>
 
         {/* Card 2: Nợ phải thu (Pending) - Cái này tính từ list transactions hoặc gọi API riêng */}
-        <KPICard 
-          title="Nợ phải thu (Pending)" 
-          value={formatCurrency(pendingIncome ?? 0)} 
-          color="red" 
-        />
-
-        {/* Card 3: Thu Mới (Revenue) */}
-        <KPICard 
-          title="Thu Mới (Trong năm)" 
-          value={formatCurrency(totalIncomeReal ?? 0)} 
-          color="green" 
-        />
-
-        {/* Card 4: Tổng Chi */}
-        <KPICard 
-          title="Tổng Chi (Trong năm)" 
-          value={formatCurrency(totalExpense ?? 0)} 
-          color="orange" 
-        />
+        <button type="button" onClick={() => { setSelectedKPI('pending'); setFilterStatus('pending'); setFilterFlow(''); setExcludeOpening(false); fetchTransactions(0,false,{ status: 'pending', flow: '', excludeOpening: false }); }}>
+          <KPICard title="Nợ phải thu (Pending)" value={formatCurrency(pendingTotal ?? 0)} color="red" active={selectedKPI === 'pending'} />
+        </button>
+        <button type="button" onClick={() => { setSelectedKPI('income'); setFilterStatus('paid'); setFilterFlow('in'); setExcludeOpening(true); fetchTransactions(0,false,{ status: 'paid', flow: 'in', excludeOpening: true }); }}>
+          <KPICard title="Thu Mới (Trong năm)" value={formatCurrency(incomeTotal ?? 0)} color="green" active={selectedKPI === 'income'} />
+        </button>
+        <button type="button" onClick={() => { setSelectedKPI('expense'); setFilterStatus('paid'); setFilterFlow('out'); setExcludeOpening(false); fetchTransactions(0,false,{ status: 'paid', flow: 'out', excludeOpening: false }); }}>
+          <KPICard title="Tổng Chi (Trong năm)" value={formatCurrency(expenseTotal ?? 0)} color="orange" active={selectedKPI === 'expense'} />
+        </button>
       </div>
 
       {/* TABLE */}
-      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b flex gap-4 bg-gray-50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-            <input type="text" placeholder="Tìm thành viên, nội dung..." className="pl-10 pr-4 py-2 border rounded-lg w-full text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+          <div className="flex items-center gap-2">
+            <select value={filterFlow} onChange={e => setFilterFlow(e.target.value)} className="border rounded px-2 py-1 text-sm">
+              <option value="">Tất cả loại</option>
+              <option value="in">Thu (in)</option>
+              <option value="out">Chi (out)</option>
+            </select>
+            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border rounded px-2 py-1 text-sm">
+              <option value="">Tất cả trạng thái</option>
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            <button onClick={() => { setFilterFlow(''); setFilterStatus(''); setExcludeOpening(false); setSelectedKPI(null); fetchTransactions(0,false); }} className="px-3 py-2 border rounded-lg bg-white text-gray-600 hover:bg-gray-50">Reset</button>
+          
           </div>
-          <button className="flex items-center gap-2 px-3 py-2 border rounded-lg bg-white text-gray-600 hover:bg-gray-50">
-            <Filter size={18} /> Bộ lọc
-          </button>
         </div>
-
-        <table className="w-full text-sm text-left">
+        <div className="max-h-[60vh] overflow-auto" onScroll={(e) => {
+            const el = e.currentTarget as HTMLElement;
+            if (el.scrollHeight - el.scrollTop <= el.clientHeight + 200) {
+              loadMore();
+            }
+          }}>
+          <table className="w-full text-sm text-left">
           <thead className="bg-gray-100 text-gray-600 border-b">
             <tr>
               <th className="p-3">Ngày tạo</th>
@@ -205,7 +270,7 @@ export default function AdminFinanceDashboard() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {transactions.map((t) => (
+            {displayedTransactions.map((t) => (
               <tr key={t.id} className="hover:bg-gray-50">
                 <td className="p-3 text-gray-500">{formatDate(t.created_at)}</td>
                 <td className="p-3 font-medium text-gray-800">
@@ -219,9 +284,7 @@ export default function AdminFinanceDashboard() {
                   </span>
                 </td>
                 <td className="p-3 text-gray-600 max-w-xs truncate">{t.description}</td>
-                <td className={`p-3 text-right font-medium ${
-                  t.financial_categories?.flow_type === 'in' ? 'text-green-600' : 'text-orange-600'
-                }`}>
+                <td className={`p-3 text-right font-medium ${t.financial_categories?.flow_type === 'in' ? 'text-green-600' : 'text-orange-600'}`}>
                   {t.financial_categories?.flow_type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
                 </td>
                 <td className="p-3 text-center">
@@ -246,8 +309,15 @@ export default function AdminFinanceDashboard() {
                 </td>
               </tr>
             ))}
+            {loadingMore && (
+              <tr><td colSpan={7} className="p-4 text-center text-sm text-gray-500">Đang tải thêm...</td></tr>
+            )}
           </tbody>
-        </table>
+          </table>
+        </div>
+        {!hasMore && (
+          <div className="p-3 text-center text-xs text-gray-500">Không còn giao dịch để tải.</div>
+        )}
       </div>
     </div>
   );
@@ -256,8 +326,11 @@ export default function AdminFinanceDashboard() {
 // Sub-components
 
 // Thay 'any' bằng Interface KPICardProps
-const KPICard = ({ title, value, color }: KPICardProps) => (
-  <div className={`p-4 rounded-xl border-l-4 bg-white shadow-sm border border-gray-100`} style={{ borderLeftColor: color }}>
+const KPICard = ({ title, value, color, active = false }: KPICardProps) => (
+  <div
+    className={`p-4 rounded-xl border-l-4 bg-white shadow-sm border ${active ? 'ring-2 ring-offset-1 ring-indigo-200' : 'border-gray-100'}`}
+    style={{ borderLeftColor: color }}
+  >
     <p className="text-gray-500 text-sm">{title}</p>
     <p className="text-xl font-bold text-gray-800 mt-1">{value}</p>
   </div>

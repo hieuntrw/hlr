@@ -1,18 +1,22 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
 import ensureAdmin from '@/lib/server-auth';
 
 export const dynamic = 'force-dynamic';
-import { createClient } from '@supabase/supabase-js';
 
 // use shared `ensureAdmin` helper
 
 export async function GET(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -24,7 +28,7 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
 
     const { data, error } = await supabaseAuth
       .from('system_settings')
@@ -68,15 +72,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Thiếu khóa' }, { status: 400 });
     }
 
-    if (process.env.SUPABASE_SERVICE_ROLE_KEY == null) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-
-    const service = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const service = getSupabaseServiceClient();
 
     const upsertPayload: Record<string, unknown> = { key: String(key), value: String(value ?? '') };
 

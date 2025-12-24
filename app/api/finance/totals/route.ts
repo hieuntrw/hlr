@@ -1,6 +1,7 @@
 import { getSupabaseServiceClient } from '@/lib/supabase-service-client';
 import { cookies } from 'next/headers';
-import { decodeSbSessionCookie } from '@/lib/server-auth';
+import { decodeSbSessionCookie, ensureAdmin } from '@/lib/server-auth';
+import { createServerClient } from '@supabase/ssr';
 
 export async function GET(req: Request) {
   try {
@@ -61,6 +62,44 @@ export async function GET(req: Request) {
     return new Response(JSON.stringify({ ok: true, totals: { openingBalance, totalIncomeReal, totalExpense, pendingIncome, clubBalance } }), { status: 200, headers: { 'content-type': 'application/json' } });
   } catch (err) {
     console.error('[api/finance/totals] error', String(err));
+    return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    // Admin-only: create or update opening balance for next year via RPC create_opening_balance
+    const cookieStore = cookies();
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error('[api/finance/totals] SUPABASE_SERVICE_ROLE_KEY not configured');
+      return new Response(JSON.stringify({ ok: false, error: 'Server not configured' }), { status: 500, headers: { 'content-type': 'application/json' } });
+    }
+
+    const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      cookies: {
+        get(name: string) {
+          return cookieStore.get(name)?.value;
+        },
+        set() {},
+        remove() {},
+      },
+    });
+    await ensureAdmin(supabaseAuth, (name: string) => cookieStore.get(name)?.value);
+
+    const body = await req.json().catch(() => ({}));
+    const prevYear = typeof body?.prev_year === 'number' ? body.prev_year : (typeof body?.prev_year === 'string' ? Number(body.prev_year) : undefined);
+    if (!prevYear) return new Response(JSON.stringify({ ok: false, error: 'missing prev_year' }), { status: 400, headers: { 'content-type': 'application/json' } });
+
+    const svc = getSupabaseServiceClient();
+    const { error } = await svc.rpc('create_opening_balance', { prev_year: prevYear });
+    if (error) {
+      console.error('[api/finance/totals] create_opening_balance error', error);
+      return new Response(JSON.stringify({ ok: false, error: String(error) }), { status: 500, headers: { 'content-type': 'application/json' } });
+    }
+
+    return new Response(JSON.stringify({ ok: true, data: { success: true } }), { status: 200, headers: { 'content-type': 'application/json' } });
+  } catch (err) {
+    console.error('[api/finance/totals] POST error', String(err));
     return new Response(JSON.stringify({ ok: false, error: String(err) }), { status: 500, headers: { 'content-type': 'application/json' } });
   }
 }

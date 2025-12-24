@@ -15,15 +15,51 @@ export const financeService = {
  
 // Hàm mới: Lấy báo cáo theo danh mục và năm
   async getReportByCategory(year: number) {
-    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
-    const { data, error } = await client
-      .from('view_finance_report_by_category')
-      .select('*')
-      .eq('fiscal_year', year)
-      .order('total_amount', { ascending: false }); // Sắp xếp số tiền lớn nhất lên đầu
+    // Try client-side first (when session is ready), otherwise fallback to server endpoint.
+    async function tryClient() {
+      return (typeof window === 'undefined' ? getSupabaseServiceClient() : supabase)
+        .from('view_finance_report_by_category')
+        .select('*')
+        .eq('fiscal_year', year)
+        .order('total_amount', { ascending: false });
+    }
 
-    if (error) throw error;
-    return data;
+    async function retry<T>(fn: () => Promise<T>, attempts = 3, delayMs = 250): Promise<T> {
+      let lastErr: unknown;
+      for (let i = 0; i < attempts; i++) {
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          return await fn();
+        } catch (e) {
+          lastErr = e;
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(res => setTimeout(res, delayMs * (i + 1)));
+        }
+      }
+      throw lastErr;
+    }
+
+    try {
+      const res = await retry(() => tryClient());
+      if (res && typeof res === 'object') {
+        const rec = res as unknown as Record<string, unknown>;
+        if (rec.error) throw rec.error as Error;
+        if (rec.data) return rec.data as unknown;
+      }
+    } catch (e) {
+      // fallthrough to server fallback
+      console.warn('[financeService] client getReportByCategory failed, falling back to server', String(e));
+    }
+
+    try {
+      const r = await fetch(`/api/finance/report?year=${encodeURIComponent(String(year))}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(`server fallback failed ${r.status}`);
+      const body = await r.json();
+      return body.data ?? [];
+    } catch (e) {
+      console.error('[financeService] getReportByCategory fallback error', String(e));
+      throw e;
+    }
   },
 
   // 1. Lấy thống kê công khai 
@@ -162,10 +198,25 @@ export const financeService = {
   // Lấy số dư quỹ hiện tại (RPC -> get_club_balance)
   async getClubBalance(year: number) {
     const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
-    const { data, error } = await client.rpc('get_club_balance', { year_input: year });
-    if (error) throw error;
-    const value = data as unknown;
-    return typeof value === 'number' ? value : Number(value ?? 0);
+    try {
+      const { data, error } = await client.rpc('get_club_balance', { year_input: year });
+      if (error) throw error;
+      const value = data as unknown;
+      return typeof value === 'number' ? value : Number(value ?? 0);
+    } catch (e) {
+      console.warn('[financeService] client getClubBalance failed, falling back to server', String(e));
+    }
+
+    // server fallback: reuse totals endpoint
+    try {
+      const r = await fetch(`/api/finance/totals?year=${encodeURIComponent(String(year))}`, { credentials: 'include' });
+      if (!r.ok) throw new Error(`server fallback failed ${r.status}`);
+      const body = await r.json();
+      return Number(body?.totals?.clubBalance ?? 0);
+    } catch (e) {
+      console.error('[financeService] getClubBalance fallback error', String(e));
+      throw e;
+    }
   },
 /*
   // Server-friendly helper which accepts a Supabase client (service or server client)
@@ -179,13 +230,7 @@ export const financeService = {
     return typeof value === 'number' ? value : Number(value ?? 0);
   },
 */
-  // Tạo hoặc cập nhật số dư đầu kỳ cho năm tiếp theo (RPC -> create_opening_balance)
-  async createOpeningBalance(prevYear: number) {
-    const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
-    const { error } = await client.rpc('create_opening_balance', { prev_year: prevYear });
-    if (error) throw error;
-    return { success: true };
-  },
+ 
 
   // Lấy số dư đầu kỳ (OPENING_BALANCE) cho năm
   async getOpeningBalance(year: number) {
@@ -210,7 +255,9 @@ export const financeService = {
     amount: number,
     description: string,
     userId: string | null = null,
-    metadata: TransactionMetadata = {}
+    metadata: TransactionMetadata = {},
+    fiscal_year?: number,
+    period_month?: number
   ) {
     // Lấy ID danh mục
     const client = typeof window === 'undefined' ? getSupabaseServiceClient() : supabase;
@@ -230,8 +277,8 @@ export const financeService = {
       description: description,
       metadata: metadata,
       payment_status: 'pending', // Mặc định là nợ, nếu chi tiền mặt ngay thì update sau
-      fiscal_year: new Date().getFullYear(),
-      period_month: new Date().getMonth() + 1
+      fiscal_year: typeof fiscal_year === 'number' ? fiscal_year : new Date().getFullYear(),
+      period_month: typeof period_month === 'number' ? period_month : new Date().getMonth() + 1
     });
     
   }

@@ -4,8 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { getEffectiveRole } from '@/lib/auth/role';
 import { formatCurrency } from '@/lib/utils';
-// 1. Đã dùng financeService, bỏ import Download thừa
-import { financeService } from '@/lib/services/financeService';
+// Use server API endpoints instead of financeService
 import { ArrowLeft, PieChart } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth/AuthContext';
@@ -53,11 +52,19 @@ export default function FinanceReportPage() {
     async function loadReport() {
       setLoading(true);
       try {
-        const data = await financeService.getReportByCategory(year);
-        if (data) setReportData(data as unknown as CategoryReportItem[]);
+        // Fetch report rows from server endpoint
+        const rep = await fetch(`/api/finance/report?year=${encodeURIComponent(String(year))}`, { credentials: 'include' });
+        if (!rep.ok) throw new Error(`report fetch failed ${rep.status}`);
+        const repBody = await rep.json();
+        if (!repBody?.ok) throw new Error(repBody?.error ?? 'report error');
+        setReportData((repBody.data ?? []) as CategoryReportItem[]);
+
+        // Fetch totals (includes clubBalance)
         try {
-          const cb = await financeService.getClubBalance(year);
-          setClubBalance(cb);
+          const tot = await fetch(`/api/finance/totals?year=${encodeURIComponent(String(year))}`, { credentials: 'include' });
+          if (!tot.ok) throw new Error(`totals fetch failed ${tot.status}`);
+          const totBody = await tot.json();
+          setClubBalance(Number(totBody?.totals?.clubBalance ?? 0));
         } catch (err) {
           console.error('Lỗi tải số dư quỹ:', err);
         }

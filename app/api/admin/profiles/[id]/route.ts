@@ -11,9 +11,13 @@ import ensureAdmin from '@/lib/server-auth';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -25,7 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
@@ -73,9 +77,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -87,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -146,9 +154,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const id = params.id;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -160,7 +172,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)

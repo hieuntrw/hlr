@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { createClient } from '@supabase/supabase-js';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
 // use internal totals API instead of calling financeService RPC directly
@@ -9,17 +9,24 @@ import ensureAdmin from '@/lib/server-auth';
 export const dynamic = 'force-dynamic';
 
 async function getServiceClient() {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+  try {
+    return getSupabaseServiceClient();
+  } catch {
+    return null;
+  }
 }
 
 // use shared `ensureAdmin` helper
 
 export async function GET(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       { cookies: { get(name: string) { return request.cookies.get(name)?.value }, set() {}, remove() {} } }
     );
 

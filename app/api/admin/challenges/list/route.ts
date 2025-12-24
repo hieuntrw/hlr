@@ -1,5 +1,6 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
+import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
 import ensureAdmin from '@/lib/server-auth';
 
@@ -9,9 +10,13 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
     const supabaseAuth = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
       {
         cookies: {
           get(name: string) {
@@ -23,11 +28,14 @@ export async function GET(request: NextRequest) {
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
+
+    const svc = getSupabaseServiceClient();
+    const client = svc || supabaseAuth;
 
     // Prefer selecting the cached `participant_count` column if present in DB.
     // If the column is missing in older DBs, fall back to counting participants.
-    const challengesRes = await supabaseAuth
+    const challengesRes = await client
       .from('challenges')
       .select('id, title, start_date, end_date, registration_deadline, status, is_locked, is_hide, created_by, profiles(full_name), participant_count')
       .order('start_date', { ascending: false });
@@ -36,7 +44,7 @@ export async function GET(request: NextRequest) {
       const msg = String(challengesRes.error.message || challengesRes.error);
       // If participant_count column doesn't exist, fall back to older approach
       if (/participant_count/i.test(msg) && /does not exist/i.test(msg)) {
-        const { data: challenges, error } = await supabaseAuth
+        const { data: challenges, error } = await client
           .from('challenges')
           .select('id, title, start_date, end_date, registration_deadline, status, is_locked, is_hide, created_by, profiles(full_name)')
           .order('start_date', { ascending: false });
@@ -49,7 +57,7 @@ export async function GET(request: NextRequest) {
         const ids = (challenges || []).map((c: Record<string, unknown>) => c.id).filter(Boolean) as string[];
         const countsMap: Record<string, number> = {};
         if (ids.length > 0) {
-          const { data: parts, error: pErr } = await supabaseAuth
+          const { data: parts, error: pErr } = await client
             .from('challenge_participants')
             .select('challenge_id')
             .in('challenge_id', ids as string[]);

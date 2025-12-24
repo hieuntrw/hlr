@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form';
 // using server APIs via fetch and financeService; no direct supabase client here
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save } from 'lucide-react';
-import { financeService } from '@/lib/services/financeService';
+// transactions are created via server API POST /api/finance/transactions
 
 // 1. Định nghĩa Types nội bộ để tránh dùng 'any'
 interface Category {
@@ -27,13 +27,18 @@ interface FinanceFormData {
   description: string;
   user_id: string;
   note: string;
+  fiscal_year?: number;
+  period_month?: number;
 }
 
 export default function CreateTransactionPage() {
   // 2. Gán kiểu dữ liệu cho useForm
-  const { register, handleSubmit, watch, reset } = useForm<FinanceFormData>({
+  const now = new Date();
+  const { register, handleSubmit, watch, reset, setValue } = useForm<FinanceFormData>({
     defaultValues: {
-      flow_type: 'in'
+      flow_type: 'in',
+      fiscal_year: now.getFullYear(),
+      period_month: now.getMonth() + 1,
     }
   });
 
@@ -46,6 +51,8 @@ export default function CreateTransactionPage() {
 
   const flowType = watch('flow_type');
 
+  const normalizedFlowType = (typeof flowType === 'string' ? flowType : String(flowType ?? 'in')).toLowerCase();
+
   useEffect(() => {
     async function init() {
       const catPromise = fetch('/api/admin/financial-categories?fields=id,name,code,flow_type', { credentials: 'same-origin' });
@@ -54,8 +61,25 @@ export default function CreateTransactionPage() {
       const [catRes, usersRes] = await Promise.all([catPromise, usersPromise]);
 
       try {
-        const catsJson = await catRes.json();
-        if (catsJson?.data) setCategories(catsJson.data as Category[]);
+        let catsJson: { data?: Category[] } | null = null;
+        if (!catRes.ok) {
+          const text = await catRes.text();
+          console.error('[CreateTransaction] /api/admin/financial-categories failed', catRes.status, text);
+        } else {
+          catsJson = await catRes.json();
+          console.log('[CreateTransaction] raw categories response:', catsJson);
+          if (catsJson?.data) {
+            setCategories(catsJson.data as Category[]);
+            console.log('[CreateTransaction] loaded categories count:', (catsJson?.data ?? []).length);
+
+            // If no category_code selected yet, pick the first matching one for the initial flow_type
+            const initialFlow = normalizedFlowType;
+            const firstMatch = (catsJson.data as Category[]).find((c: Category) => String(c.flow_type ?? '').toLowerCase() === initialFlow);
+            if (firstMatch) {
+              setValue('category_code', firstMatch.code);
+            }
+          }
+        }
       } catch (e) {
         console.error('Failed to parse /api/admin/financial-categories response', e);
       }
@@ -68,30 +92,47 @@ export default function CreateTransactionPage() {
       }
     }
     init();
-  }, []);
+  }, [normalizedFlowType, setValue]);
 
-  const filteredCategories = categories.filter(c => c.flow_type === flowType);
+  const filteredCategories = categories.filter(c => String(c.flow_type ?? '').toLowerCase() === normalizedFlowType);
+  // Runtime visibility for debugging: helpful when options appear empty
+  useEffect(() => {
+    console.log('[CreateTransaction] filteredCategories count:', filteredCategories.length, 'flowType=', normalizedFlowType);
+  }, [filteredCategories.length, normalizedFlowType]);
 
   // 4. Định nghĩa kiểu cho data đầu vào (Fix lỗi Implicit any)
   const onSubmit = async (data: FinanceFormData) => {
     setLoading(true);
     try {
-      await financeService.createTransaction(
-        data.category_code,
-        Number(data.amount),
-        data.description,
-        data.user_id || null,
-        {
+      const payload = {
+        category_code: data.category_code,
+        amount: Number(data.amount),
+        description: data.description,
+        user_id: data.user_id || null,
+        metadata: {
           note: data.note,
-          manual_entry: true, // Giờ file types đã có trường này nên sẽ không lỗi nữa
-        }
-      );
-      
+          manual_entry: true,
+        },
+        fiscal_year: data.fiscal_year ? Number(data.fiscal_year) : undefined,
+        period_month: data.period_month ? Number(data.period_month) : undefined,
+      };
+
+      const res = await fetch('/api/finance/transactions', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        console.error('[CreateTransaction] create failed', res.status, json);
+        alert('Lỗi khi tạo giao dịch. Vui lòng thử lại.');
+        return;
+      }
+
       alert('Tạo giao dịch thành công!');
-      
-      // 5. Sử dụng hàm reset để làm sạch form (Fix lỗi unused var)
-      reset(); 
-      // router.push('/admin/finance'); // Có thể bật lại nếu muốn redirect
+      reset();
     } catch (error) {
       console.error(error);
       alert('Lỗi khi tạo giao dịch. Vui lòng thử lại.');
@@ -160,6 +201,28 @@ export default function CreateTransactionPage() {
                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
                placeholder="Ví dụ: Mua 3 thùng nước + 5kg dưa hấu..."
              />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Năm áp dụng</label>
+              <input
+                type="number"
+                {...register('fiscal_year', { valueAsNumber: true })}
+                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none"
+                min={2000}
+                max={2100}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Tháng áp dụng</label>
+              <select {...register('period_month', { valueAsNumber: true })} className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="">-- Chọn tháng --</option>
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <option key={i+1} value={i+1}>{i+1}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>

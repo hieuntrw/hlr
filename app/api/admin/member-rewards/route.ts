@@ -27,7 +27,21 @@ export const dynamic = 'force-dynamic';
 // Keep function names `GET` and `PUT` unchanged.
 
 function supabaseServerClient(request: NextRequest) {
-  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+    // fall back to anon key if service role not configured to avoid hard failure in some environments
+    return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        get(name: string) {
+          return request.cookies.get(name)?.value;
+        },
+        set() {},
+        remove() {},
+      },
+    });
+  }
+
+  return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
       get(name: string) {
         return request.cookies.get(name)?.value;
