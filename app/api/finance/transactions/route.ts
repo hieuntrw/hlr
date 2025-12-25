@@ -13,6 +13,11 @@ const getIncomePaid = async (
     console.error('[getIncomePaid] SUPABASE_SERVICE_ROLE_KEY not configured');
     return { ok: false, error: 'Server not configured' };
   }
+  const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+  if (!hasSession) {
+    console.error('[getIncomePaid] no session cookie present');
+    return { ok: false, error: 'Không xác thực' };
+  }
   const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
       get(name: string) {
@@ -53,6 +58,11 @@ const getExpensePaid = async (
     console.error('[getExpensePaid] SUPABASE_SERVICE_ROLE_KEY not configured');
     return { ok: false, error: 'Server not configured' };
   }
+  const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+  if (!hasSession) {
+    console.error('[getExpensePaid] no session cookie present');
+    return { ok: false, error: 'Không xác thực' };
+  }
   const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
       get(name: string) {
@@ -91,6 +101,11 @@ const getPendingTransactions = async (
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[getPendingTransactions] SUPABASE_SERVICE_ROLE_KEY not configured');
     return { ok: false, error: 'Server not configured' };
+  }
+  const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+  if (!hasSession) {
+    console.error('[getPendingTransactions] no session cookie present');
+    return { ok: false, error: 'Không xác thực' };
   }
   const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
@@ -131,6 +146,11 @@ const getAllTransactions = async (
     console.error('[getAllTransactions] SUPABASE_SERVICE_ROLE_KEY not configured');
     return { ok: false, error: 'Server not configured' };
   }
+  const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+  if (!hasSession) {
+    console.error('[getAllTransactions] no session cookie present');
+    return { ok: false, error: 'Không xác thực' };
+  }
   const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
       get(name: string) {
@@ -170,6 +190,11 @@ const getFilteredTransactions = async (
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
     console.error('[getFilteredTransactions] SUPABASE_SERVICE_ROLE_KEY not configured');
     return { ok: false, error: 'Server not configured' };
+  }
+  const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+  if (!hasSession) {
+    console.error('[getFilteredTransactions] no session cookie present');
+    return { ok: false, error: 'Không xác thực' };
   }
   const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
     cookies: {
@@ -217,7 +242,6 @@ export async function GET(req: Request) {
     const yearParam = url.searchParams.get('year');
     const year = yearParam ? Number(yearParam) : undefined;
 
-    const svc = getSupabaseServiceClient();
     const idParamSingle = url.searchParams.get('id');
 
     // If requesting a single transaction by id, return it (admin-only)
@@ -242,6 +266,7 @@ export async function GET(req: Request) {
         return new Response(JSON.stringify({ ok: false, error: 'Insufficient permissions' }), { status: 403, headers: { 'content-type': 'application/json' } });
       }
 
+      const svc = getSupabaseServiceClient();
       const { data, error } = await svc
         .from('view_transactions_master')
         .select('*,member_info:profiles!user_id(full_name)')
@@ -278,6 +303,7 @@ export async function GET(req: Request) {
         return new Response(JSON.stringify({ ok: false, error: 'Insufficient permissions' }), { status: 403, headers: { 'content-type': 'application/json' } });
       }
 
+      const svc = getSupabaseServiceClient();
       const yearForList = typeof year === 'number' && !Number.isNaN(year) ? year : new Date().getFullYear();
       if (listParam === 'income_paid') {
         const resp = await getIncomePaid(cookieStore, svc, yearForList);
@@ -317,6 +343,8 @@ export async function GET(req: Request) {
       console.error('[api/finance/transactions] ensureAdmin failed', String(e));
       return new Response(JSON.stringify({ ok: false, error: 'Insufficient permissions' }), { status: 403, headers: { 'content-type': 'application/json' } });
     }
+
+    const svc = getSupabaseServiceClient();
 
     // If no filters/search provided, reuse the existing helper which queries the
     // `view_transactions_master` view instead of building a new query here.

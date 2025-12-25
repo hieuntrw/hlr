@@ -36,19 +36,42 @@ export default function TransactionDetailPageClient() {
       setLoading(true);
       try {
         const resp = await fetch(`/api/finance/transactions?id=${encodeURIComponent(id)}`, { credentials: 'include' });
-        const body = await resp.json().catch(() => ({}));
-        if (!resp.ok || !body?.ok) {
-          const msg = body?.error
-            ? (typeof body.error === 'string' ? body.error : JSON.stringify(body.error))
-            : `Không thể tải giao dịch (status ${resp.status})`;
+        let body: unknown = null;
+        try {
+          body = await resp.json();
+        } catch {
+          body = null;
+        }
+
+        function formatErr(e: unknown) {
+          if (e === null || e === undefined) return String(e);
+          if (typeof e === 'string') return e;
+          try {
+            return JSON.stringify(e);
+          } catch {
+            try {
+              return String(e);
+            } catch {
+              return 'Unknown error';
+            }
+          }
+        }
+
+        const bodyObj = (typeof body === 'object' && body !== null) ? (body as Record<string, unknown>) : null;
+
+        if (!resp.ok || !(bodyObj && (bodyObj.ok as unknown))) {
+          console.error('[tx detail] fetch failed', { status: resp.status, body });
+          const msg = bodyObj && 'error' in bodyObj ? formatErr(bodyObj.error) : `Không thể tải giao dịch (status ${resp.status})`;
           setError(msg);
           setTx(null);
         } else {
-          if (mounted) setTx(body.data ?? null);
+          const data = bodyObj && Object.prototype.hasOwnProperty.call(bodyObj, 'data') ? (bodyObj as Record<string, unknown>)['data'] : null;
+          if (mounted) setTx(((data as unknown) as TransactionDetail) ?? null);
         }
       } catch (err) {
+        console.error('[tx detail] unexpected error', err);
         const msg = err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : String(err));
-        setError(msg);
+        setError(msg || 'Unknown error');
       } finally {
         setLoading(false);
       }

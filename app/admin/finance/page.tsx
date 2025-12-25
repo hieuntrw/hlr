@@ -29,8 +29,9 @@ interface Transaction {
 // 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
 interface KPICardProps {
   title: string;
-  value: string | number;
-  color: string;
+  value: React.ReactNode;
+  bgColor?: string; // accepts CSS var name (e.g. --color-bg-secondary) or var(...) or hex
+  borderColor?: string; // accepts CSS var name for left border (e.g. --color-primary)
   active?: boolean;
 }
 
@@ -177,14 +178,10 @@ export default function AdminFinanceDashboard() {
   }, [router, loadFiltered]);
 
 
-  // Transaction actions removed from client; KPI clicks update filter state only
+    // KPI numbers are provided by `/api/finance/totals` (stored in pendingTotal, incomeTotal, expenseTotal)
 
-  // KPI numbers are provided by `/api/finance/totals` (stored in pendingTotal, incomeTotal, expenseTotal)
-
-  // No client-side transaction list loading: leave server query implementation to you.
-
+ 
  if (totalsLoading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
-
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* HEADER */}
@@ -205,13 +202,17 @@ export default function AdminFinanceDashboard() {
      {/* KPI CARDS - CẬP NHẬT THEO SỐ LIỆU CHUẨN TỪ VIEW */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         {/* Card 1: Tổng Quỹ (Quan trọng nhất với Admin) */}
-        <div className="p-4 rounded-xl bg-blue-600 text-white shadow-md">
-          <p className="text-blue-100 text-sm font-medium">TỔNG QUỸ HIỆN CÓ</p>
-          <p className="text-2xl font-bold mt-1">{formatCurrency(clubBalance ?? 0)}</p>
-          <div className="mt-2 text-xs text-blue-200 flex justify-between">
-            <span>Đầu kỳ: {formatCurrency(openingBalance ?? 0)}</span>
-          </div>
-        </div>
+        <KPICard
+          title="TỔNG QUỸ HIỆN CÓ"
+          bgColor="--color-bg-secondary"
+          borderColor="--color-primary"
+          value={
+            <div>
+              <div className={`${clubBalance !== null ? (clubBalance > 0 ? 'text-green-600' : clubBalance < 0 ? 'text-red-600' : 'text-gray-700') : 'text-gray-700'} text-2xl font-bold`}>{formatCurrency(clubBalance ?? 0)}</div>
+              <div className="mt-2 text-xs text-gray-400">Đầu kỳ: {formatCurrency(openingBalance ?? 0)}</div>
+            </div>
+          }
+        />
 
         {/* Card 2: Nợ phải thu (Pending) */}
         <button
@@ -222,7 +223,7 @@ export default function AdminFinanceDashboard() {
             setFlowTypeFilter('in');
           }}
         >
-          <KPICard title="Nợ phải thu (pending)" value={formatCurrency(pendingTotal ?? 0)} color="red" active={selectedKPI === 'pending'} />
+          <KPICard title="Danh sách đang nợ" value={<span className="text-orange-600 text-2xl font-bold">{formatCurrency(pendingTotal ?? 0)}</span>} bgColor="--color-bg-secondary" borderColor="--color-primary" active={selectedKPI === 'pending'} />
         </button>
         <button
           type="button"
@@ -232,7 +233,7 @@ export default function AdminFinanceDashboard() {
             setFlowTypeFilter('in');
           }}
         >
-          <KPICard title="Thu mới (Trong năm)" value={formatCurrency(incomeTotal ?? 0)} color="green" active={selectedKPI === 'income'} />
+          <KPICard title="Tổng thu" value={<span className="text-green-600 text-2xl font-bold">{formatCurrency(incomeTotal ?? 0)}</span>} bgColor="--color-bg-secondary" borderColor="--color-primary" active={selectedKPI === 'income'} />
         </button>
         <button
           type="button"
@@ -242,7 +243,7 @@ export default function AdminFinanceDashboard() {
             setFlowTypeFilter('out');
           }}
         >
-          <KPICard title="Tổng chi (Trong năm)" value={formatCurrency(expenseTotal ?? 0)} color="orange" active={selectedKPI === 'expense'} />
+          <KPICard title="Tổng chi" value={<span className="text-red-600 text-2xl font-bold">{formatCurrency(expenseTotal ?? 0)}</span>} bgColor="--color-bg-secondary" borderColor="--color-primary" active={selectedKPI === 'expense'} />
         </button>
       </div>
 
@@ -291,8 +292,7 @@ export default function AdminFinanceDashboard() {
           </div>
         </div>
         <div className="p-6 text-sm text-gray-600">
-          <div className="mb-3">Danh sách giao dịch giờ được load bởi server; client chỉ điều khiển filter `payment_status` và `flow_type` từ các KPI.</div>
-          {txLoading ? (
+         {txLoading ? (
             <div>Đang tải danh sách giao dịch...</div>
           ) : txError ? (
             <div className="text-red-600">Lỗi: {typeof txError === 'object' ? JSON.stringify(txError) : txError}</div>
@@ -364,15 +364,33 @@ export default function AdminFinanceDashboard() {
 // Sub-components
 
 // Thay 'any' bằng Interface KPICardProps
-const KPICard = ({ title, value, color, active = false }: KPICardProps) => (
-  <div
-    className={`p-4 rounded-xl border-l-4 bg-white shadow-sm border ${active ? 'ring-2 ring-offset-1 ring-indigo-200' : 'border-gray-100'}`}
-    style={{ borderLeftColor: color }}
-  >
-    <p className="text-gray-500 text-sm">{title}</p>
-    <p className="text-xl font-bold text-gray-800 mt-1">{value}</p>
-  </div>
-);
+const KPICard = ({ title, value, bgColor, borderColor, active = false }: KPICardProps) => {
+  function resolveColor(input?: string) {
+    if (!input) return undefined;
+    const s = String(input).trim();
+    if (s.startsWith('var(')) return s;
+    if (s.startsWith('--')) return `var(${s})`;
+    return s; // hex or other CSS color
+  }
+
+  const resolvedBg = resolveColor(bgColor);
+  const resolvedBorder = resolveColor(borderColor) ?? resolvedBg;
+  const cardStyle: React.CSSProperties = {
+    borderLeftColor: resolvedBorder ?? undefined,
+    backgroundColor: resolvedBg ?? undefined,
+    color: 'var(--color-text-inverse)'
+  };
+
+  return (
+    <div
+      className={`p-4 rounded-xl border-l-4 shadow-sm ${active ? 'ring-2 ring-offset-1 ring-indigo-200' : ''}`}
+      style={cardStyle}
+    >
+      <p className="text-sm" style={{ color: 'black', opacity: 0.9 }}>{title}</p>
+      <p className="text-xl font-bold mt-1">{value}</p>
+    </div>
+  );
+};
 
 // StatusBadge 
 
