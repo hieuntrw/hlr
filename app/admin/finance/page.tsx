@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 // supabase client not used in admin page anymore; server APIs handle transactions
 import { useRouter } from 'next/navigation';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
 // financeService not needed for totals here; using server totals endpoint
@@ -11,22 +11,19 @@ import { useAuth } from "@/lib/auth/AuthContext";
 import { getEffectiveRole, isAdminRole } from "@/lib/auth/role";
 
 
-// 1. Định nghĩa Interface cho dữ liệu (Fix lỗi Line 10)
-interface TransactionWithDetails {
-  id: string;
+// Transaction shape is queried from server view; define a minimal interface
+// to avoid `any` and satisfy ESLint.
+interface Transaction {
+  transaction_id?: number | string;
+  id: number | string;
   created_at: string;
-  amount: number;
-  description: string;
-  payment_status: string; // Hoặc 'pending' | 'paid' | ...
-  member_info?: {
-    full_name: string;
-  } | null;
-  financial_categories?: {
-    name: string;
-    flow_type: 'in' | 'out';
-    code: string;
-  } | null;
-  fiscal_year?: number | null;
+  member_info?: { full_name?: string } | null;
+  description?: string | null;
+  category_name?: string | null;
+  category_code?: string | null;
+  amount?: number | null;
+  payment_status?: string | null;
+  flow_type?: 'in' | 'out' | string | null;
 }
 
 // 2. Định nghĩa Props cho Component con (Fix lỗi Line 145)
@@ -42,21 +39,49 @@ export default function AdminFinanceDashboard() {
   const router = useRouter();
   // use shared supabase singleton
   
-  const [transactions, setTransactions] = useState<TransactionWithDetails[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [offset, setOffset] = useState(0);
-  const pageSize = 50;
-  const [hasMore, setHasMore] = useState(true);
-  const [filterStatus, setFilterStatus] = useState<string>('');
-  const [filterFlow, setFilterFlow] = useState<string>('');
   const [clubBalance, setClubBalance] = useState<number | null>(null);
   const [pendingTotal, setPendingTotal] = useState<number | null>(null);
   const [incomeTotal, setIncomeTotal] = useState<number | null>(null);
   const [expenseTotal, setExpenseTotal] = useState<number | null>(null);
   const [openingBalance, setOpeningBalance] = useState<number | null>(null);
-  const [excludeOpening, setExcludeOpening] = useState(false);
   const [selectedKPI, setSelectedKPI] = useState<'pending' | 'income' | 'expense' | null>(null);
+  const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
+  const [totalsLoading, setTotalsLoading] = useState(true);
+  // Filters that will be used by server-side query (you will implement loading logic)
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string | null>(null);
+  const [flowTypeFilter, setFlowTypeFilter] = useState<string | null>(null);
+  const [transactions, setTransactions] = useState<Transaction[] | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txError, setTxError] = useState<string | null>(null);
+  
+  // loadFiltered is a reusable fetch so actions can refresh the list
+  const loadFiltered = useCallback(async () => {
+    if (authLoading || !sessionChecked || !user) return;
+    setTxLoading(true);
+    setTxError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set('year', String(fiscalYear));
+      if (paymentStatusFilter) params.set('status', paymentStatusFilter);
+      if (flowTypeFilter) params.set('flow_type', flowTypeFilter);
+      const resp = await fetch(`/api/finance/transactions?${params.toString()}`, { credentials: 'include' });
+      const body = await (resp.ok ? resp.json() : Promise.resolve({ ok: false, error: 'Request failed' }));
+      if (!resp.ok) {
+        setTxError(body?.error ?? 'Server error');
+        setTransactions([]);
+      } else {
+        const rows = (body?.data ?? []) as Array<Record<string, unknown> & { transaction_id?: number | string; id?: number | string }>;
+        const normalized = rows.map(r => ({ ...(r || {}), id: (r.transaction_id ?? r.id) }));
+        setTransactions(normalized as Transaction[]);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      setTxError(msg);
+      setTransactions([]);
+    } finally {
+      setTxLoading(false);
+    }
+  }, [authLoading, sessionChecked, user, fiscalYear, paymentStatusFilter, flowTypeFilter]);
 
   const checkRole = useCallback(async () => {
     if (!user) {
@@ -75,12 +100,20 @@ export default function AdminFinanceDashboard() {
     checkRole();
   }, [authLoading, sessionChecked, checkRole, user]);
 
-  // Load toàn bộ giao dịch
+  // load more transactions when scrolling near bottom
+ 
+
+  // load more transactions when scrolling near bottom
+  // transaction listing responsibility removed from client — server-side view will be used.
+
+  // Load toàn bộ giao dịch (use ref-held fetchTransactions to avoid re-running
+  // when fetchTransactions identity changes)
   useEffect(() => {
     if (authLoading || !sessionChecked || !user) return;
-    setLoading(true);
+    setTotalsLoading(true);
     async function fetchAll() {
-      const year = new Date().getFullYear();
+      const year = fiscalYear;
+      console.debug('[admin/finance] active filters', { paymentStatusFilter, flowTypeFilter });
       const totalsResp = await fetch(`/api/finance/totals?year=${year}`, { credentials: 'include' });
       const totalsBody = await (totalsResp.ok ? totalsResp.json() : Promise.resolve({ ok: false }));
       const totals = totalsBody?.totals ?? null;
@@ -95,102 +128,62 @@ export default function AdminFinanceDashboard() {
       setIncomeTotal(income);
       setExpenseTotal(expense);
 
-      // fetch first page of transactions (no year filter)
-      await fetchTransactions(0, false);
-      setLoading(false);
+      // transaction list loading removed — client only shows KPI cards now
+      setTotalsLoading(false);
     }
     fetchAll();
-  }, [authLoading, sessionChecked, user]);
+  }, [authLoading, sessionChecked, user, fiscalYear, paymentStatusFilter, flowTypeFilter]);
 
-  // load more transactions when scrolling near bottom
-  const buildQuery = (off = 0, overrides?: { status?: string; flow?: string; excludeOpening?: boolean }) => {
-    const qs = new URLSearchParams();
-    qs.set('limit', String(pageSize));
-    qs.set('offset', String(off));
-    const status = overrides?.status ?? filterStatus;
-    const flow = overrides?.flow ?? filterFlow;
-    const excl = overrides?.excludeOpening ?? excludeOpening;
-    if (status) qs.set('status', status);
-    if (flow) qs.set('flow_type', flow);
-    if (excl) qs.set('exclude_category_code', 'OPENING_BALANCE');
-    return qs.toString();
-  };
+  // Fetch filtered transactions when filters/year change
+  useEffect(() => {
+    loadFiltered();
+  }, [loadFiltered]);
 
-  const fetchTransactions = async (off = 0, append = false, overrides?: { status?: string; flow?: string; excludeOpening?: boolean }) => {
-    if (loadingMore) return;
-    if (append) setLoadingMore(true);
-    else setLoading(true);
-    try {
-      const resp = await fetch(`/api/finance/transactions?${buildQuery(off, overrides)}`, { credentials: 'include' });
-      const body = await (resp.ok ? resp.json() : Promise.resolve({ ok: false }));
-      const rows = Array.isArray(body?.data) ? (body.data as TransactionWithDetails[]) : [];
-      if (rows.length > 0) {
-        if (append) setTransactions(prev => [...prev, ...rows]);
-        else setTransactions(rows);
-        setOffset(off + rows.length);
-        setHasMore(rows.length >= pageSize);
-      } else {
-        if (!append) setTransactions([]);
-        setHasMore(false);
+  // Action handlers (approve/reject) call server and refresh list
+  const handleAction = useCallback(async (action: 'approve' | 'reject' | 'view', tx: Transaction) => {
+    if (action === 'view') {
+      const targetId = tx.id ?? tx.transaction_id;
+      if (!targetId) {
+        console.error('Missing transaction id for view action', tx);
+        return;
       }
-    } catch (e) {
-      console.error('fetchTransactions error', e);
+      router.push(`/admin/finance/${targetId}`);
+      return;
+    }
+    setTxLoading(true);
+    setTxError(null);
+    try {
+      const updates: Partial<{ payment_status: string }> = {};
+      if (action === 'approve') updates.payment_status = 'paid';
+      if (action === 'reject') updates.payment_status = 'Cancelled';
+      const resp = await fetch('/api/finance/transactions', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: tx.id, updates }),
+      });
+      const body = await (resp.ok ? resp.json() : Promise.resolve({ ok: false, error: 'Request failed' }));
+      if (!resp.ok || !body?.ok) {
+        setTxError(body?.error ?? 'Action failed');
+      } else {
+        await loadFiltered();
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : String(err));
+      setTxError(msg);
     } finally {
-      if (append) setLoadingMore(false);
-      else setLoading(false);
+      setTxLoading(false);
     }
-  };
+  }, [router, loadFiltered]);
 
-  const loadMore = () => {
-    if (!hasMore || loadingMore) return;
-    fetchTransactions(offset, true);
-  };
 
-  // Hành động xác nhận thu tiền nhanh
-  const markAsPaid = async (id: string, flowType: string = 'in') => {
-  // 1. Xác định câu hỏi xác nhận dựa trên loại dòng tiền
-  const actionText = flowType === 'in' 
-    ? 'đã THU TIỀN' 
-    : 'đã CHI TIỀN / TRAO GIẢI';
-    
-  if(!confirm(`Xác nhận ${actionText} cho khoản này?`)) return;
-  
-  // 2. Gọi API update (Giữ nguyên)
-  try {
-    const r = await fetch('/api/finance/transactions', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, updates: { payment_status: 'paid', processed_at: new Date().toISOString() } }),
-    });
-    const body = await (r.ok ? r.json() : Promise.resolve({ ok: false, error: 'request failed' }));
-    if (body && body.ok) {
-      setTransactions(prev => prev.map(t => t.id === id ? { ...t, payment_status: 'paid' } : t));
-    } else {
-      alert('Có lỗi xảy ra, vui lòng thử lại.');
-    }
-  } catch (e) {
-    console.error('markAsPaid error', String(e));
-    alert('Có lỗi xảy ra, vui lòng thử lại.');
-  }
-};
+  // Transaction actions removed from client; KPI clicks update filter state only
 
   // KPI numbers are provided by `/api/finance/totals` (stored in pendingTotal, incomeTotal, expenseTotal)
 
-  // Server-side filtered transactions are stored in `transactions`
-  const displayedTransactions = transactions;
+  // No client-side transaction list loading: leave server query implementation to you.
 
-  // Debounce search/filter changes
-  useEffect(() => {
-    const t = setTimeout(() => {
-      // reset offset and fetch fresh
-      fetchTransactions(0, false);
-    }, 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterStatus, filterFlow, excludeOpening]);
-
- if (loading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
+ if (totalsLoading) return <div className="p-8">Đang tải bảng điều khiển...</div>;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -220,104 +213,149 @@ export default function AdminFinanceDashboard() {
           </div>
         </div>
 
-        {/* Card 2: Nợ phải thu (Pending) - Cái này tính từ list transactions hoặc gọi API riêng */}
-        <button type="button" onClick={() => { setSelectedKPI('pending'); setFilterStatus('pending'); setFilterFlow(''); setExcludeOpening(false); fetchTransactions(0,false,{ status: 'pending', flow: '', excludeOpening: false }); }}>
-          <KPICard title="Nợ phải thu (Pending)" value={formatCurrency(pendingTotal ?? 0)} color="red" active={selectedKPI === 'pending'} />
+        {/* Card 2: Nợ phải thu (Pending) */}
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedKPI('pending');
+            setPaymentStatusFilter('pending');
+            setFlowTypeFilter('in');
+          }}
+        >
+          <KPICard title="Nợ phải thu (pending)" value={formatCurrency(pendingTotal ?? 0)} color="red" active={selectedKPI === 'pending'} />
         </button>
-        <button type="button" onClick={() => { setSelectedKPI('income'); setFilterStatus('paid'); setFilterFlow('in'); setExcludeOpening(true); fetchTransactions(0,false,{ status: 'paid', flow: 'in', excludeOpening: true }); }}>
-          <KPICard title="Thu Mới (Trong năm)" value={formatCurrency(incomeTotal ?? 0)} color="green" active={selectedKPI === 'income'} />
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedKPI('income');
+            setPaymentStatusFilter('paid');
+            setFlowTypeFilter('in');
+          }}
+        >
+          <KPICard title="Thu mới (Trong năm)" value={formatCurrency(incomeTotal ?? 0)} color="green" active={selectedKPI === 'income'} />
         </button>
-        <button type="button" onClick={() => { setSelectedKPI('expense'); setFilterStatus('paid'); setFilterFlow('out'); setExcludeOpening(false); fetchTransactions(0,false,{ status: 'paid', flow: 'out', excludeOpening: false }); }}>
-          <KPICard title="Tổng Chi (Trong năm)" value={formatCurrency(expenseTotal ?? 0)} color="orange" active={selectedKPI === 'expense'} />
+        <button
+          type="button"
+          onClick={() => {
+            setSelectedKPI('expense');
+            setPaymentStatusFilter('paid');
+            setFlowTypeFilter('out');
+          }}
+        >
+          <KPICard title="Tổng chi (Trong năm)" value={formatCurrency(expenseTotal ?? 0)} color="orange" active={selectedKPI === 'expense'} />
         </button>
       </div>
 
-      {/* TABLE */}
-        <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+      {/* Transaction table/loading removed — client shows only KPI controls */}
+      <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
         <div className="p-4 border-b flex gap-4 bg-gray-50">
           <div className="flex items-center gap-2">
-            <select value={filterFlow} onChange={e => setFilterFlow(e.target.value)} className="border rounded px-2 py-1 text-sm">
-              <option value="">Tất cả loại</option>
-              <option value="in">Thu (in)</option>
-              <option value="out">Chi (out)</option>
-            </select>
-            <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="border rounded px-2 py-1 text-sm">
-              <option value="">Tất cả trạng thái</option>
-              <option value="pending">Pending</option>
-              <option value="paid">Paid</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <button onClick={() => { setFilterFlow(''); setFilterStatus(''); setExcludeOpening(false); setSelectedKPI(null); fetchTransactions(0,false); }} className="px-3 py-2 border rounded-lg bg-white text-gray-600 hover:bg-gray-50">Reset</button>
-          
+            <div className="flex items-center gap-2 bg-white border p-1 rounded-lg shadow-sm">
+              <span className="pl-3 text-sm text-gray-500 font-medium">Năm tài chính:</span>
+              <select
+                value={fiscalYear}
+                onChange={(e) => setFiscalYear(Number(e.target.value))}
+                className="p-2 bg-transparent font-bold text-gray-800 outline-none cursor-pointer"
+              >
+                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 4 + i).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-500">Trạng thái:</label>
+              <select
+                value={paymentStatusFilter ?? ''}
+                onChange={(e) => setPaymentStatusFilter(e.target.value ? e.target.value : null)}
+                className="p-2 bg-white border rounded-md text-sm"
+              >
+                <option value="">Tất cả</option>
+                <option value="pending">Chờ (pending)</option>
+                <option value="paid">Đã thanh toán (paid)</option>
+                <option value="cancelled">Đã hủy (cancelled)</option>
+               </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-500">Loại dòng tiền:</label>
+              <select
+                value={flowTypeFilter ?? ''}
+                onChange={(e) => setFlowTypeFilter(e.target.value ? e.target.value : null)}
+                className="p-2 bg-white border rounded-md text-sm"
+              >
+                <option value="">Tất cả</option>
+                <option value="in">Thu (in)</option>
+                <option value="out">Chi (out)</option>
+              </select>
+            </div>
+            <button onClick={() => { setPaymentStatusFilter(null); setFlowTypeFilter(null); setSelectedKPI(null); }} className="px-3 py-2 border rounded-lg bg-white text-gray-600 hover:bg-gray-50">Reset</button>
           </div>
         </div>
-        <div className="max-h-[60vh] overflow-auto" onScroll={(e) => {
-            const el = e.currentTarget as HTMLElement;
-            if (el.scrollHeight - el.scrollTop <= el.clientHeight + 200) {
-              loadMore();
-            }
-          }}>
-          <table className="w-full text-sm text-left">
-          <thead className="bg-gray-100 text-gray-600 border-b">
-            <tr>
-              <th className="p-3">Ngày tạo</th>
-              <th className="p-3">Thành viên</th>
-              <th className="p-3">Danh mục</th>
-              <th className="p-3">Nội dung</th>
-              <th className="p-3 text-right">Số tiền</th>
-              <th className="p-3 text-center">Trạng thái</th>
-              <th className="p-3 text-center">Hành động</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {displayedTransactions.map((t) => (
-              <tr key={t.id} className="hover:bg-gray-50">
-                <td className="p-3 text-gray-500">{formatDate(t.created_at)}</td>
-                <td className="p-3 font-medium text-gray-800">
-                  {t.member_info?.full_name || <span className="text-gray-400 italic">Chung (CLB)</span>}
-                </td>
-                <td className="p-3">
-                  <span className={`px-2 py-1 rounded text-xs ${
-                    t.financial_categories?.flow_type === 'in' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'
-                  }`}>
-                    {t.financial_categories?.name}
-                  </span>
-                </td>
-                <td className="p-3 text-gray-600 max-w-xs truncate">{t.description}</td>
-                <td className={`p-3 text-right font-medium ${t.financial_categories?.flow_type === 'in' ? 'text-green-600' : 'text-orange-600'}`}>
-                  {t.financial_categories?.flow_type === 'in' ? '+' : '-'}{formatCurrency(t.amount)}
-                </td>
-                <td className="p-3 text-center">
-                   <StatusBadge status={t.payment_status} flowType={t.financial_categories?.flow_type} />
-                </td>
-                <td className="p-3 text-center">
-                  {t.payment_status === 'pending' && (
-                    <button 
-                      // Truyền thêm flow_type vào hàm xử lý
-                      onClick={() => markAsPaid(t.id, t.financial_categories?.flow_type || 'in')}
-                      
-                      className={`text-xs px-2 py-1 rounded border hover:opacity-80 transition font-medium ${
-                        t.financial_categories?.flow_type === 'in'
-                          ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' // Màu xanh cho Thu
-                          : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100' // Màu cam cho Chi
-                      }`}
-                    >
-                      {/* Logic hiển thị chữ trên nút */}
-                      {t.financial_categories?.flow_type === 'in' ? 'Xác nhận thu' : 'Xác nhận chi'}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {loadingMore && (
-              <tr><td colSpan={7} className="p-4 text-center text-sm text-gray-500">Đang tải thêm...</td></tr>
-            )}
-          </tbody>
-          </table>
+        <div className="p-6 text-sm text-gray-600">
+          <div className="mb-3">Danh sách giao dịch giờ được load bởi server; client chỉ điều khiển filter `payment_status` và `flow_type` từ các KPI.</div>
+          {txLoading ? (
+            <div>Đang tải danh sách giao dịch...</div>
+          ) : txError ? (
+            <div className="text-red-600">Lỗi: {typeof txError === 'object' ? JSON.stringify(txError) : txError}</div>
+          ) : transactions && transactions.length === 0 ? (
+            <div>Không có giao dịch khớp điều kiện.</div>
+          ) : transactions ? (
+            <div className="overflow-x-auto">
+              <div className="max-h-[48rem] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-gray-600">
+                    <tr>
+                      <th className="py-2 w-32">Ngày</th>
+                      <th className="py-2 w-56">Thành viên</th>
+                      <th className="py-2 text-center w-1/3">Mô tả</th>
+                      <th className="py-2 w-25">Danh mục</th>
+                      <th className="py-2 w-30 text-center">Số tiền</th>
+                      <th className="py-2 w-30 text-nowrap">Trạng thái</th>
+                      <th className="py-2 w-20">Hành động</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {transactions.map((t: Transaction) => (
+                      <tr key={t.id} className="border-t">
+                        <td className="py-2">{new Date(t.created_at).toLocaleDateString('en-GB')}</td>
+                        <td className="py-2 font-bold">{t.member_info?.full_name ?? '-'}</td>
+                        <td className="py-2 text-left">{t.description ?? '-'}</td>
+                        <td className="py-2">{t.category_name ?? t.category_code ?? '-'}</td>
+                        <td className="py-2 text-right pr-6">
+                          {t.flow_type === 'in' ? (
+                            <span className="text-green-700">+{formatCurrency(Number(t.amount ?? 0))}</span>
+                          ) : (
+                            <span className="text-red-700">-{formatCurrency(Number(t.amount ?? 0))}</span>
+                          )}
+                        </td>
+                        <td className="py-2 text-nowrap"><StatusBadge status={t.payment_status ?? ''} flowType={t.flow_type ?? undefined} /></td>
+                        <td className="py-2">
+                          <div className="flex gap-2 itiems-right">
+                            <div className="w-20 text-right pr-6">
+                              {t.payment_status === 'pending' ? (
+                                <button onClick={() => handleAction('approve', t)} className="px-2 py-1 bg-green-600 text-white rounded-md text-xs">{getStatusLabel(t.payment_status ?? '', t.flow_type)}</button>
+                              ) : t.payment_status === 'paid' ? (
+                                null
+                              ) : (
+                                <button onClick={() => handleAction('view', t)} className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md text-xs">{getStatusLabel(t.payment_status ?? '', t.flow_type)}</button>
+                              )}
+                            </div>
+                            <div className="w-10">
+                              <button onClick={() => {
+                                const targetId = t.id ?? t.transaction_id;
+                                if (!targetId) return console.error('Missing transaction id for edit', t);
+                                router.push(`/admin/finance/${targetId}`);
+                              }} className="px-2 py-1 bg-blue-50 text-blue-700 rounded-md text-xs">Sửa</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : null}
         </div>
-        {!hasMore && (
-          <div className="p-3 text-center text-xs text-gray-500">Không còn giao dịch để tải.</div>
-        )}
       </div>
     </div>
   );
@@ -335,6 +373,8 @@ const KPICard = ({ title, value, color, active = false }: KPICardProps) => (
     <p className="text-xl font-bold text-gray-800 mt-1">{value}</p>
   </div>
 );
+
+// StatusBadge 
 
 // Component hiển thị trạng thái (Copy đè lên cái cũ ở cuối file)
 const StatusBadge = ({ 
@@ -380,8 +420,28 @@ const StatusBadge = ({
   }
 
   return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-bold uppercase whitespace-nowrap ${colorClass}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-medium ${colorClass}`}>
       {label}
     </span>
   );
+
 };
+
+
+// Utility: return the textual label used by StatusBadge (reused for action labels)
+function getStatusLabel(status: string | null | undefined, flowType?: string | null) {
+  let label = status ?? '';
+  if (status === 'paid') {
+    label = 'Hoàn thành';
+  } else if (status === 'cancelled') {
+    label = 'Đã hủy';
+  } else if (status === 'pending') {
+    if (flowType === 'in') {
+      label = 'Đã thu';
+    } else {
+      label = 'Đã chi';
+    }
+  }
+  return label;
+}
+

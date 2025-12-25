@@ -26,7 +26,7 @@ export default function FinanceReportPage() {
   const { user, isLoading: authLoading, sessionChecked } = useAuth();
   
   // Danh sách năm (5 năm gần nhất)
-  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 1 + i);
+  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 4 + i);
 
   // Kiểm tra vai trò người dùng (dựa vào session) trước khi tải báo cáo
   const checkRole = useCallback(() => {

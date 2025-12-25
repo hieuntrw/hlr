@@ -395,3 +395,68 @@ GRANT EXECUTE ON FUNCTION get_total_expense(int) TO authenticated, anon, service
 GRANT EXECUTE ON FUNCTION get_total_income_real(int) TO authenticated, anon, service_role;
 GRANT EXECUTE ON FUNCTION get_total_pending_income(int) TO authenticated, anon, service_role;
 -- =================================================================
+-- 1. Xóa view cũ nếu trùng tên
+DROP VIEW IF EXISTS public.view_transactions_master;
+
+-- 2. Tạo View tổng hợp
+CREATE OR REPLACE VIEW public.view_transactions_master AS
+SELECT 
+    t.id AS transaction_id,
+    t.created_at,
+    t.processed_at, -- Ngày giao dịch thực tế
+    t.fiscal_year,
+    t.period_month,
+    t.amount,
+    t.description,
+    t.payment_status, -- (paid, pending, cancel)
+    t.user_id,
+    
+    -- Thông tin từ bảng danh mục (Financial Categories)
+    t.category_id,
+    fc.name AS category_name,
+    fc.code AS category_code,
+    fc.flow_type -- Quan trọng: 'in' (Thu) hoặc 'out' (Chi)
+    
+FROM public.transactions t
+LEFT JOIN public.financial_categories fc ON t.category_id = fc.id;
+
+-- 3. Cấu hình bảo mật (BẮT BUỘC để tránh lỗi RLS)
+ALTER VIEW public.view_transactions_master OWNER TO postgres;
+ALTER VIEW public.view_transactions_master SET (security_invoker = true);
+
+-- 4. Cấp quyền truy cập
+GRANT SELECT ON public.view_transactions_master TO authenticated;
+GRANT SELECT ON public.view_transactions_master TO service_role;
+GRANT SELECT ON public.view_transactions_master TO anon; -- Nếu cần hiển thị công khai-- 1. Xóa view cũ nếu trùng tên
+DROP VIEW IF EXISTS public.view_transactions_master;
+
+-- 2. Tạo View tổng hợp
+CREATE OR REPLACE VIEW public.view_transactions_master AS
+SELECT 
+    t.id AS transaction_id,
+    t.created_at,
+    t.processed_at, -- Ngày giao dịch thực tế
+    t.fiscal_year,
+    t.period_month,
+    t.amount,
+    t.description,
+    t.payment_status, -- (paid, pending, cancel)
+    t.user_id,
+    
+    -- Thông tin từ bảng danh mục (Financial Categories)
+    t.category_id,
+    fc.name AS category_name,
+    fc.code AS category_code,
+    fc.flow_type -- Quan trọng: 'in' (Thu) hoặc 'out' (Chi)
+    
+FROM public.transactions t
+LEFT JOIN public.financial_categories fc ON t.category_id = fc.id;
+
+-- 3. Cấu hình bảo mật (BẮT BUỘC để tránh lỗi RLS)
+ALTER VIEW public.view_transactions_master OWNER TO postgres;
+ALTER VIEW public.view_transactions_master SET (security_invoker = true);
+
+-- 4. Cấp quyền truy cập
+GRANT SELECT ON public.view_transactions_master TO authenticated;
+GRANT SELECT ON public.view_transactions_master TO service_role;
+GRANT SELECT ON public.view_transactions_master TO anon; -- Nếu cần hiển thị công khai
