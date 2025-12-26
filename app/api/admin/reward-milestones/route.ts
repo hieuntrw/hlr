@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ function makeSupabase(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = makeSupabase(request);
-    await ensureAdmin(supabase, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const { data, error } = await supabase
       .from('reward_milestones')
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
 
     const supabase = makeSupabase(request);
-    await ensureAdmin(supabase, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const { data, error } = await supabase.from('reward_milestones').insert(Array.isArray(body) ? body : [body]).select();
     if (error) {
@@ -81,7 +81,7 @@ export async function PUT(request: NextRequest) {
     const updates: Record<string, unknown> = { ...bodyObj };
     delete updates.id;
     const supabase = makeSupabase(request);
-    await ensureAdmin(supabase, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const { data, error } = await supabase.from('reward_milestones').update(updates).eq('id', id).select();
     if (error) {
@@ -104,7 +104,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
 
     const supabase = makeSupabase(request);
-    await ensureAdmin(supabase, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const { data, error } = await supabase.from('reward_milestones').delete().eq('id', id).select();
     if (error) {

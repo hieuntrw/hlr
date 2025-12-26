@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 // Local types to avoid using `any` across this file
 type ErrorShape = { code?: string; message?: string } | null;
@@ -56,8 +56,8 @@ export async function GET(request: NextRequest) {
   // Load all four tables required by reward-monitor in a simple, deterministic way.
   try {
     const supabaseAuth = supabaseServerClient(request);
-    // ensure admin/mod_finance via shared helper (throws if not allowed)
-    const { user } = await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    // ensure admin/mod_finance via centralized helper
+    const { user } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     // Prefer service role client when available for full visibility; otherwise use authenticated client
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -251,7 +251,7 @@ export async function PUT(request: NextRequest) {
   // Deliver single or multiple reward rows.
   try {
     const supabaseAuth = supabaseServerClient(request);
-    const { user } = await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    const { user } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)

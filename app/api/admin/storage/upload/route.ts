@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
+    // Require admin/mod authentication for file uploads
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    
     const form = await request.formData();
     const fileVal = form.get('file');
     const bucket = String(form.get('bucket') || 'public');

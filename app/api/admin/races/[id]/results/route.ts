@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
 // (removed unused type import)
 
 export const dynamic = 'force-dynamic';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 function timeToSeconds(t: string): number {
   const parts = t.split(":").map((p) => parseInt(p || "0", 10));
@@ -16,22 +16,10 @@ function timeToSeconds(t: string): number {
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   const raceId = params.id;
   try {
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    const { ensureAdmin } = await import('@/lib/server-auth');
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value, ['admin','mod_race']);
+    const { supabaseAuth, role } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    if (!['admin','mod_race'].includes(String(role || ''))) {
+      return NextResponse.json({ error: 'Không có quyền' }, { status: 403 });
+    }
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
@@ -137,22 +125,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const raceId = params.id;
   try {
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    const { ensureAdmin } = await import('@/lib/server-auth');
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value, ['admin','mod_race']);
+    const { supabaseAuth, role } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    if (!['admin','mod_race'].includes(String(role || ''))) {
+      return NextResponse.json({ error: 'Không có quyền' }, { status: 403 });
+    }
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });

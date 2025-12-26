@@ -1,3 +1,12 @@
+// ============================================================================
+// DEPRECATED: This entire service file is NOT USED anywhere in the codebase.
+// The reward logic was intended to be called from race result processing
+// but was never integrated. Consider removing or integrating into:
+// - /api/admin/races/[id]/process-results (for checkRaceReward, checkPodiumReward)  
+// - /api/admin/challenges/[id]/lock (for checkChallengePenalty)
+// Marked for potential deletion - Dec 2024
+// ============================================================================
+
 import { getSupabaseServiceClient } from "@/lib/supabase-service-client";
 const supabase = getSupabaseServiceClient();
 import serverDebug from "@/lib/server-debug";

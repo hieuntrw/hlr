@@ -29,14 +29,29 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     );
 
     const { getUserFromAuthClient } = await import('@/lib/server-auth');
-    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value);
-    if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
+    const user = await getUserFromAuthClient(supabase, (name: string) => request.cookies.get(name)?.value, true);
+    if (!user) return NextResponse.json({ ok: false, error: 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại' }, { status: 401 });
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       return NextResponse.json({ ok: false, error: 'Service role key not configured' }, { status: 500 });
     }
 
     const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+
+    // Verify transaction belongs to this user before allowing upload
+    const { data: txCheck, error: txCheckErr } = await service
+      .from('transactions')
+      .select('id, user_id')
+      .eq('id', transactionId)
+      .maybeSingle();
+    
+    if (txCheckErr || !txCheck) {
+      return NextResponse.json({ ok: false, error: 'Không tìm thấy giao dịch' }, { status: 404 });
+    }
+    
+    if (txCheck.user_id !== user.id) {
+      return NextResponse.json({ ok: false, error: 'Không có quyền tải biên lai cho giao dịch này' }, { status: 403 });
+    }
 
     // Obtain ArrayBuffer from uploaded blob-like object
     let arrayBuffer: ArrayBuffer;

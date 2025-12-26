@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,35 +11,14 @@ export async function GET(request: NextRequest) {
   const start = Date.now();
   serverDebug.debug('[admin/profiles] GET start', { url: request.url });
   try {
-    // Log cookies/header for diagnosis
-    try {
-      serverDebug.debug('[admin/profiles] request headers cookie:', request.headers.get('cookie')?.slice(0, 300));
-    } catch (e) {
-      serverDebug.warn('[admin/profiles] failed to read request.headers.cookie', e);
-    }
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    // Log cookie presence only (never log token values)
+    serverDebug.debug('[admin/profiles] cookies present:', !!request.headers.get('cookie'));
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     let service;
     try {
       service = getSupabaseServiceClient();
+      if (!service) throw new Error('no service client');
     } catch (e) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured', e);
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });

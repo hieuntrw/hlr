@@ -1,7 +1,16 @@
+// ============================================================================
+// DEPRECATED: setServerSession function is not used anywhere in the codebase.
+// Session management is now handled via /api/auth/email-login and /api/auth/set-session
+// routes directly from AuthContext.
+// Marked for potential deletion - Dec 2024
+// ============================================================================
+
+/* UNUSED - setServerSession
 /**
  * Helper to set server-side Supabase session (HttpOnly cookies) from the browser.
  * Call this after a client-side sign-in that returns access/refresh tokens.
  */
+/*
 export async function setServerSession(accessToken: string, refreshToken?: string) {
   if (!accessToken) throw new Error('accessToken required');
 
@@ -25,3 +34,7 @@ export async function setServerSession(accessToken: string, refreshToken?: strin
 }
 
 export default setServerSession;
+*/
+
+// Placeholder export to avoid "empty module" error
+export {};

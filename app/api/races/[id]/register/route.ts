@@ -27,12 +27,12 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       }
     );
 
-    // Debug: log cookie previews to help diagnose RLS/refresh-token issues
+    // Debug: log incoming cookie names only (do not log token values)
     try {
-      const previews = cookieStore.getAll().map(c => ({ name: c.name, preview: String(c.value).slice(0, 80) }));
-      serverDebug.debug('POST /api/races/[id]/register incoming cookies preview', { raceId, previews });
+      const cookieNames = cookieStore.getAll().map(c => c.name);
+      serverDebug.debug('POST /api/races/[id]/register incoming cookie names', { raceId, cookieNames });
     } catch (e) {
-      serverDebug.warn('Failed to read cookie previews in register', e);
+      serverDebug.warn('Failed to read cookie names in register', e);
     }
 
     // Reconstruct user from auth cookies

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || Object.keys(body).length === 0) return NextResponse.json({ error: 'Missing updates' }, { status: 400 });

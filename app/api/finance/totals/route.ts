@@ -1,7 +1,7 @@
 import { getSupabaseServiceClient } from '@/lib/supabase-service-client';
 import { cookies } from 'next/headers';
-import { decodeSbSessionCookie, ensureAdmin } from '@/lib/server-auth';
-import { createServerClient } from '@supabase/ssr';
+import { decodeSbSessionCookie } from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export async function GET(req: Request) {
   try {
@@ -75,16 +75,7 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ ok: false, error: 'Server not configured' }), { status: 500, headers: { 'content-type': 'application/json' } });
     }
 
-    const supabaseAuth = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {},
-        remove() {},
-      },
-    });
-    await ensureAdmin(supabaseAuth, (name: string) => cookieStore.get(name)?.value);
+    await requireAdminFromRequest((name: string) => cookieStore.get(name)?.value);
 
     const body = await req.json().catch(() => ({}));
     const prevYear = typeof body?.prev_year === 'number' ? body.prev_year : (typeof body?.prev_year === 'string' ? Number(body.prev_year) : undefined);

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,28 +9,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
+
+    const service = getSupabaseServiceClient();
+    if (!service) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
-
-    const service = getSupabaseServiceClient();
-    const client = service || supabaseAuth;
+    const client = service;
 
     const { data, error } = await client
       .from('races')
@@ -60,24 +45,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const service = getSupabaseServiceClient();
     const body: unknown = await request.json().catch(() => null);

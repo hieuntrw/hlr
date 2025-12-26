@@ -36,8 +36,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       serverDebug.debug('[join.route] could not read request.cookies.getAll()', e);
     }
     try {
+      // Avoid logging raw cookie contents; only log presence/length for diagnostics
       const rawCookie = request.headers.get('cookie');
-      serverDebug.debug('[join.route] raw Cookie header:', rawCookie ? rawCookie.slice(0, 500) : null);
+      serverDebug.debug('[join.route] Raw Cookie header present:', !!rawCookie, 'length:', rawCookie ? rawCookie.length : 0);
     } catch (e) {
       serverDebug.debug('[join.route] could not read raw Cookie header', e);
     }

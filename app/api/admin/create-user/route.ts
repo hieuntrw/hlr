@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
 import serverDebug from '@/lib/server-debug'
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 export async function POST(req: NextRequest) {
@@ -22,39 +22,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Mật khẩu phải có ít nhất 6 ký tự" }, { status: 400 });
     }
 
-    // Create server client to get current user session
-    const response = NextResponse.next();
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name: string, value: string, options: Record<string, unknown>) {
-            response.cookies.set({ name, value, ...options });
-          },
-          remove(name: string, options: Record<string, unknown>) {
-            response.cookies.set({ name, value: "", ...options });
-          },
-        },
-      }
-    );
+    // response placeholder if cookies need to be set on redirect flows (not used currently)
 
-    // Ensure caller is admin via shared helper (handles sb-session fallback)
+    // Ensure caller is admin via shared helper
     try {
-      const { ensureAdmin } = await import('@/lib/server-auth');
-      const result = await ensureAdmin(supabaseAuth, (name: string) => req.cookies.get(name)?.value, ['admin']);
-      serverDebug.debug('[Create User API] Current user:', result.user?.email);
-      serverDebug.debug('[Create User API] Current user role (app_metadata):', result.role);
+      const { user, role } = await requireAdminFromRequest((name: string) => req.cookies.get(name)?.value);
+      serverDebug.debug('[Create User API] Authorized user id:', user?.id);
+      serverDebug.debug('[Create User API] Current user role (app_metadata):', role);
     } catch (e: unknown) {
       const err = e as unknown as Record<string, unknown>;
-      serverDebug.warn('[Create User API] ensureAdmin failed', err);
+      serverDebug.warn('[Create User API] requireAdminFromRequest failed', err);
       const status = (err as Record<string, any>)?.status ?? 401;
       const message = (err as Record<string, any>)?.message ?? 'Không xác thực';
       return NextResponse.json({ error: message }, { status });

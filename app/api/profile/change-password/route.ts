@@ -30,10 +30,10 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    // Ensure user is authenticated (reconstruct if needed)
+    // Ensure user is authenticated (strict mode - no sb-session fallback for mutations)
     const { getUserFromAuthClient } = await import('@/lib/server-auth');
-    const user = await getUserFromAuthClient(supabase, (n: string) => request.cookies.get(n)?.value);
-    if (!user) return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
+    const user = await getUserFromAuthClient(supabase, (n: string) => request.cookies.get(n)?.value, true);
+    if (!user) return NextResponse.json({ ok: false, error: 'Phiên đăng nhập hết hạn, vui lòng đăng nhập lại' }, { status: 401 });
 
     // Verify the authenticated user via server cookie and ensure profile exists.
     // Do NOT use the anon key to re-authenticate here; presence of a valid

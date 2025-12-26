@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,9 +24,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     );
 
-    const authInfo = await ensureAdmin(supabaseAuth);
-    // Only allow full admins to hide challenges; moderators can still edit other fields
-    const role = (authInfo as Record<string, unknown>)?.role as string | undefined;
+    const { role } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, is_hide } = body;
@@ -78,10 +76,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
         },
       }
     );
-
-    const authInfo = await ensureAdmin(supabaseAuth);
-    // Only full admins may hide (soft-delete) challenges via DELETE
-    const role = (authInfo as Record<string, unknown>)?.role as string | undefined;
+    const { role } = await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
     if (role !== 'admin') return NextResponse.json({ error: 'Only admin can hide challenges' }, { status: 403 });
 
     // Fetch challenge and participant count
@@ -153,8 +148,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         },
       }
     );
-
-    await ensureAdmin(supabaseAuth);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    // role not used here beyond authorization
 
     const { data, error } = await supabaseAuth.from('challenges').select('*').eq('id', id).maybeSingle();
     if (error) {

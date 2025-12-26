@@ -1,4 +1,6 @@
-export type Role = 'admin' | 'mod_finance' | 'mod_member' | 'mod_challenge' |'member' | string | null;
+import { ADMIN_ROLES, MOD_ROLES, type UserRoleType } from '@/lib/constants';
+
+export type Role = UserRoleType | string | null;
 
 export function getEffectiveRole(
   user: { app_metadata?: unknown } | null | undefined,
@@ -13,9 +15,22 @@ export function getEffectiveRole(
 }
 
 export function isAdminRole(role: Role): boolean {
-  return role === 'admin';
+  return ADMIN_ROLES.includes(role as typeof ADMIN_ROLES[number]);
 }
 
 export function isModRole(role: Role): boolean {
-  return role === 'mod_finance' || role === 'mod_member' || role === 'mod_challenge';
+  return MOD_ROLES.includes(role as typeof MOD_ROLES[number]);
 }
+
+// ============================================================================
+// UNUSED: isPrivilegedRole is not used anywhere in the codebase.
+// Marked for potential deletion - Dec 2024
+// ============================================================================
+/* UNUSED - isPrivilegedRole
+export function isPrivilegedRole(role: Role): boolean {
+  return isAdminRole(role) || isModRole(role);
+}
+*/
+
+// Re-export constants for convenience
+export { UserRole, ADMIN_ROLES, MOD_ROLES, type UserRoleType } from '@/lib/constants';

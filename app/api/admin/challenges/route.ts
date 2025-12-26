@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 // use shared `ensureAdmin` helper
 
@@ -24,8 +24,7 @@ export async function POST(request: NextRequest) {
         },
       }
     );
-
-    const { user } = await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
+    const { user } = await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json()) as Record<string, unknown>;
     const { title, start_date, end_date, registration_deadline, min_pace_seconds, max_pace_seconds, min_km, description, require_map } = body;

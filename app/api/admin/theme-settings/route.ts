@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,20 +11,14 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
+
+    const service = getSupabaseServiceClient();
+    if (!service) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { cookies: { get(name: string) { return request.cookies.get(name)?.value }, set() {}, remove() {} } }
-    );
-
-    await ensureAdmin(supabase, (n: string) => request.cookies.get(n)?.value);
-
-    const service = getSupabaseServiceClient();
-    const client = service || supabase;
+    const client = service;
 
     const { data: systemSettings } = await client.from('system_theme_settings').select('*').maybeSingle();
     const { data: presets } = await client.from('theme_presets').select('*').order('name', { ascending: true });
@@ -43,18 +36,13 @@ export async function POST(request: NextRequest) {
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
+
+    const client = getSupabaseServiceClient();
+    if (!client) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      { cookies: { get(name: string) { return request.cookies.get(name)?.value }, set() {}, remove() {} } }
-    );
-    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
-
-    const client = getSupabaseServiceClient() || supabaseAuth;
 
     // two actions supported: updateSystemSettings or togglePreset
     if (String(body.action) === 'updateSystem' && body.settings) {

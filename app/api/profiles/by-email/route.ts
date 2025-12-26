@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
   try {
+    // Require admin access - this endpoint exposes user data by email
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+
     const url = new URL(request.url);
     const email = url.searchParams.get('email');
     if (!email) return NextResponse.json({ ok: false, error: 'Missing email' }, { status: 400 });

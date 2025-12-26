@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,21 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export async function PUT(request: NextRequest) {
   try {
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || !body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -45,7 +30,12 @@ export async function PUT(request: NextRequest) {
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       : null;
 
-    const client = service || supabaseAuth;
+    if (!service) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
+
+    const client = service;
 
     const { data, error } = await client.from('race_results').update(cleanUpdates).eq('id', id).select().maybeSingle();
     if (error) {
@@ -67,21 +57,7 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || !body.id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
@@ -92,7 +68,12 @@ export async function DELETE(request: NextRequest) {
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       : null;
 
-    const client = service || supabaseAuth;
+    if (!service) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
+
+    const client = service;
 
     const { error } = await client.from('race_results').delete().eq('id', id);
     if (error) {

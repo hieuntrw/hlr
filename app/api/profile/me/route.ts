@@ -9,14 +9,14 @@ export async function GET() {
   try {
     const start = Date.now();
     const cookieStore = cookies();
-    // Log incoming cookie previews for diagnosis
+    // Log incoming cookie names only (never log token values in production)
     try {
-      const incoming = cookieStore.getAll().map(c => ({ name: c.name, preview: c.value?.substring(0, 80) }));
-      serverDebug.debug('[profile.me] incoming cookies:', incoming);
-      serverDebug.debug('[profile.me] sb-access-token preview:', cookieStore.get('sb-access-token')?.value?.substring(0,120) || null);
-      serverDebug.debug('[profile.me] sb-refresh-token preview:', cookieStore.get('sb-refresh-token')?.value?.substring(0,120) || null);
+      const cookieNames = cookieStore.getAll().map(c => c.name);
+      serverDebug.debug('[profile.me] incoming cookie names:', cookieNames);
+      serverDebug.debug('[profile.me] sb-access-token present:', !!cookieStore.get('sb-access-token')?.value);
+      serverDebug.debug('[profile.me] sb-refresh-token present:', !!cookieStore.get('sb-refresh-token')?.value);
     } catch (e) {
-      serverDebug.warn('[profile.me] failed to read cookie previews', e);
+      serverDebug.warn('[profile.me] failed to read cookie info', e);
     }
 
     const supabase = createServerClient(

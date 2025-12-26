@@ -203,3 +203,101 @@ If you'd like, I can:
 - Create a PR with small hardening changes (audit logs when fallback used, stricter token handling).
 
 Tell me which next step you prefer and I will proceed.
+
+
+
+
+Dựa trên tài liệu AUTH_BUSINESS_LOGIC.md bạn cung cấp, tôi đã rà soát lại toàn bộ luồng nghiệp vụ xác thực (Authentication) và phân quyền (Authorization) của dự án.
+
+Dưới đây là bản đánh giá chi tiết và các khuyến nghị cụ thể để vá lỗ hổng bảo mật và tối ưu hóa hệ thống.
+
+1. Đánh giá Tổng quan
+Hệ thống hiện tại đang sử dụng mô hình Hybrid (Lai): kết hợp giữa Supabase Auth tiêu chuẩn và cơ chế quản lý Cookie tự xây dựng (custom cookie management) để đồng bộ trạng thái giữa Next.js Server (SSR) và Client.
+
+Điểm mạnh:
+
+Sử dụng cookie HttpOnly giúp hạn chế rủi ro XSS so với lưu token ở localStorage.
+
+Có sự phân chia rõ ràng giữa anon key (đăng nhập) và service_role key (tạo user, admin action).
+
+Logic kiểm tra quyền (ensureAdmin) được đặt ở phía server.
+
+Điểm yếu (Rủi ro):
+
+Cơ chế "Fallback" (dự phòng) vào cookie sb-session không được xác thực chữ ký (unverified) là lỗ hổng nguy hiểm nhất.
+
+Cơ chế đồng bộ thủ công (whoami -> restore -> setSession) rất phức tạp và dễ sinh lỗi (race conditions).
+
+2. Các Rủi ro Nghiêm trọng & Khuyến nghị Khắc phục
+🔴 Rủi ro 1: Tin tưởng mù quáng vào sb-session (Critical)
+Vấn đề: Trong file lib/server-auth.ts, hàm ensureAdmin có thể cho phép user đi qua nếu việc xác thực JWT thất bại nhưng cookie sb-session (JSON thuần) vẫn tồn tại.
+
+Nguy hiểm: Hacker có thể giả mạo cookie sb-session (vì nó không có chữ ký mã hóa của Supabase như JWT) để lừa server rằng mình là Admin. Mặc dù cookie là HttpOnly, nhưng nếu có lỗ hổng set-cookie từ subdomain khác hoặc XSS đọc/ghi cookie (hiếm nhưng có thể), hệ thống sẽ bị qua mặt.
+
+✅ Khuyến nghị:
+
+Chỉ dùng sb-session cho UI (Read-only): Chỉ dùng cookie này để hiển thị giao diện (ví dụ: hiện avatar, tên user).
+
+Cấm dùng cho hành động Ghi/Admin: Với các hàm ensureAdmin hoặc các API thay đổi dữ liệu (POST/PUT/DELETE), BẮT BUỘC phải xác thực bằng supabase.auth.getUser() (check JWT thật sự). Nếu JWT hết hạn, bắt buộc client phải refresh token hoặc đăng nhập lại, tuyệt đối không fallback sang JSON cookie không an toàn.
+
+🟠 Rủi ro 2: Endpoint /api/auth/restore lộ Token
+Vấn đề: Endpoint này trả về access_token dạng JSON cho client.
+
+Nguy hiểm: Nếu trang web có lỗ hổng XSS, hacker có thể gọi endpoint này để lấy access_token mới nhất và mang đi gọi API thay cho user.
+
+✅ Khuyến nghị:
+
+Đảm bảo endpoint này có Header bảo mật chặt chẽ.
+
+Kiểm tra kỹ nguồn gốc request (Origin Check) để chống CSRF.
+
+Tốt nhất: Nếu chuyển sang thư viện @supabase/ssr chính chủ, bạn có thể loại bỏ hoàn toàn endpoint này vì thư viện sẽ tự xử lý việc hydrate session từ cookie.
+
+🟡 Rủi ro 3: Logic signup dùng Service Role
+Vấn đề: Endpoint signup đang dùng SUPABASE_SERVICE_ROLE_KEY.
+
+Phân tích: Nếu endpoint này là Public (cho người lạ đăng ký), việc dùng Service Role là rủi ro vì nó bỏ qua các giới hạn (Rate Limit, Captcha) mà Supabase áp dụng cho anon key. Nó cũng tốn tài nguyên server hơn.
+
+Trường hợp đúng: Nếu đây là endpoint chỉ dành cho Admin tạo User nội bộ, thì dùng Service Role là đúng.
+
+✅ Khuyến nghị:
+
+Nếu là đăng ký công khai: Hãy chuyển sang dùng anon key (supabase.auth.signUp).
+
+Nếu là Admin tạo user: Hãy bọc endpoint này bằng middleware ensureAdmin thật chặt.
+
+3. Tối ưu hóa Code & Bảo trì
+1. Chuẩn hóa Role (Hardcoded Strings)
+Vấn đề: File lib/auth/role.ts đang đọc chuỗi thô từ user.app_metadata.role. ✅ Khuyến nghị: Tạo một file constants.ts hoặc enums cho Role.
+
+TypeScript
+
+// lib/constants.ts
+export enum UserRole {
+  ADMIN = 'admin',
+  MODERATOR = 'moderator',
+  MEMBER = 'member'
+}
+// Sử dụng: if (user.app_metadata.role === UserRole.ADMIN)
+2. Xử lý bộ nhớ đệm LocalStorage
+Vấn đề: AuthContext cache profile trong localStorage 5 phút.
+
+Hệ quả: Nếu Admin hạ quyền user xuống "member", user đó vẫn thấy giao diện Admin trong 5 phút (dù gọi API sẽ lỗi). ✅ Khuyến nghị: Xóa cache localStorage ngay lập tức khi phát hiện sự kiện SIGNED_OUT hoặc khi API trả về lỗi 403 Forbidden.
+
+3. Chuyển đổi sang @supabase/ssr (Long-term)
+Hệ thống hiện tại đang tự viết lại logic quản lý cookie (set-session, restore, whoami). Đây là "Technical Debt" (nợ kỹ thuật) lớn. Supabase đã ra mắt thư viện @supabase/ssr thay thế cho cách làm thủ công này. Nó tự động xử lý set-cookie, refresh token và xác thực server-side an toàn hơn.
+
+Lộ trình đề xuất:
+
+Giữ nguyên hệ thống hiện tại để chạy dự án.
+
+Vá lỗ hổng ensureAdmin (Rủi ro 1) ngay lập tức.
+
+Lên kế hoạch refactor (tái cấu trúc) code auth chuyển sang @supabase/ssr trong tương lai gần để loại bỏ các file lib/server-auth.ts, restore/route.ts, set-session/route.ts.
+
+Tổng kết Checklist hành động ngay:
+[ ] Audit lib/server-auth.ts: Sửa hàm ensureAdmin. Nếu getUser() thất bại -> Trả về lỗi (Throw Error), không return user từ sb-session.
+
+[ ] Audit signup/route.ts: Xác định rõ là Public hay Admin-only. Nếu Admin-only, thêm check ensureAdmin ở đầu hàm.
+
+[ ] Audit Logging: Rà soát các hàm serverDebug, đảm bảo không log in ra toàn bộ access_token hay password vào console server.

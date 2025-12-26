@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       serverDebug.warn('[set-session] failed to set sb-session cookie', e);
     }
 
-    serverDebug.debug('[set-session] Set sb-access-token cookie preview:', (access || '').slice(0, 20) + '...');
+    serverDebug.debug('[set-session] Cookie set successfully');
 
     return res;
   } catch (err: unknown) {

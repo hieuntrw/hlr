@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,8 +27,7 @@ export async function GET(request: NextRequest) {
         },
       }
     );
-
-    await ensureAdmin(supabaseAuth, (n: string) => request.cookies.get(n)?.value);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
 
     const svc = getSupabaseServiceClient();
     const client = svc || supabaseAuth;

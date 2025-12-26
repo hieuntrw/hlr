@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 import serverDebug from '@/lib/server-debug';
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use service role key for admin operations
+    // Require admin privileges to create users via this endpoint
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+
+    // Use service role key for the actual user creation once authorized
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     serverDebug.info("Creating user:", email);
 
-    // Create user in Supabase Auth kiểm tra lại role ghi vào app_metadata
+    // Create user in Supabase Auth (admin-created)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,

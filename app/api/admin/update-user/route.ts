@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
 import serverDebug from '@/lib/server-debug';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,35 +12,15 @@ export async function POST(req: NextRequest) {
 
     serverDebug.info("[Update User API] Request:", { userId, role, fullName });
 
-    // Create server client to get current user session
-    const response = NextResponse.next();
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return req.cookies.get(name)?.value;
-          },
-          set(name: string, value: string, options?: Record<string, unknown>) {
-            response.cookies.set({ name, value, ...(options || {}) });
-          },
-          remove(name: string, options?: Record<string, unknown>) {
-            response.cookies.set({ name, value: "", ...(options || {}) });
-          },
-        },
-      }
-    );
-
     // Ensure caller is admin via shared helper (handles sb-session fallback)
     try {
-      const { ensureAdmin } = await import('@/lib/server-auth');
-      const result = await ensureAdmin(supabaseAuth, (name: string) => req.cookies.get(name)?.value, ['admin']);
-      serverDebug.debug('[Update User API] Current user:', result.user?.email);
-      serverDebug.debug('[Update User API] Current user role (app_metadata):', result.role);
+      const { user, role: callerRole } = await requireAdminFromRequest((name: string) => req.cookies.get(name)?.value);
+      serverDebug.debug('[Update User API] Current user:', user?.email);
+      serverDebug.debug('[Update User API] Current user role (app_metadata):', callerRole);
+      if (callerRole !== 'admin') return NextResponse.json({ error: 'Không có quyền' }, { status: 403 });
     } catch (e: unknown) {
       const err = e as Record<string, unknown> | null;
-      serverDebug.warn('[Update User API] ensureAdmin failed', err);
+      serverDebug.warn('[Update User API] requireAdminFromRequest failed', err);
       const status = err && typeof err['status'] === 'number' ? (err['status'] as number) : 401;
       const message = err && typeof err['message'] === 'string' ? (err['message'] as string) : 'Không xác thực';
       return NextResponse.json({ error: message }, { status });

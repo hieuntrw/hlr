@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 // use internal totals API instead of calling financeService RPC directly
 
 
@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
       { cookies: { get(name: string) { return request.cookies.get(name)?.value }, set() {}, remove() {} } }
     );
 
-    // Ensure caller is admin/mod (allow helper to reconstruct session from cookies)
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    // Ensure caller is admin/mod using centralized helper
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     // Prefer service client for aggregate queries to bypass RLS
     const service = await getServiceClient();

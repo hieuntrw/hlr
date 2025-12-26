@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug'
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     }
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { cookies: { get(n: string) { return request.cookies.get(n)?.value }, set() {}, remove() {} } });
 
-    await ensureAdmin(supabase, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     // configs
     const { data: configs } = await supabase.from('reward_podium_config').select('*').eq('is_active', true).order('podium_type', { ascending: true }).order('rank', { ascending: true });
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { cookies: { get(n: string) { return request.cookies.get(n)?.value }, set() {}, remove() {} } });
-    await ensureAdmin(supabase, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     const payload = Array.isArray(body) ? body : [body];
     const { data, error } = await supabase.from('member_podium_rewards').insert(payload).select();
@@ -93,7 +93,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
     }
     const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { cookies: { get(n: string) { return request.cookies.get(n)?.value }, set() {}, remove() {} } });
-    await ensureAdmin(supabase, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
     const { data, error } = await supabase.from('member_podium_rewards').update(updates).eq('id', id).select();
     if (error) {
       serverDebug.error('[admin/podium-rewards] update error', error);

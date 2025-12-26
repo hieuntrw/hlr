@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "check-sensitive-logging": "node scripts/check_sensitive_logging.js"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.8.0",

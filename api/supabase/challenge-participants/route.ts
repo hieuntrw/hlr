@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
+
 export async function GET(request: Request) {
   try {
+    // Require session cookie for service-role queries
+    const cookieStore = cookies();
+    const hasAuth = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAuth) {
+      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+    }
+
     const url = new URL(request.url)
     const challengeId = url.searchParams.get('challenge_id')
     const userId = url.searchParams.get('user_id')
@@ -9,7 +18,7 @@ export async function GET(request: Request) {
 
     const { createClient } = await import('@supabase/supabase-js')
     const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY
+    const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
     if (!SUPABASE_URL || !SERVICE_KEY) {
       return NextResponse.json({ error: 'Missing supabase config' }, { status: 500 })
     }

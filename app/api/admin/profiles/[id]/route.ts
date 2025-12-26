@@ -1,35 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/ssr';
-
 export const dynamic = 'force-dynamic';
 import { createClient } from '@supabase/supabase-js';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
-
-
-// use shared `ensureAdmin` helper
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
       serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
@@ -77,31 +54,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       : null;
 
-    const client = service || supabaseAuth;
+    const client = service;
 
     // Only allow specific fields to be updated via this endpoint
     const allowed: Record<string, unknown> = {};
@@ -135,6 +94,11 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       }
     }
 
+    if (!client) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured for PATCH');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
+
     const { data: updatedData, error } = await client.from('profiles').update(allowed).eq('id', id).select().maybeSingle();
     if (error) {
       serverDebug.error('PATCH /api/admin/profiles/[id] error', error);
@@ -154,33 +118,20 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const id = params.id;
     if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
 
-    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured');
-      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
-    }
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
-      {
-        cookies: {
-          get(name: string) {
-            return request.cookies.get(name)?.value;
-          },
-          set() {},
-          remove() {},
-        },
-      }
-    );
-
-    await ensureAdmin(supabaseAuth, (name: string) => request.cookies.get(name)?.value);
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
 
     const service = process.env.SUPABASE_SERVICE_ROLE_KEY
       ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
       : null;
 
-    const client = service || supabaseAuth;
+    const client = service;
 
     const now = new Date().toISOString().slice(0,10);
+    if (!client) {
+      serverDebug.error('SUPABASE_SERVICE_ROLE_KEY not configured for DELETE');
+      return NextResponse.json({ error: 'Server not configured' }, { status: 500 });
+    }
+
     const { data, error } = await client.from('profiles').update({ is_active: false, leave_date: now }).eq('id', id).select().maybeSingle();
     if (error) {
       serverDebug.error('DELETE /api/admin/profiles/[id] error', error);

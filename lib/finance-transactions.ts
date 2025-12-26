@@ -1,5 +1,14 @@
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { getSupabaseServiceClient } from './supabase-service-client';
 
+// ============================================================================
+// DEPRECATED: All functions below are not used anywhere in the codebase.
+// They were intended for finance transaction queries but financeService.ts
+// now handles these operations via views and RPCs.
+// Marked for potential deletion - Dec 2024
+// ============================================================================
+
+/* UNUSED - getIncomePaid
 export const getIncomePaid = async (year: number) => {
   const svc = getSupabaseServiceClient();
   const { data, error } = await svc
@@ -16,7 +25,9 @@ export const getIncomePaid = async (year: number) => {
   }
   return data;
 };
+*/
 
+/* UNUSED - getExpensePaid
 export const getExpensePaid = async (year: number) => {
   const svc = getSupabaseServiceClient();
   const { data, error } = await svc
@@ -33,7 +44,9 @@ export const getExpensePaid = async (year: number) => {
   }
   return data;
 };
+*/
 
+/* UNUSED - getPendingTransactions
 export const getPendingTransactions = async (year: number) => {
   const svc = getSupabaseServiceClient();
   const { data, error } = await svc
@@ -49,7 +62,9 @@ export const getPendingTransactions = async (year: number) => {
   }
   return data;
 };
+*/
 
+/* UNUSED - getProblematicTransactions
 export const getProblematicTransactions = async (year: number) => {
   const svc = getSupabaseServiceClient();
   const { data, error } = await svc
@@ -65,3 +80,7 @@ export const getProblematicTransactions = async (year: number) => {
   }
   return data;
 };
+*/
+
+// Placeholder export to avoid "empty module" error
+export {};

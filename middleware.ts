@@ -6,10 +6,10 @@ import serverDebug from "@/lib/server-debug";
 export async function middleware(req: NextRequest) {
   serverDebug.debug("\n[Middleware] ===== NEW REQUEST =====");
   serverDebug.debug("[Middleware] Path:", req.nextUrl.pathname);
-  // Log raw Cookie header to help diagnose whether cookies are sent
+  // Log presence/size of raw Cookie header (never print raw cookie contents)
   const rawCookieHeader = req.headers.get("cookie");
   if (rawCookieHeader) {
-    serverDebug.debug("[Middleware] Raw Cookie header:", rawCookieHeader.substring(0, 1000));
+    serverDebug.debug("[Middleware] Raw Cookie header present, length:", rawCookieHeader.length);
   } else {
     serverDebug.debug("[Middleware] Raw Cookie header: <none>");
   }
@@ -39,7 +39,7 @@ export async function middleware(req: NextRequest) {
         get(name: string) {
           const value = req.cookies.get(name)?.value;
           if (value) {
-            serverDebug.debug(`[Middleware] Cookie get: ${name} = ${value.substring(0, 20)}...`);
+            serverDebug.debug(`[Middleware] Cookie get: ${name} present (redacted)`);
           }
           return value;
         },
@@ -89,10 +89,10 @@ export async function middleware(req: NextRequest) {
   // and retry. This mirrors the behavior in `whoami` and avoids unsigned
   // JWT payload decoding in middleware.
   if (!user) {
-    // Preview auth cookie values (do not log full tokens in production)
-    const accessPreview = req.cookies.get('sb-access-token')?.value?.substring(0, 120) || null;
-    const refreshPreview = req.cookies.get('sb-refresh-token')?.value?.substring(0, 120) || null;
-    serverDebug.debug('[Middleware] No user from supabase.auth.getUser(). Cookie previews:', { accessPreview, refreshPreview });
+    // Indicate presence of auth cookies (do not log token contents)
+    const accessPresent = !!req.cookies.get('sb-access-token')?.value;
+    const refreshPresent = !!req.cookies.get('sb-refresh-token')?.value;
+    serverDebug.debug('[Middleware] No user from supabase.auth.getUser(). Auth cookie presence:', { accessPresent, refreshPresent });
     // Log important headers that affect cookie behavior
     serverDebug.debug('[Middleware] x-forwarded-proto:', req.headers.get('x-forwarded-proto'));
     serverDebug.debug('[Middleware] host:', req.headers.get('host'));
@@ -109,7 +109,7 @@ export async function middleware(req: NextRequest) {
         user = getUserResult.data.user;
         authError = getUserResult.error as unknown;
         serverDebug.debug('[Middleware] retry supabase.getUser error:', (authError as { message?: string }).message ?? null);
-        serverDebug.debug('[Middleware] retry user:', user?.email || 'not authenticated');
+                serverDebug.debug('[Middleware] retry user:', user?.email || 'not authenticated');
       } catch (e) {
         serverDebug.warn('[Middleware] setSession attempt failed', e);
       }
@@ -146,7 +146,7 @@ export async function middleware(req: NextRequest) {
                     user_metadata: {},
                     app_metadata: { role: finalRole },
                   } as unknown;
-                  serverDebug.debug('[Middleware] reconstructed user from sb-session, id:', sub, 'role:', finalRole);
+                  serverDebug.info('[Middleware] reconstructed user from sb-session (read-only): id=%s role=%s', String(sub), String(finalRole));
                 }
               } catch (e) {
                 serverDebug.warn('[Middleware] failed to decode/access token payload', String(e));

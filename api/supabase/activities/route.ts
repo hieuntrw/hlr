@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 
 export async function GET(request: Request) {
   try {
+    // Require session cookie for service-role queries
+    const cookieStore = cookies();
+    const hasAuth = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAuth) {
+      return NextResponse.json({ error: 'Không xác thực' }, { status: 401 });
+    }
+
     const url = new URL(request.url)
     const userId = url.searchParams.get('user_id')
     const start = url.searchParams.get('start')

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import getSupabaseServiceClient from '@/lib/supabase-service-client';
 import serverDebug from '@/lib/server-debug';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    // Require admin/mod authentication
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    
     const svc = getSupabaseServiceClient();
     const { data: challenges } = await svc.from('challenges').select('id, name, month, year').order('year', { ascending: false }).order('month', { ascending: false });
     const { data: winners } = await svc.from('lucky_draw_winners').select('*, challenge:challenges(id,name,month,year), member:profiles(full_name,email)').order('created_at', { ascending: false });
@@ -20,6 +24,9 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    // Require admin/mod authentication
+    await requireAdminFromRequest((name: string) => request.cookies.get(name)?.value);
+    
     const body = await request.json().catch(() => null);
     if (!body) return NextResponse.json({ error: 'Missing body' }, { status: 400 });
     const svc = getSupabaseServiceClient();

@@ -1,7 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import serverDebug from '@/lib/server-debug';
-import ensureAdmin from '@/lib/server-auth';
+import { requireAdminFromRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
     );
 
-    await ensureAdmin(supabaseAuth);
+    await requireAdminFromRequest((n: string) => request.cookies.get(n)?.value);
     // use shared `ensureAdmin` helper
 
     const body = await request.json();

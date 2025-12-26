@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase-service-client';
+import { cookies } from 'next/headers';
 
 export async function GET(req: Request) {
   try {
+    // Require session cookie for theme preference access
+    const cookieStore = cookies();
+    const hasAuth = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAuth) {
+      return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
+    }
+
     const url = new URL(req.url);
     const userId = url.searchParams.get('userId');
     if (!userId) return NextResponse.json({ ok: false, error: 'missing userId' }, { status: 400 });
@@ -21,6 +29,13 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
+    // Require session cookie for theme preference update
+    const cookieStore = cookies();
+    const hasAuth = Boolean(cookieStore.get('sb-access-token') || cookieStore.get('sb-session') || cookieStore.get('sb-refresh-token'));
+    if (!hasAuth) {
+      return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
+    }
+
     const body = await req.json();
     const { userId, preference } = body;
     if (!userId || !preference) return NextResponse.json({ ok: false, error: 'missing body' }, { status: 400 });

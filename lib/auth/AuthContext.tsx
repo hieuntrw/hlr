@@ -44,6 +44,15 @@ function setCachedAuth(profile: Profile) {
 }
 function clearCachedAuth() { try { localStorage.removeItem(CACHE_KEY); } catch {} }
 
+/**
+ * Call this function when an API returns 403 Forbidden to immediately 
+ * invalidate cached auth state. This ensures the UI updates to reflect 
+ * the user's actual permissions.
+ */
+export function invalidateAuthCache() {
+  clearCachedAuth();
+}
+
 function getRoleFromUser(u: User | null): string | undefined {
   if (!u) return undefined;
   const uobj = u as unknown;
@@ -160,8 +169,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Allow unused first param from Supabase callback
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted.current) return;
+      
+      // Clear cache on sign out or token refresh failure
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+        setUser(null);
+        setProfile(null);
+        clearCachedAuth();
+        setIsLoading(false);
+        setSessionChecked(true);
+        return;
+      }
+      
       if (!session) {
         setUser(null);
         setProfile(null);
