@@ -50,7 +50,11 @@ export async function PUT(request: NextRequest) {
     const { data, error } = await client.from('race_results').update(cleanUpdates).eq('id', id).select().maybeSingle();
     if (error) {
       serverDebug.error('PUT /api/admin/race-results update error', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const errObj = error as unknown as Record<string, unknown>;
+      const msg = errObj && typeof errObj.message === 'string'
+        ? (errObj.message as string)
+        : String(error || 'Unknown error');
+      return NextResponse.json({ error: msg }, { status: 500 });
     }
 
     return NextResponse.json({ updated: data });
@@ -93,13 +97,21 @@ export async function DELETE(request: NextRequest) {
     const { error } = await client.from('race_results').delete().eq('id', id);
     if (error) {
       serverDebug.error('DELETE /api/admin/race-results delete error', error);
-      return NextResponse.json({ error: error.message }, { status: 500 });
+      const errObj = error as unknown as Record<string, unknown>;
+      const msg = errObj && typeof errObj.message === 'string'
+        ? (errObj.message as string)
+        : String(error || 'Unknown error');
+      const detail = typeof errObj.details === 'string'
+        ? `: ${(errObj.details as string)}`
+        : '';
+      return NextResponse.json({ error: `${msg}${detail}` }, { status: 500 });
     }
 
     return NextResponse.json({ deleted: id });
   } catch (err: unknown) {
     serverDebug.error('DELETE /api/admin/race-results exception', err);
     const status = (err as Record<string, unknown>)?.status || 500;
-    return NextResponse.json({ error: (err as Record<string, unknown>)?.message || String(err) }, { status: typeof status === 'number' ? status : 500 });
+    const msg = (err && (err as Record<string, unknown>)?.message) ? (err as Record<string, unknown>)?.message : String(err ?? 'Unknown error');
+    return NextResponse.json({ error: msg }, { status: typeof status === 'number' ? status : 500 });
   }
 }

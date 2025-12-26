@@ -226,6 +226,7 @@ export default function ProfilePage() {
     pb_fm_time: "",
   });
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  
 
   // Tách loading cho từng phần dữ liệu
   const [, setProfileLoading] = useState(true);
@@ -786,27 +787,42 @@ export default function ProfilePage() {
                   <div className="w-24 h-24 rounded-full flex items-center justify-center border-4 text-5xl shadow-lg flex-shrink-0" style={{ background: "var(--color-bg-primary)", borderColor: 'var(--color-primary)' }}>
                     <User size={64} style={{ color: 'var(--color-primary)' }} />
                   </div>
+                 
                   <div className="flex-1">
                     <h1 className="text-2xl font-bold mb-3 text-gray-900">{localProfile.full_name}</h1>
-                    {/* total_stars moved to Personal Records (column 2) */}
+              
                     <div className="space-y-1.5 text-base text-gray-700">
                       <p className="flex items-center gap-2"><Cake size={16} /> {formatDate(localProfile.dob)}</p>
                       <p className="flex items-center gap-2"><Watch size={16} /> {localProfile.device_name || "Chưa cập nhật"}</p>
                       <p className="flex items-center gap-2"><Phone size={16} /> {localProfile.phone_number || "Chưa cập nhật"}</p>
                       <p className="flex items-center gap-2"><Calendar size={16} /> Gia nhập: {formatDate(localProfile.join_date)}</p>
                     </div>
-                    <button
-                      onClick={() => setShowEditModal(true)}
-                      className="mt-3 w-full px-4 py-2 text-white rounded-lg font-medium transition-all shadow text-sm"
-                      style={{ backgroundColor: 'var(--color-primary)' }}
-                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                    >
-                      📝 Cập nhật thông tin
-                    </button>
+                    
                   </div>
                 </div>
+                 <div className="mt-3 flex gap-2">
+                  <button
+                        onClick={() => router.push('/profile/change-password')}
+                        className="flex-1 px-4 py-2 text-white rounded-lg font-medium transition-all shadow text-sm"
+                        style={{background: 'var(--color-primary)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      >
+                        🔒 Đổi mật khẩu
+                      </button> 
+                      <button
+                        onClick={() => setShowEditModal(true)}
+                        className="flex-1 px-4 py-2 text-white rounded-lg font-medium transition-all shadow text-sm"
+                        style={{ backgroundColor: 'var(--color-primary)' }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      >
+                        📝 Cập nhật thông tin
+                      </button>
+                      
+                    </div>
               </div>
+             
 
               {/* Column 2: Personal Records */}
               <div className="rounded-lg border p-4" style={{ background: "rgba(var(--color-bg-secondary-rgb, 255, 255, 255), 0.6)", borderColor: 'var(--color-accent)', backdropFilter: 'blur(10px)' }}>
@@ -960,6 +976,7 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+            
           </div>
         </div>
 

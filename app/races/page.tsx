@@ -13,6 +13,7 @@ interface Race {
   location: string;
   image_url?: string;
   participant_count?: number;
+  distances?: string[]; // e.g. ["5km","10km","21km","42km"]
 }
 
 interface RaceResult {
@@ -106,7 +107,9 @@ function RaceCard({ race, onClick }: { race: Race; onClick: () => void }) {
         </div>
 
         <div className="mt-4 pt-4 border-t border-gray-200">
-          <span className="text-sm font-semibold" style={{ color: "var(--color-primary)" }}>Chi tiết →</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold" style={{ color: "var(--color-primary)" }}>Chi tiết →</span>
+          </div>
         </div>
       </div>
     </div>
@@ -118,6 +121,11 @@ export default function RacesPage() {
   const [selectedRace, setSelectedRace] = useState<Race | null>(null);
   const [raceResults, setRaceResults] = useState<RaceResult[]>([]);
   const [rewards, setRewards] = useState<RewardDefinition[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [selectedDistance, setSelectedDistance] = useState<string>('');
+  const [registering, setRegistering] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
+  const [registerSuccess, setRegisterSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [resultsLoading, setResultsLoading] = useState(false);
@@ -203,9 +211,9 @@ export default function RacesPage() {
     try {
       // Fetch race results and rewards via server APIs (service-role)
       try {
-        const [resResults, resRewards] = await Promise.all([
+        const [resResults] = await Promise.all([
           fetch(`/api/races/${encodeURIComponent(race.id)}/results`, { credentials: 'same-origin' }),
-          fetch(`/api/races/${encodeURIComponent(race.id)}/rewards`, { credentials: 'same-origin' }),
+  
         ]);
 
         if (!resResults.ok) {
@@ -224,13 +232,6 @@ export default function RacesPage() {
           } as RaceResult));
           setRaceResults(formatted);
         }
-
-        if (!resRewards.ok) {
-          console.error('[Races] failed to fetch rewards', await resRewards.text().catch(() => null));
-        } else {
-          const jr2 = await resRewards.json().catch(() => null);
-          setRewards(jr2?.data ?? []);
-        }
       } catch (e) {
         console.error('Unexpected error fetching race data via API', e);
       }
@@ -238,6 +239,57 @@ export default function RacesPage() {
       console.error("Unexpected error:", err);
     } finally {
       setResultsLoading(false);
+    }
+    // reset register UI state when selecting a race
+    setSelectedDistance('');
+    setRegisterError(null);
+    setRegisterSuccess(false);
+  }
+  
+  // Note: card-level quick-register removed; use detail view for registration
+
+  useEffect(() => {
+    // fetch current user's id to allow hiding register button
+    let mounted = true;
+    (async () => {
+      try {
+        const resp = await fetch('/api/profiles/me', { credentials: 'same-origin' });
+        if (!resp.ok) return;
+        const json = await resp.json().catch(() => null);
+        const id = json?.profile?.id ?? null;
+        if (mounted) setCurrentUserId(id);
+      } catch (e) {
+        console.error('[Races] failed to fetch current profile', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  
+  async function submitRegistration(raceId: string) {
+    setRegisterError(null);
+    if (!selectedDistance) return setRegisterError('Vui lòng chọn cự ly');
+    setRegistering(true);
+    try {
+      const res = await fetch(`/api/races/${encodeURIComponent(raceId)}/register`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ distance: selectedDistance }),
+      });
+      const json = await res.json().catch(() => ({ ok: false, error: 'Invalid response' }));
+      if (!res.ok || !json.ok) {
+        setRegisterError(json.error || 'Đăng ký thất bại');
+      } else {
+        setRegisterSuccess(true);
+        // refresh results to reflect new registration
+        const race = races.find((r) => r.id === raceId) || selectedRace;
+        if (race) await handleSelectRace(race as Race);
+      }
+    } catch (err) {
+      setRegisterError(String(err));
+    } finally {
+      setRegistering(false);
     }
   }
 
@@ -291,6 +343,53 @@ export default function RacesPage() {
                 </div>
               </div>
             </div>
+            {/* Registration area */}
+            <div className="mt-4">
+              <div className="rounded-lg p-4 bg-white shadow-sm" style={{ background: 'var(--color-bg-secondary)' }}>
+                <h3 className="text-lg font-semibold mb-2">Đăng ký tham gia</h3>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={selectedDistance}
+                    onChange={(e) => setSelectedDistance(e.target.value)}
+                    className="px-3 py-2 border rounded-md bg-white"
+                  >
+                    <option value="">Chọn cự ly</option>
+                    <option value="5km">5km</option>
+                    <option value="10km">10km</option>
+                    <option value="21km">HM (21km)</option>
+                    <option value="42km">FM (42km)</option>
+                  </select>
+
+                  {/* Show register button only while registration open; disable if already registered */}
+                  {(() => {
+                    const raceDate = new Date(selectedRace.race_date);
+                    const now = new Date();
+                    const registrationOpen = now <= raceDate;
+                    const alreadyRegistered = Boolean(currentUserId && raceResults.some((r) => r.user_id === currentUserId));
+
+                    if (!registrationOpen) {
+                      return <div className="text-sm text-gray-500">Đã quá ngày đăng ký</div>;
+                    }
+
+                    return (
+                      <button
+                        onClick={() => {
+                          if (alreadyRegistered) return;
+                          submitRegistration(selectedRace.id);
+                        }}
+                        disabled={registering || alreadyRegistered}
+                        className={`px-4 py-2 rounded-md text-sm font-medium ${registering || alreadyRegistered ? 'bg-gray-300 text-gray-600' : 'bg-green-600 text-white hover:opacity-90'}`}
+                      >
+                        {alreadyRegistered ? 'Đã đăng ký' : (registering ? 'Đang gửi...' : 'Đăng ký')}
+                      </button>
+                    );
+                  })()}
+
+                  {registerError && <div className="text-red-600 ml-2">{registerError}</div>}
+                  {registerSuccess && <div className="text-green-700 ml-2">Đăng ký thành công</div>}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -313,7 +412,7 @@ export default function RacesPage() {
                       <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ color: "var(--color-text-inverse)" }}>
                         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
                       </svg>
-                      Kết Quả Giải Chạy
+                      Danh sách tham gia
                     </h2>
                   </div>
 
@@ -403,7 +502,7 @@ export default function RacesPage() {
                   ))}
                 </div>
               )}
-
+            
               {/* Reward Table */}
               {rewards.length > 0 && (
                 <div className="mb-8">

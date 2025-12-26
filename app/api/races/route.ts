@@ -1,12 +1,22 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { cookies } from 'next/headers';
 import serverDebug from '@/lib/server-debug'
 
 export async function GET() {
   try {
-    const service = process.env.SUPABASE_SERVICE_ROLE_KEY
-      ? createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-      : createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+    const cookieStore = cookies();
+    const hasSession = Boolean(cookieStore.get('sb-session') || cookieStore.get('sb-access-token') || cookieStore.get('sb-refresh-token'));
+    if (!hasSession) {
+      return NextResponse.json({ ok: false, error: 'Không xác thực' }, { status: 401 });
+    }
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.NEXT_PUBLIC_SUPABASE_URL) {
+      serverDebug.error('Missing SUPABASE_SERVICE_ROLE_KEY or NEXT_PUBLIC_SUPABASE_URL');
+      return NextResponse.json({ ok: false, error: 'Server not configured' }, { status: 500 });
+    }
+
+    const service = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
     const { data, error } = await service
       .from('races')

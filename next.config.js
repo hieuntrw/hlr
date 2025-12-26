@@ -1,5 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  compiler: {
+    // Dòng này sẽ xóa toàn bộ console.log khi lên host
+    removeConsole: process.env.NODE_ENV === "production",
+  },
   reactStrictMode: true,
   images: {
     // Allow loading images from local Supabase storage during development
